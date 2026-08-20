@@ -1,4 +1,3 @@
-
 import 'package:shared_preferences/shared_preferences.dart';
 
 class InvoiceCounterService {
@@ -8,9 +7,7 @@ class InvoiceCounterService {
 
   // تهيئة SharedPreferences مرة واحدة
   static Future<void> _initSharedPreferences() async {
-    if (_prefsInstance == null) {
-      _prefsInstance = await SharedPreferences.getInstance();
-    }
+    _prefsInstance ??= await SharedPreferences.getInstance();
   }
 
   // استخدام متغير في الذاكرة لتخزين القيمة الحالية
@@ -23,7 +20,7 @@ class InvoiceCounterService {
     _currentCounterValue = _prefsInstance!.getInt(_counterKey) ?? 0;
   }
 
-  Future<int> findInvoiceNo() async {
+  static Future<int> findInvoiceNo() async {
     // التأكد من تهيئة SharedPreferences و تحميل القيمة الأولية
     // (يمكن استدعاء loadInitialCounter مرة واحدة عند بدء التطبيق)
     await _initSharedPreferences();

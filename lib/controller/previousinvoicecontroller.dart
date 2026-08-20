@@ -3,9 +3,12 @@ import 'package:get/get.dart';
 import 'package:laundry/core/services/preparePDF.dart';
 import 'package:laundry/sqldb.dart';
 import 'dart:math';
-import 'package:flutter/foundation.dart';
+import 'dart:io';
+import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
-import 'package:printing/printing.dart'; // لإضافة تأخير عشوائي
+import 'package:printing/printing.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:flutter/foundation.dart';
 
 class PreviousInvoiceController extends GetxController {
   final invoices = <Map<String, dynamic>>[].obs;
@@ -29,7 +32,7 @@ class PreviousInvoiceController extends GetxController {
     try {
       isLoading.value = true;
       final data = await readData(page: 1);
-      // print(data);
+      // debugPrint('$data');
       invoices.assignAll(data);
       hasMore.value = data.length == limit;
     } catch (e) {
@@ -88,12 +91,12 @@ class PreviousInvoiceController extends GetxController {
       final offset = (page - 1) * limit;
 
       return await db.readData('''
-        SELECT * FROM invoice
+        SELECT * FROM invoices
         ORDER BY invoices_id DESC
         LIMIT $limit OFFSET $offset
       ''');
     } catch (e) {
-      print('Error reading data: $e');
+      debugPrint('Error reading data: $e');
       return [];
     }
   }
@@ -117,13 +120,36 @@ class PreviousInvoiceController extends GetxController {
   Future<void> printPDF(Map<String, dynamic> data) async {
     try {
       final pdfBytes = await compute(PreparePDF.generatePdfData, data);
-      // if (pdfBytes.isNotEmpty) {
-      // await Printing.sharePdf(bytes: pdfBytes, filename: "invoice12345678.pdf");
-      await Printing.layoutPdf(onLayout: (PdfPageFormat format) => pdfBytes);
-      // controllerinvoice.deleteInvoice();
-      // }
+      if (pdfBytes.isNotEmpty) {
+        // Save PDF to temporary file and open it
+        final tempDir = await getTemporaryDirectory();
+        final fileName = 'invoice_${data['invoiceNumber']}.pdf';
+        final filePath = '${tempDir.path}/$fileName';
+        final file = File(filePath);
+        await file.writeAsBytes(pdfBytes);
+
+        // Open the PDF file with default application
+        if (Platform.isAndroid || Platform.isIOS) {
+          // For mobile platforms, use printing package
+          await Printing.layoutPdf(
+            onLayout: (PdfPageFormat format) => pdfBytes,
+          );
+        } else {
+          // For desktop platforms, save and open file
+          final uri = Uri.file(filePath);
+          if (await canLaunchUrl(uri)) {
+            await launchUrl(uri);
+          } else {
+            Get.snackbar(
+              'خطأ',
+              'لا يمكن فتح ملف PDF',
+              snackPosition: SnackPosition.BOTTOM,
+            );
+          }
+        }
+      }
     } catch (e) {
-      print('Error sharing PDF: $e');
+      debugPrint('Error sharing PDF: $e');
       Get.snackbar('خطأ', '$e', snackPosition: SnackPosition.BOTTOM);
     }
   }

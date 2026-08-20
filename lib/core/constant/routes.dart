@@ -9,11 +9,10 @@ class AppRoute {
   static const String customernumber = "/customernumber";
   static const String invoices = "/invoices";
 
-
-  // static const String timesalaht = "/timesalaht";
-  // static const String times = "/times";
-  // static const String qiblacompass = "/qiblacompass";
-  // static const String setting = "/setting";
-  // static const String locked = "/locked";
-  
+  // New routes
+  static const String dashboard = "/dashboard";
+  static const String reports = "/reports";
+  static const String settings = "/settings";
+  static const String processing = "/processing";
+  static const String subscriptions = "/subscriptions";
 }

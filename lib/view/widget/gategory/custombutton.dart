@@ -5,7 +5,12 @@ class CustomButton extends StatelessWidget {
   final IconData icon;
   final Color color;
 
-  const CustomButton({super.key,required this.lable,required this.icon,required this.color});
+  const CustomButton({
+    super.key,
+    required this.lable,
+    required this.icon,
+    required this.color,
+  });
 
   @override
   Widget build(BuildContext context) {

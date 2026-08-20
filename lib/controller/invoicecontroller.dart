@@ -3,20 +3,19 @@ import 'package:get/get.dart';
 
 class InvoiceController extends GetxController {
   List<Map<String, dynamic>> invoice = [];
-  TextEditingController custmername = TextEditingController();
-  double sumatiom = 0;
+  TextEditingController customername = TextEditingController();
+  RxDouble summation = 0.0.obs;
 
-  String calcSumation() {
-    sumatiom = 0.00;
+  String calcSummation() {
+    summation.value = 0.00;
     for (int i = 0; i < invoice.length; i++) {
-      sumatiom = sumatiom + invoice[i]["total_price"];
+      summation.value = summation.value + invoice[i]["total_price"];
     }
-    return sumatiom.toString();
+    return summation.value.toString();
   }
 
   void removeItem(int index) {
     invoice.removeAt(index);
-    Get.back();
     update();
   }
 
@@ -32,8 +31,8 @@ class InvoiceController extends GetxController {
   deleteInvoice() {
     if (invoice.isNotEmpty) {
       invoice.clear();
-      sumatiom = 0.00;
-      custmername.clear();
+      summation.value = 0.00;
+      customername.clear();
       update();
     }
   }

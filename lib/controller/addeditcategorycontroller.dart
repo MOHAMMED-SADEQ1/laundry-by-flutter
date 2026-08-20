@@ -9,11 +9,6 @@ class AddCategoryController extends GetxController {
   TextEditingController ironingprice = TextEditingController();
   TextEditingController urgentironingprice = TextEditingController();
 
-  @override
-  void onInit() {
-    super.onInit();
-  }
-
   writeData() async {
     SqlDB db = SqlDB();
     int response = await db.insertData(

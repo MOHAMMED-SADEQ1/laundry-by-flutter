@@ -29,7 +29,6 @@ class EditController extends GetxController {
       Get.back();
       messageSuccessfully();
       // await Future.delayed(Duration(seconds: 2),(){});
-      
     }
   }
 

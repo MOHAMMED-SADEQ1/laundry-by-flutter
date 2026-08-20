@@ -1,5 +1,6 @@
 import 'package:get/get.dart';
 import 'package:laundry/core/constant/routes.dart';
+import 'package:laundry/services/security/session_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class SplashController extends GetxController {
@@ -16,13 +17,16 @@ class SplashController extends GetxController {
     await Future.delayed(Duration(seconds: 1));
     opacity.value = 1.0;
     scale.value = 1.2;
-    await Future.delayed(Duration(seconds: 3));
+    await Future.delayed(Duration(milliseconds: 1500));
 
     SharedPreferences prefs = await SharedPreferences.getInstance();
-    if (prefs.getBool("login") == null) {
-      Get.offNamed(AppRoute.login);
-    } else {
+    final isLoggedIn = prefs.getBool("login") ?? false;
+
+    if (isLoggedIn) {
+      await SessionManager.restoreSession();
       Get.offNamed(AppRoute.homepage);
-    } // الانتقال للصفحة الرئيسية
+    } else {
+      Get.offNamed(AppRoute.login);
+    }
   }
 }

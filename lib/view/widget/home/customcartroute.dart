@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
@@ -6,7 +5,12 @@ class CustomCardRoute extends StatelessWidget {
   String pagename;
   String title;
   IconData icon;
-  CustomCardRoute({super.key,required this.pagename,required this.title,required this.icon});
+  CustomCardRoute({
+    super.key,
+    required this.pagename,
+    required this.title,
+    required this.icon,
+  });
   @override
   Widget build(BuildContext context) {
     return Card(
