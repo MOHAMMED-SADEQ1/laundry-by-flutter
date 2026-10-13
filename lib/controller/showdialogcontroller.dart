@@ -95,12 +95,12 @@ class ShowDialogController extends GetxController {
     };
     if (note.trim().isNotEmpty) item["note"] = note.trim();
     if (photoPath.isNotEmpty) item["photo"] = photoPath;
-    controllerinvoce.invoice.add(item);
     note = "";
     photoPath = "";
     photoPreview.value = '';
     Get.back();
-    controllerinvoce.update();
+    // `addItem` تُضيف البند **و**تُزامن مجموع الفاتورة، فلا يُحفظ صفرًا.
+    controllerinvoce.addItem(item);
   }
 
   addWash(Map<String, dynamic> data) {

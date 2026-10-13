@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:laundry/services/customer/customer_ledger_service.dart';
+import 'package:laundry/services/security/session_manager.dart';
 import 'package:laundry/sqldb.dart';
 
 /// حالات فاتورة المصنعية
@@ -28,24 +30,18 @@ class ProcessingController extends GetxController {
 
   Future<void> loadWorkers() async {
     try {
-      final rows = await db.safeRead(
-        'users',
-        where: 'role = ? AND is_active = 1',
-        whereArgs: ['worker'],
-        orderBy: 'full_name COLLATE NOCASE ASC',
+      // العمال أولاً (دور worker) ثم بقية المستخدمين النشطين — وكلهم صالحون
+      // للتعيين في المصنعية. الترتيب بالأسماء مع احترام من بلا اسم كامل.
+      final rows = await db.readData(
+        'SELECT * FROM "users" WHERE is_active = 1 '
+        "ORDER BY CASE WHEN role = 'worker' THEN 0 ELSE 1 END ASC, "
+        "CASE WHEN full_name IS NULL OR TRIM(full_name) = '' THEN 1 ELSE 0 END ASC, "
+        "COALESCE(NULLIF(TRIM(full_name), ''), username) COLLATE NOCASE ASC",
       );
-      if (rows.isEmpty) {
-        // لو ما في عمال مسجلون، نعرض كل المستخدمين
-        final all = await db.safeRead(
-          'users',
-          orderBy: 'full_name COLLATE NOCASE ASC',
-        );
-        workers.assignAll(all);
-      } else {
-        workers.assignAll(rows);
-      }
+      workers.assignAll(rows);
     } catch (e) {
       debugPrint('loadWorkers error: $e');
+      workers.clear();
     }
   }
 
@@ -139,7 +135,8 @@ class ProcessingController extends GetxController {
     if (assignedTo == null) return '';
     for (final w in workers) {
       if ('${w['user_id']}' == '$assignedTo') {
-        return w['full_name']?.toString() ?? w['username']?.toString() ?? '';
+        final full = w['full_name']?.toString().trim() ?? '';
+        return full.isNotEmpty ? full : (w['username']?.toString() ?? '');
       }
     }
     return '';
@@ -178,10 +175,20 @@ class ProcessingController extends GetxController {
         {
           'status': status,
           'status_updated_at': DateTime.now().toIso8601String(),
+          'status_updated_by': SessionManager.currentUserId,
         },
         where: 'invoices_id = ?',
         whereArgs: [invoiceId],
       );
+
+      await db.logAudit(
+        userId: SessionManager.currentUserId,
+        action: 'invoice_status_change',
+        tableName: 'invoices',
+        recordId: invoiceId,
+        newValues: '{"status":"$status"}',
+      );
+
       await loadInvoices();
       Get.snackbar(
         'تم',
@@ -198,21 +205,71 @@ class ProcessingController extends GetxController {
     }
   }
 
-  /// تسليم فاتورة مع سداد المتبقي إن وجد (كاش)
+  /// تسليم فاتورة مع سداد المتبقي إن وجد (كاش).
+  ///
+  /// **إصلاح محاسبي:** السداد يُقيَّد في `customer_payments` (دفتر الأستاذ)
+  /// أيضًا — لا في `invoices` وحده. سابقًا كان المتبقي يُصفَّر بلا أي قيد،
+  /// فتنقص مدفوعات النقدية بصندوق اليوم بمقدار كل سداد عند التسليم.
   Future<void> deliver(int invoiceId, Map<String, dynamic> inv) async {
     final remaining = double.tryParse('${inv['remaining_amount'] ?? 0}') ?? 0;
+    final customerId = inv['customer_id'] as int?;
+    final paidBefore =
+        double.tryParse('${inv['paid_amount'] ?? 0}') ?? 0;
+
     if (remaining > 0) {
+      final userId = SessionManager.currentUserId;
+      final now = DateTime.now().toIso8601String();
+
+      // 1. تحديث الفاتورة: تُسدَّد بالكامل
       await db.safeUpdate(
         'invoices',
         {
-          'paid_amount':
-              (double.tryParse('${inv['paid_amount'] ?? 0}') ?? 0) + remaining,
+          'paid_amount': paidBefore + remaining,
           'remaining_amount': 0.0,
         },
         where: 'invoices_id = ?',
         whereArgs: [invoiceId],
       );
+
+      // 2. قيد السداد في دفتر الدفعات — يُربط بالفاتورة والزبون
+      if (customerId != null) {
+        await db.safeInsert('customer_payments', {
+          'customer_id': customerId,
+          'amount': remaining,
+          'payment_method': 'كاش',
+          'payment_date': now,
+          'notes': 'سداد عند تسليم الفاتورة #$invoiceId',
+          'recorded_by': userId,
+          'source': 'delivery',
+          'invoice_id': invoiceId,
+        });
+
+        await db.safeInsert('customer_balance_log', {
+          'customer_id': customerId,
+          'change_amount': -remaining,
+          'balance_after': 0,
+          'reason': 'delivery_payment',
+          'reference_id': invoiceId,
+          'created_at': now,
+          'created_by': userId,
+        });
+      }
+
+      await db.logAudit(
+        userId: userId,
+        action: 'invoice_delivered_with_payment',
+        tableName: 'invoices',
+        recordId: invoiceId,
+        newValues:
+            '{"paid_added":$remaining,"source":"delivery"}',
+      );
+
+      // 3. أعِد اشتقاق رصيد الزبون من الفواتير (لا تخمين)
+      if (customerId != null) {
+        await CustomerLedgerService.instance.syncBalance(customerId);
+      }
     }
+
     await updateStatus(invoiceId, ProcessingStatuses.delivered);
   }
 
@@ -224,6 +281,15 @@ class ProcessingController extends GetxController {
         where: 'invoices_id = ?',
         whereArgs: [invoiceId],
       );
+
+      await db.logAudit(
+        userId: SessionManager.currentUserId,
+        action: 'invoice_assign_worker',
+        tableName: 'invoices',
+        recordId: invoiceId,
+        newValues: '{"assigned_to":$workerId}',
+      );
+
       await loadInvoices();
     } catch (e) {
       debugPrint('assignWorker error: $e');

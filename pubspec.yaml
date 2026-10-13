@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.1.2+1
+version: 1.2.0+2
 
 environment:
   sdk: ^3.7.2
@@ -42,13 +42,32 @@ dependencies:
   shared_preferences: ^2.5.3
   url_launcher: ^6.3.1
   path_provider: ^2.1.4
-  # sqflite_common_ffi: ^2.3.5
+  # 🔀 محرّك قاعدة البيانات على **سطح المكتب** (ويندوز/Linux/macOS).
+  # `sqflite` لا يعمل على ويندوز إطلاقًا، فهذه الحزمة تُوفّر نفس الواجهة عبر
+  # sqlite3. على أندرويد يبقى `sqflite` الأصلي هو المستخدم ولا تُلمس هذه
+  # الحزمة — التفاصيل والمفتاح في `lib/config/run_target.dart`.
+  #
+  # ⚠️ **لماذا 2.3.x وليس 2.4.x؟** لأن 2.4+ يعتمد `sqlite3` v3 الذي يبني
+  # المكتبة عبر **build hooks**، وقد فشل فعليًا على ويندوز في هذا المشروع
+  # (`Building native assets failed` عند `flutter build windows`). والتوثيق
+  # الرسمي للحزمة يوصي بالرجوع إلى v2 عند هذه المشاكل حرفيًا:
+  # «sqlite3 v3 depends on hooks which can cause some issues... you can simply
+  #   add the following constraint to continue using sqlite3 v2».
+  # فلا تُرقِّ إلى 2.4.x إلا بعد التأكد أن build hooks تعمل على جهازك.
+  sqflite_common_ffi: ^2.3.7
+  # يثبّت sqlite3 على الإصدار الثاني (مطلوب صراحةً مع sqflite_common_ffi 2.3.x).
+  sqlite3: ^2.9.4
+  # تُجمّع `sqlite3.dll` مع التطبيق على ويندوز (وفي Linux) في وضعي
+  # التصحيح **والإصدار** معًا. بدونها يعمل التصحيح فقط، وتحتاج في نسخة
+  # الإصدار إلى نسخ `sqlite3.dll` يدويًا بجانب الملف التنفيذي.
+  sqlite3_flutter_libs: ^0.5.24
   font_awesome_flutter: ^10.8.0
   intl: ^0.20.2
   crypto: ^3.0.6
   path: ^1.9.0
   barcode: ^2.2.9
   file_picker: ^8.1.7
+  package_info_plus: ^8.1.1
   
 
 dev_dependencies:

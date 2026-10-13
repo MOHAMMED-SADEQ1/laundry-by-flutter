@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:laundry/controller/auth/auth_controller.dart';
+import 'package:laundry/config/app_info.dart';
 import 'package:laundry/controller/shift_controller.dart';
 import 'package:laundry/core/theme/app_colors.dart';
+import 'package:laundry/services/business_info_service.dart';
+import 'package:laundry/services/permission/permission_service.dart';
 import 'package:laundry/view/screen/shifts_history_screen.dart';
+import 'package:laundry/view/widget/common/developer_credit.dart';
 
 /// قائمة جانبية عصرية بتدرجات وأقسام منظمة
 class CustomDrawer extends StatelessWidget {
@@ -53,9 +57,11 @@ class CustomDrawer extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        "مغاسل النظارة",
-                        style: TextStyle(
+                      Text(
+                        BusinessInfoService.instance.name.isNotEmpty
+                            ? BusinessInfoService.instance.name
+                            : 'نظام المغاسل',
+                        style: const TextStyle(
                           color: Colors.white,
                           fontFamily: 'cairo',
                           fontSize: 18,
@@ -74,6 +80,30 @@ class CustomDrawer extends StatelessWidget {
                           ),
                         );
                       }),
+                      const SizedBox(height: 4),
+                      // شارة الدور
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: Color(PermissionService.roleColor)
+                              .withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: Color(PermissionService.roleColor)
+                                .withValues(alpha: 0.4),
+                          ),
+                        ),
+                        child: Text(
+                          PermissionService.roleLabel,
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontFamily: 'cairo',
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -87,169 +117,230 @@ class CustomDrawer extends StatelessWidget {
           ),
 
           // ─── حالة الوردية ───
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 14, 14, 6),
-            child: Obx(() {
-              final active = shiftController.isShiftActive.value;
-              return AnimatedContainer(
-                duration: const Duration(milliseconds: 300),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 12,
-                ),
-                decoration: BoxDecoration(
-                  gradient:
-                      active
-                          ? AppColors.successGradient
-                          : AppColors.amberGradient,
-                  borderRadius: BorderRadius.circular(14),
-                  boxShadow: AppColors.softShadow(blur: 10, y: 3),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      active ? Icons.lock_clock : Icons.play_circle_fill,
-                      color: Colors.white,
-                      size: 22,
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            active ? "وردية مفتوحة الآن" : "لا توجد وردية نشطة",
-                            style: const TextStyle(
-                              fontFamily: 'cairo',
-                              fontSize: 13,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
-                          ),
-                          if (active)
+          if (PermissionService.canManageShifts)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 14, 14, 6),
+              child: Obx(() {
+                final active = shiftController.isShiftActive.value;
+                return AnimatedContainer(
+                  duration: const Duration(milliseconds: 300),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 12,
+                  ),
+                  decoration: BoxDecoration(
+                    gradient:
+                        active
+                            ? AppColors.successGradient
+                            : AppColors.amberGradient,
+                    borderRadius: BorderRadius.circular(14),
+                    boxShadow: AppColors.softShadow(blur: 10, y: 3),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        active ? Icons.lock_clock : Icons.play_circle_fill,
+                        color: Colors.white,
+                        size: 22,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
                             Text(
-                              "منذ: ${shiftController.shiftStartTime.value}",
-                              style: TextStyle(
+                              active ? "وردية مفتوحة الآن" : "لا توجد وردية نشطة",
+                              style: const TextStyle(
                                 fontFamily: 'cairo',
-                                fontSize: 11,
-                                color: Colors.white.withValues(alpha: 0.9),
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
                               ),
                             ),
-                        ],
+                            if (active)
+                              Text(
+                                "منذ: ${shiftController.shiftStartTime.value}",
+                                style: TextStyle(
+                                  fontFamily: 'cairo',
+                                  fontSize: 11,
+                                  color: Colors.white.withValues(alpha: 0.9),
+                                ),
+                              ),
+                          ],
+                        ),
                       ),
-                    ),
-                    Material(
-                      color: Colors.white.withValues(alpha: 0.25),
-                      borderRadius: BorderRadius.circular(20),
-                      child: InkWell(
+                      Material(
+                        color: Colors.white.withValues(alpha: 0.25),
                         borderRadius: BorderRadius.circular(20),
-                        onTap: () {
-                          Get.back();
-                          active
-                              ? shiftController.closeShift()
-                              : shiftController.startShift();
-                        },
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 7,
-                          ),
-                          child: Text(
-                            active ? "إغلاق" : "فتح وردية",
-                            style: const TextStyle(
-                              fontFamily: 'cairo',
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(20),
+                          onTap: () {
+                            Get.back();
+                            active
+                                ? shiftController.closeShift()
+                                : shiftController.startShift();
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 7,
+                            ),
+                            child: Text(
+                              active ? "إغلاق" : "فتح وردية",
+                              style: const TextStyle(
+                                fontFamily: 'cairo',
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
                             ),
                           ),
                         ),
                       ),
-                    ),
-                  ],
-                ),
-              );
-            }),
-          ),
+                    ],
+                  ),
+                );
+              }),
+            ),
 
           // ─── القائمة ───
           Expanded(
             child: ListView(
               padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
               children: [
-                _SectionLabel('الإدارة'),
-                _DrawerItem(
-                  icon: Icons.dashboard_outlined,
-                  title: 'لوحة التحكم',
-                  color: AppColors.primary,
-                  route: '/dashboard',
-                ),
-                _DrawerItem(
-                  icon: Icons.add_card_outlined,
-                  title: 'إضافة لبس',
-                  color: AppColors.success,
-                  route: '/addcategory',
-                ),
-                _DrawerItem(
-                  icon: Icons.edit_outlined,
-                  title: 'حذف وتعديل لبس',
-                  color: AppColors.warning,
-                  route: '/category',
-                ),
-                const SizedBox(height: 8),
+                // ─── الإدارة ───
+                if (PermissionService.canViewDashboard ||
+                    PermissionService.canManageCategories)
+                  ...[
+                    _SectionLabel('الإدارة'),
+                    if (PermissionService.canViewDashboard)
+                      _DrawerItem(
+                        icon: Icons.dashboard_outlined,
+                        title: 'لوحة التحكم',
+                        color: AppColors.primary,
+                        route: '/dashboard',
+                      ),
+                    if (PermissionService.canManageCategories)
+                      _DrawerItem(
+                        icon: Icons.add_card_outlined,
+                        title: 'إضافة لبس',
+                        color: AppColors.success,
+                        route: '/addcategory',
+                      ),
+                    if (PermissionService.canManageCategories)
+                      _DrawerItem(
+                        icon: Icons.edit_outlined,
+                        title: 'حذف وتعديل لبس',
+                        color: AppColors.warning,
+                        route: '/category',
+                      ),
+                    const SizedBox(height: 8),
+                  ],
 
+                // ─── العمليات ───
                 _SectionLabel('العمليات'),
-                _DrawerItem(
-                  icon: Icons.contact_phone_outlined,
-                  title: 'الزبائن',
-                  color: AppColors.secondary,
-                  route: '/customernumber',
-                ),
+                if (PermissionService.canManageCustomers)
+                  _DrawerItem(
+                    icon: Icons.contact_phone_outlined,
+                    title: 'الزبائن',
+                    color: AppColors.secondary,
+                    route: '/customernumber',
+                  ),
                 _DrawerItem(
                   icon: Icons.receipt_long_outlined,
                   title: 'الفواتير',
                   color: AppColors.info,
                   route: '/invoices',
                 ),
-                _DrawerItem(
-                  icon: Icons.local_laundry_service_outlined,
-                  title: 'لوحة المصنعية',
-                  color: AppColors.violet,
-                  route: '/processing',
-                ),
-                _DrawerItem(
-                  icon: Icons.card_membership,
-                  title: 'الاشتراكات الشهرية',
-                  color: AppColors.warning,
-                  route: '/subscriptions',
-                ),
+                if (PermissionService.canProcessLaundry)
+                  _DrawerItem(
+                    icon: Icons.local_laundry_service_outlined,
+                    title: 'لوحة المصنعية',
+                    color: AppColors.violet,
+                    route: '/processing',
+                  ),
+                if (PermissionService.canManageSubscriptions)
+                  _DrawerItem(
+                    icon: Icons.card_membership,
+                    title: 'الاشتراكات الشهرية',
+                    color: AppColors.warning,
+                    route: '/subscriptions',
+                  ),
+                if (PermissionService.canViewReports)
+                  _DrawerItem(
+                    icon: Icons.insights_outlined,
+                    title: 'لوحة الاشتراكات',
+                    color: AppColors.violet,
+                    route: '/subscription-dashboard',
+                  ),
                 const SizedBox(height: 8),
 
-                _SectionLabel('التقارير'),
-                _DrawerItem(
-                  icon: Icons.bar_chart_rounded,
-                  title: 'التقارير',
-                  color: AppColors.info,
-                  route: '/reports',
-                ),
-                _DrawerItem(
-                  icon: Icons.history_edu_outlined,
-                  title: 'سجل الورديات',
-                  color: AppColors.indigo,
-                  onTap: () {
-                    Get.back();
-                    Get.to(() => const ShiftsHistoryScreen());
-                  },
-                ),
-                const SizedBox(height: 8),
+                // ─── التقارير ───
+                if (PermissionService.canViewReports) ...[
+                  _SectionLabel('التقارير'),
+                  _DrawerItem(
+                    icon: Icons.money_rounded,
+                    title: 'صندوق اليوم',
+                    color: AppColors.success,
+                    route: '/daily-cash',
+                  ),
+                  if (PermissionService.canManageExpenses)
+                    _DrawerItem(
+                      icon: Icons.payments_outlined,
+                      title: 'المصروفات',
+                      color: AppColors.danger,
+                      route: '/expenses',
+                    ),
+                  _DrawerItem(
+                    icon: Icons.bar_chart_rounded,
+                    title: 'التقارير',
+                    color: AppColors.info,
+                    route: '/reports',
+                  ),
+                  if (PermissionService.canManageShifts)
+                    _DrawerItem(
+                      icon: Icons.history_edu_outlined,
+                      title: 'سجل الورديات',
+                      color: AppColors.indigo,
+                      onTap: () {
+                        Get.back();
+                        Get.to(() => const ShiftsHistoryScreen());
+                      },
+                    ),
+                  const SizedBox(height: 8),
+                ],
 
+                // ─── النظام ───
                 _SectionLabel('النظام'),
                 _DrawerItem(
-                  icon: Icons.settings_outlined,
-                  title: 'الإعدادات',
-                  color: AppColors.slate,
-                  route: '/settings',
+                  icon: Icons.person_outline,
+                  title: 'الملف الشخصي',
+                  color: AppColors.primary,
+                  route: '/profile',
                 ),
+                if (PermissionService.canManageUsers)
+                  _DrawerItem(
+                    icon: Icons.people_outlined,
+                    title: 'إدارة المستخدمين',
+                    color: AppColors.violet,
+                    route: '/users',
+                  ),
+                if (PermissionService.canManageSettings)
+                  _DrawerItem(
+                    icon: Icons.settings_outlined,
+                    title: 'الإعدادات',
+                    color: AppColors.slate,
+                    route: '/settings',
+                  ),
+                // سجل التدقيق: يعرض ما سجّله النظام فعلًا من تجاوزات
+                // وحذف وإلغاءات — كان يُكتب في 24 موضعًا ولا يُقرأ في أي شاشة.
+                if (PermissionService.canManageSettings)
+                  _DrawerItem(
+                    icon: Icons.fact_check_outlined,
+                    title: 'سجل التدقيق',
+                    color: AppColors.warning,
+                    route: '/audit-log',
+                  ),
                 _DrawerItem(
                   icon: Icons.logout_rounded,
                   title: 'تسجيل الخروج',
@@ -281,93 +372,45 @@ class CustomDrawer extends StatelessWidget {
               color: AppColors.surfaceSoft,
               border: Border(top: BorderSide(color: AppColors.border)),
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  "الإصدار 1.2.0  •  ",
-                  style: TextStyle(
-                    fontFamily: 'cairo',
-                    fontSize: 11,
-                    color: AppColors.textMuted,
-                  ),
-                ),
-                InkWell(
-                  onTap: () => _showDeveloperDialog(),
-                  borderRadius: BorderRadius.circular(8),
-                  child: Padding(
-                    padding: const EdgeInsets.all(4),
-                    child: Text(
-                      "مطوّر النظام",
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      "الإصدار ${AppInfo.version}  •  ",
                       style: const TextStyle(
                         fontFamily: 'cairo',
                         fontSize: 11,
-                        color: AppColors.primary,
-                        fontWeight: FontWeight.bold,
+                        color: AppColors.textMuted,
                       ),
                     ),
-                  ),
+                    InkWell(
+                      onTap: showDeveloperDialog,
+                      borderRadius: BorderRadius.circular(8),
+                      child: const Padding(
+                        padding: EdgeInsets.all(4),
+                        child: Text(
+                          "مطوّر النظام",
+                          style: TextStyle(
+                            fontFamily: 'cairo',
+                            fontSize: 11,
+                            color: AppColors.primary,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
+                // حقوق المطوّر — أسفل القائمة الجانبية
+                const DeveloperCredit(fontSize: 11),
               ],
             ),
           ),
         ],
       ),
-    );
-  }
-
-  void _showDeveloperDialog() {
-    Get.defaultDialog(
-      title: "مطوّر النظام",
-      titleStyle: TextStyle(
-        fontFamily: 'cairo',
-        fontWeight: FontWeight.bold,
-        color: AppColors.textPrimary,
-      ),
-      contentPadding: const EdgeInsets.fromLTRB(24, 8, 24, 20),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.code, size: 40, color: AppColors.primary),
-          SizedBox(height: 10),
-          Text(
-            "للشكاوى والاستفسار تواصل معنا عبر:",
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontFamily: 'cairo',
-              fontSize: 13,
-              color: AppColors.textSecondary,
-            ),
-          ),
-        ],
-      ),
-      actions: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          children: [
-            IconButton(
-              tooltip: 'البريد الإلكتروني',
-              onPressed:
-                  () =>
-                      Get.snackbar('معلومات', 'mohammadsadekaljafri@gmail.com'),
-              icon: const Icon(
-                Icons.mail_outline,
-                color: AppColors.info,
-                size: 34,
-              ),
-            ),
-            IconButton(
-              tooltip: 'واتساب',
-              onPressed: () => Get.snackbar('معلومات', '0537498756'),
-              icon: const Icon(
-                Icons.chat_outlined,
-                color: AppColors.success,
-                size: 34,
-              ),
-            ),
-          ],
-        ),
-      ],
     );
   }
 }

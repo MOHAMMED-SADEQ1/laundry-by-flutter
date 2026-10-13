@@ -196,8 +196,8 @@ class _TotalSection extends StatelessWidget {
                   key: ValueKey(controller.summation.value),
                   children: [
                     Text(
-                      (double.tryParse(controller.calcSummation()) ?? 0)
-                          .toStringAsFixed(2),
+                      // عرض فقط — لا نكتب في `summation` من داخل `Obx`
+                      controller.totalValue().toStringAsFixed(2),
                       style: const TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,

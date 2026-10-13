@@ -6,8 +6,10 @@ import 'package:laundry/controller/previousinvoicecontroller.dart';
 import 'package:laundry/controller/printInvoicecontroller.dart';
 import 'package:laundry/controller/shift_controller.dart';
 import 'package:laundry/core/theme/app_colors.dart';
+import 'package:laundry/services/business_info_service.dart';
 import 'package:laundry/view/widget/common/animation_wrappers.dart';
 import 'package:laundry/view/widget/common/common_widgets.dart';
+import 'package:laundry/view/widget/common/developer_credit.dart';
 import 'package:laundry/view/widget/customappbar.dart';
 
 class ShiftsHistoryScreen extends StatelessWidget {
@@ -36,8 +38,15 @@ class ShiftsHistoryScreen extends StatelessWidget {
         }
         return ListView.builder(
           padding: const EdgeInsets.all(14),
-          itemCount: controller.closedShifts.length,
+          // عنصر أخير إضافي = حقوق المطوّر أسفل سجل الورديات
+          itemCount: controller.closedShifts.length + 1,
           itemBuilder: (context, index) {
+            if (index == controller.closedShifts.length) {
+              return const DeveloperCredit(
+                fontSize: 12,
+                padding: EdgeInsets.only(top: 18, bottom: 8),
+              );
+            }
             final shift = controller.closedShifts[index];
             final startTime = DateFormat(
               'yyyy-MM-dd hh:mm a',
@@ -202,6 +211,9 @@ class ShiftsHistoryScreen extends StatelessWidget {
                               ],
                             ),
                           ),
+                          const SizedBox(height: 12),
+                          // ─── جرد الدرج (الجزء المخزَّن عند الإقفال) ───
+                          _stocktakeBox(shift),
                         ],
                       ),
                     ),
@@ -252,6 +264,134 @@ class ShiftsHistoryScreen extends StatelessWidget {
           ],
         ),
       ],
+    );
+  }
+
+  /// صندوق جرد الدرج للوردية المقفَلة.
+  ///
+  /// `expected` **مشتق** من المخزَّن: `counted − difference` (لأن
+  /// `difference = counted − expected`). لم نخزّن «المتوقع» مباشرةً لأن
+  /// إعادة حسابه من الحركات قد تتغيّر مع أي تعديل لاحق، بينما لقطة الإقفال
+  /// يجب أن تبقى ثابتة. والفرق بين «أُقفل بلا جرد» (counted = null) و
+  /// «جُرِد وطابق» (difference = 0) معلومة حقيقية لا تُدمج.
+  Widget _stocktakeBox(Map<String, dynamic> shift) {
+    final counted = (shift['counted_cash'] as num?)?.toDouble();
+    final difference = (shift['cash_difference'] as num?)?.toDouble() ?? 0.0;
+    final reason = '${shift['difference_reason'] ?? ''}'.trim();
+
+    if (counted == null) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: AppColors.warning.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.warning.withValues(alpha: 0.3)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.help_outline, size: 16, color: AppColors.warning),
+            const SizedBox(width: 8),
+            Text(
+              'أُقفلت بلا جرد للدرج',
+              style: TextStyle(
+                fontFamily: 'cairo',
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: AppColors.warning,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final expected = counted - difference;
+    final balanced = difference.abs() < 0.01;
+    final color = balanced
+        ? AppColors.success
+        : (difference > 0 ? AppColors.info : AppColors.danger);
+    final diffLabel = balanced
+        ? 'مطابق'
+        : difference > 0
+        ? 'زيادة ${difference.toStringAsFixed(2)}'
+        : 'عجز ${difference.abs().toStringAsFixed(2)}';
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.07),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.calculate_outlined, size: 16, color: color),
+              const SizedBox(width: 8),
+              const Text(
+                'جرد الدرج',
+                style: TextStyle(
+                  fontFamily: 'cairo',
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                diffLabel,
+                style: TextStyle(
+                  fontFamily: 'cairo',
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: color,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'المتوقع: ${expected.toStringAsFixed(2)}',
+                  style: TextStyle(
+                    fontFamily: 'cairo',
+                    fontSize: 11,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ),
+              Expanded(
+                child: Text(
+                  'المعدود: ${counted.toStringAsFixed(2)}',
+                  textAlign: TextAlign.end,
+                  style: TextStyle(
+                    fontFamily: 'cairo',
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (reason.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              'السبب: $reason',
+              style: TextStyle(
+                fontFamily: 'cairo',
+                fontSize: 11,
+                color: AppColors.textMuted,
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 
@@ -549,6 +689,9 @@ class _ShiftInvoiceRow extends StatelessWidget {
       'invoiceNumber': invoice['invoices_id'],
       'customername': mapdata['customername'],
       'date': mapdata['date'],
+      'bizName': BusinessInfoService.instance.name,
+      'bizPhone': BusinessInfoService.instance.phone,
+      'bizAddress': BusinessInfoService.instance.address,
     };
     final printCtrl =
         Get.isRegistered<PreviousInvoiceController>()

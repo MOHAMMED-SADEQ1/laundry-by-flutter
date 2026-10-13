@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
+import 'package:laundry/services/invoice/invoice_items_service.dart';
+import 'package:laundry/services/subscription/subscription_service.dart';
 import 'package:laundry/sqldb.dart';
 import 'package:intl/intl.dart';
 
@@ -14,6 +16,38 @@ class DashboardController extends GetxController {
   final RxDouble todayCost = 0.0.obs;
   final RxInt totalCustomers = 0.obs;
   final RxInt activeShift = 0.obs;
+
+  // ─── مؤشرات الاشتراكات الشهرية ───
+  // كانت غائبة تمامًا: كل استعلامات اللوحة تشترط `subscription_id IS NULL`،
+  // فلم يرَ صاحب المحل أي أثر لإيراد الاشتراكات في اللوحة الرئيسية.
+  /// الإيراد المُعترف به من الاشتراكات اليوم (خدمة مُستهلكة).
+  final RxDouble todaySubscriptionRevenue = 0.0.obs;
+
+  /// النقدية المحصَّلة من دفعات الاشتراكات اليوم.
+  final RxDouble todaySubscriptionCollected = 0.0.obs;
+
+  /// الإيراد الشهري المتكرّر — أساس التخطيط.
+  final RxDouble subscriptionMrr = 0.0.obs;
+
+  /// الالتزام المتبقّي (إيراد مؤجَّل): خدمة مضمونة لم تُقدَّم بعد.
+  final RxDouble subscriptionLiability = 0.0.obs;
+
+  /// تكلفة خدمة الاشتراكات اليوم — **حقل مستقل** لا يُضاف إلى `todayCost`.
+  ///
+  /// **إصلاح سباق (race):** كان `_loadSubscriptionKpis` يكتب
+  /// `todayCost.value = todayCost.value + subCostToday`، بينما
+  /// `_loadTodayCost` يكتب `todayCost.value = <القيمة>`. والاثنان يعملان
+  /// معًا داخل `Future.wait` بلا ترتيب مضمون، ومع إعادة تحميل اللوحة
+  /// النتيجة تتغيّر: إمّا تُلغى تكلفة الاشتراك (إن سبق `_loadTodayCost`)
+  /// أو تُضاف مرتين (إن تكرّرت). الآن كل حقل يُكتب بمصدره الواحد،
+  /// والجمع يحدث لحظة العرض في `todayProfit` و`todayTotalCost`.
+  final RxDouble todaySubscriptionCost = 0.0.obs;
+
+  /// عدد المشتركين بتغطية سارية.
+  final RxInt activeSubscribers = 0.obs;
+
+  /// اشتراكات متأخّرة عن السداد.
+  final RxInt overdueSubscriptions = 0.obs;
 
   // Charts data
   final RxList<Map<String, dynamic>> weeklySales = <Map<String, dynamic>>[].obs;
@@ -58,6 +92,7 @@ class DashboardController extends GetxController {
         _loadComparisonData(),
         _loadPeakHours(),
         _loadForecast(),
+        _loadSubscriptionKpis(),
       ]);
 
       todayAverage.value =
@@ -65,10 +100,20 @@ class DashboardController extends GetxController {
               ? todaySales.value / todayInvoices.value
               : 0.0;
 
-      todayProfit.value = (todaySales.value - todayCost.value).clamp(
-        0,
-        double.infinity,
-      );
+      // 💰 صافي الربح يجب أن يرى **إيراد الاشتراكات وتكلفتها** أيضًا.
+      // سابقًا كان: (مبيعات عادية − تكلفة تشمل الاشتراكات) ⇒ سالب دائمًا.
+      //
+      // الجمع يتم هنا لحظة العرض، لا بالكتابة في الحقول — فلا أثر لترتيب
+      // تنفيذ الاستعلامات المتوازية.
+      //
+      // **لا `.clamp`**: قصّ القيمة عند صفر كان يُخفي الأيام الخاسرة تمامًا،
+      // فيرى المالك «0» بينما التقرير يعرض الرقم السالب بالأحمر — تناقض
+      // يُخفي خسارة حقيقية. الواجهة تتكفّل بعرض السالب بلونه التحذيري.
+      todayProfit.value =
+          todaySales.value +
+          todaySubscriptionRevenue.value -
+          todayCost.value -
+          todaySubscriptionCost.value;
     } catch (e) {
       debugPrint('Dashboard error: $e');
     } finally {
@@ -79,7 +124,11 @@ class DashboardController extends GetxController {
   Future<void> _loadTodaySales() async {
     final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
     final result = await _db.readData(
-      'SELECT COALESCE(SUM(total_price), 0) as total FROM invoices WHERE DATE(invoice_date) = ?',
+      // final_amount (بعد الخصم) — نفس أساس التقارير. كان total_price
+      // (قبل الخصم) ⇒ «مبيعات اليوم» في اللوحة تتجاوز «المبيعات» في
+      // التقرير لنفس اليوم بمقدار الخصومات.
+      'SELECT COALESCE(SUM(final_amount), 0) as total FROM invoices '
+      "WHERE DATE(invoice_date) = ? AND subscription_id IS NULL",
       [today],
     );
     todaySales.value = (result.first['total'] ?? 0).toDouble();
@@ -88,28 +137,76 @@ class DashboardController extends GetxController {
   Future<void> _loadTodayInvoices() async {
     final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
     final result = await _db.readData(
-      'SELECT COUNT(*) as count FROM invoices WHERE DATE(invoice_date) = ?',
+      // `subscription_id IS NULL`: بدونه يُقسم إجمالي المبيعات العادية على
+      // عدد يشمل فواتير الاشتراك ⇒ متوسط الفاتورة أقل من الحقيقة دائمًا.
+      'SELECT COUNT(*) as count FROM invoices '
+      "WHERE DATE(invoice_date) = ? AND subscription_id IS NULL",
       [today],
     );
     todayInvoices.value = result.first['count'] ?? 0;
   }
 
-  /// تكلفة القطع المباعة اليوم (مواد التشغيل حسب تكلفة كل قطعة)
+  /// تكلفة القطع المباعة اليوم (مواد التشغيل حسب تكلفة كل قطعة).
+  ///
+  /// **إصلاح**: كانت تشمل فواتير الاشتراكات بينما الإيراد يستثنيها ⇒ ربح سالب.
+  /// الآن تُحسب على الفواتير **غير** المرتبطة باشتراك، وتكلفة الاشتراكات
+  /// تُحتسب منفصلة في [_loadSubscriptionKpis]، ثم تُجمع في `todayCost`.
   Future<void> _loadTodayCost() async {
     final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
     try {
-      final result = await _db.readData(
-        '''
-        SELECT COALESCE(SUM(json_extract(j.value, '\$.count') * COALESCE(c.cost_price, 0)), 0) as cost
-        FROM invoices i, json_each(i.list_data) j, clothing c
-        WHERE DATE(i.invoice_date) = ? AND json_extract(j.value, '\$.vestments') = c.clothing_name
-      ''',
-        [today],
+      // التكلفة من **لقطة البنود** (`invoice_items`) لا من الربط بالاسم مع
+      // `clothing` — الربط بالاسم كان يصفّر التكلفة عند إعادة تسمية صنف.
+      todayCost.value = await InvoiceItemsService.instance.costFor(
+        where: 'DATE(i.invoice_date) = ? AND i.subscription_id IS NULL',
+        args: [today],
       );
-      todayCost.value = (result.first['cost'] ?? 0).toDouble();
     } catch (e) {
       todayCost.value = 0;
       debugPrint('cost error: $e');
+    }
+  }
+
+  /// مؤشرات الاشتراكات: إيراد مُعترف به + محصَّل + MRR + التزام متبقٍّ.
+  ///
+  /// سبب الفصل: الإيراد المُعترف به (خدمة مُقدَّمة) والمحصَّل (نقدية) رقمان
+  /// مختلفان تمامًا في المحاسبة، وخلطهما هو ما يجعل التقارير كاذبة.
+  Future<void> _loadSubscriptionKpis() async {
+    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    try {
+      final svc = await SubscriptionService.instance.financials();
+
+      // الإيراد المُعترف به اليوم: قيمة الغسيل المُستهلك من فواتير الاشتراكات
+      final recognized = await _db.readData(
+        'SELECT COALESCE(SUM(COALESCE(i.subscription_used_value, 0)), 0) '
+        '  AS v '
+        'FROM invoices i '
+        'WHERE DATE(i.invoice_date) = ? AND i.subscription_id IS NOT NULL',
+        [today],
+      );
+      todaySubscriptionRevenue.value =
+          (recognized.firstOrNull?['v'] as num?)?.toDouble() ?? 0;
+
+      // تكلفة خدمة الاشتراكات اليوم — من لقطة البنود (لا الربط بالاسم)
+      todaySubscriptionCost.value = await InvoiceItemsService.instance.costFor(
+        where: 'DATE(i.invoice_date) = ? AND i.subscription_id IS NOT NULL',
+        args: [today],
+      );
+
+      final collected = await _db.readData(
+        'SELECT COALESCE(SUM(amount), 0) AS t FROM subscription_payments '
+        "WHERE DATE(paid_date) = ? AND COALESCE(source,'manual') "
+        "  != 'cancel_refund'",
+        [today],
+      );
+      todaySubscriptionCollected.value =
+          (collected.firstOrNull?['t'] as num?)?.toDouble() ?? 0;
+
+      subscriptionMrr.value = await SubscriptionService.instance.mrr();
+      subscriptionLiability.value = svc.deferred;
+      activeSubscribers.value = svc.activeCount + svc.cappedCount;
+      overdueSubscriptions.value = svc.overdueCount + svc.pendingCount;
+    } catch (e) {
+      debugPrint('subscription kpis error: $e');
     }
   }
 
@@ -121,10 +218,18 @@ class DashboardController extends GetxController {
   }
 
   Future<void> _loadWeeklySales() async {
+    // ⚠️ **قاعدة الفلترة الزمنية:** `DATE(invoice_date)` **بلا** `'localtime'`،
+    // بينما `DATE('now', 'localtime')` **تبقى** — `'now'` في SQLite وقت UTC
+    // فعلًا فتحويله للمحلي صواب، أما `invoice_date` فمخزَّن **محليًا** أصلًا
+    // (لا `toUtc()` في المشروع كله)، فإضافة `'localtime'` عليه تحويل مزدوج
+    // يزيح كل فاتورة بعد 21:00 محليًا (UTC+3) إلى اليوم التالي.
+    // القياس العددي في `tool/verify_localtime_removal.py`.
     final result = await _db.readData('''
-      SELECT DATE(invoice_date) as day, SUM(total_price) as total, COUNT(*) as count
+      SELECT DATE(invoice_date) as day,
+             SUM(final_amount) as total, COUNT(*) as count
       FROM invoices
-      WHERE invoice_date >= DATE('now', '-7 days')
+      WHERE DATE(invoice_date) >= DATE('now', 'localtime', '-7 days')
+        AND subscription_id IS NULL
       GROUP BY DATE(invoice_date)
       ORDER BY day ASC
     ''');
@@ -133,9 +238,11 @@ class DashboardController extends GetxController {
 
   Future<void> _loadMonthlySales() async {
     final result = await _db.readData('''
-      SELECT strftime('%Y-%m', invoice_date) as month, SUM(total_price) as total, COUNT(*) as count
+      SELECT strftime('%Y-%m', invoice_date) as month,
+             SUM(final_amount) as total, COUNT(*) as count
       FROM invoices
-      WHERE invoice_date >= DATE('now', '-12 months')
+      WHERE DATE(invoice_date) >= DATE('now', 'localtime', '-12 months')
+        AND subscription_id IS NULL
       GROUP BY strftime('%Y-%m', invoice_date)
       ORDER BY month ASC
     ''');
@@ -143,17 +250,27 @@ class DashboardController extends GetxController {
   }
 
   Future<void> _loadTopItems() async {
+    // الترتيب الثانوي بـ item_name يجعل الناتج حتميًا عند تعادل الإيراد
+    // (كان الترتيب غير معرَّف عند التعادل فيتغيّر بين تحميل وآخر).
     final result = await _db.readData(
-      "SELECT json_extract(value, '\$.vestments') as item_name, SUM(json_extract(value, '\$.total_price')) as total_revenue, SUM(json_extract(value, '\$.count')) as total_count FROM invoices, json_each(list_data) WHERE invoice_date >= DATE('now', '-30 days') GROUP BY item_name ORDER BY total_revenue DESC LIMIT 10",
+      "SELECT json_extract(value, '\$.vestments') as item_name, "
+      "  SUM(json_extract(value, '\$.total_price')) as total_revenue, "
+      "  SUM(json_extract(value, '\$.count')) as total_count "
+      "FROM invoices, json_each(list_data) "
+      "WHERE DATE(invoice_date) >= DATE('now', 'localtime', '-30 days') "
+      "  AND subscription_id IS NULL "
+      "GROUP BY item_name "
+      "ORDER BY total_revenue DESC, item_name ASC LIMIT 10",
     );
     topItems.assignAll(List<Map<String, dynamic>>.from(result));
   }
 
   Future<void> _loadPaymentMethods() async {
     final result = await _db.readData('''
-      SELECT payment_method, COUNT(*) as count, SUM(total_price) as total
+      SELECT payment_method, COUNT(*) as count, SUM(final_amount) as total
       FROM invoices
-      WHERE DATE(invoice_date) = DATE('now')
+      WHERE DATE(invoice_date) = DATE('now', 'localtime')
+        AND subscription_id IS NULL
       GROUP BY payment_method
     ''');
     paymentMethods.assignAll(List<Map<String, dynamic>>.from(result));
@@ -165,22 +282,32 @@ class DashboardController extends GetxController {
       'yyyy-MM-dd',
     ).format(DateTime.now().subtract(Duration(days: 1)));
     final yResult = await _db.readData(
-      'SELECT COALESCE(SUM(total_price), 0) as total FROM invoices WHERE DATE(invoice_date) = ?',
+      "SELECT COALESCE(SUM(final_amount), 0) as total FROM invoices "
+      "WHERE DATE(invoice_date) = ? AND subscription_id IS NULL",
       [yesterday],
     );
     yesterdaySales.value = (yResult.first['total'] ?? 0).toDouble();
 
-    // Last week
+    // Last week — نطاق [‎-14, -8] لا [‎-14, -7]:
+    // كانت BETWEEN ضامّة للطرفين فيُحسب يوم ‎-7 في الأسبوعين معًا (ازدواج).
+    // النطاق الصحيح: 7 أيام كاملة تنتهي أمس.
     final lastWeek = await _db.readData('''
-      SELECT COALESCE(SUM(total_price), 0) as total FROM invoices
-      WHERE DATE(invoice_date) BETWEEN DATE('now', '-14 days') AND DATE('now', '-7 days')
+      SELECT COALESCE(SUM(final_amount), 0) as total FROM invoices
+      WHERE DATE(invoice_date)
+            BETWEEN DATE('now', 'localtime', '-14 days')
+                AND DATE('now', 'localtime', '-8 days')
+        AND subscription_id IS NULL
     ''');
     lastWeekSales.value = (lastWeek.first['total'] ?? 0).toDouble();
 
-    // Last month
+    // Last month — 30 يومًا كاملة تنتهي ‎-30 (النطاق السابق [‎-60,‎-30] كان
+    // 31 يومًا ويضمّ حدًّا مشتركًا مع الشهر الحالي).
     final lastMonth = await _db.readData('''
-      SELECT COALESCE(SUM(total_price), 0) as total FROM invoices
-      WHERE DATE(invoice_date) BETWEEN DATE('now', '-60 days') AND DATE('now', '-30 days')
+      SELECT COALESCE(SUM(final_amount), 0) as total FROM invoices
+      WHERE DATE(invoice_date)
+            BETWEEN DATE('now', 'localtime', '-60 days')
+                AND DATE('now', 'localtime', '-31 days')
+        AND subscription_id IS NULL
     ''');
     lastMonthSales.value = (lastMonth.first['total'] ?? 0).toDouble();
   }
@@ -196,9 +323,10 @@ class DashboardController extends GetxController {
       final result = await _db.readData('''
         SELECT CAST(strftime('%H', invoice_date) AS INTEGER) as hour, COUNT(*) as count
         FROM invoices
-        WHERE invoice_date >= DATE('now', '-7 days')
+        WHERE DATE(invoice_date) >= DATE('now', 'localtime', '-7 days')
+          AND subscription_id IS NULL
         GROUP BY hour
-        ORDER BY count DESC
+        ORDER BY count DESC, hour ASC
         LIMIT 6
       ''');
       peakHours.assignAll(List<Map<String, dynamic>>.from(result));
@@ -207,19 +335,26 @@ class DashboardController extends GetxController {
     }
   }
 
-  /// توقع مبيعات اليوم: متوسط آخر 3 أيام في نفس الوقت من اليوم
+  /// توقع مبيعات اليوم: متوسط آخر 7 أيام ماضية **في نفس الوقت من اليوم**.
+  ///
+  /// كان يجمع `>= DATE('now','-3 days')` وهو ما يشمل 3 أيام كاملة **زائد
+  /// اليوم الحالي**، ثم يقسم على 3 — فتزداد النتيجة بمقدار ⅓ يوم حالي
+  /// مزدوج. الآن: نافذة [‎-7, أمس] (7 أيام كاملة، لا تشمل اليوم) ÷ 7.
   Future<void> _loadForecast() async {
     try {
       final currentHour = DateTime.now().hour;
       final total = await _db.readData(
         '''
-        SELECT COALESCE(SUM(total_price), 0) as t FROM invoices
-        WHERE invoice_date >= DATE('now', '-3 days')
+        SELECT COALESCE(SUM(final_amount), 0) as t FROM invoices
+        WHERE DATE(invoice_date)
+              BETWEEN DATE('now', 'localtime', '-7 days')
+                  AND DATE('now', 'localtime', '-1 days')
           AND CAST(strftime('%H', invoice_date) AS INTEGER) <= ?
+          AND subscription_id IS NULL
       ''',
         [currentHour],
       );
-      forecastToday.value = (total.first['t'] ?? 0).toDouble() / 3.0;
+      forecastToday.value = (total.first['t'] ?? 0).toDouble() / 7.0;
     } catch (e) {
       debugPrint('forecast error: $e');
     }

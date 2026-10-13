@@ -126,6 +126,14 @@ class EditCategory extends StatelessWidget {
                           ),
                         ],
                       ),
+                      const SizedBox(height: 10),
+                      // تكلفة القطعة — كانت غائبة من شاشة التعديل تمامًا،
+                      // فبقي `cost_price` صفرًا لكل صنف وكل تقارير الربح وهمية.
+                      CustomTextFormField(
+                        valueinput: controller.costprice,
+                        lable: 'تكلفة القطعة (مواد + تشغيل)',
+                        inputtype: TextInputType.number,
+                      ),
                       const SizedBox(height: 20),
                       Row(
                         children: [

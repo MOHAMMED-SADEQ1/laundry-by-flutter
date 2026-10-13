@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart' show DateFormat;
 import 'package:laundry/controller/reports/report_controller.dart';
+import 'package:laundry/core/constant/routes.dart';
 import 'package:laundry/core/theme/app_colors.dart';
 import 'package:laundry/view/widget/common/animation_wrappers.dart';
 import 'package:laundry/view/widget/common/common_widgets.dart';
+import 'package:laundry/view/widget/common/developer_credit.dart';
 
 class ReportsScreen extends StatelessWidget {
   const ReportsScreen({super.key});
@@ -72,6 +74,12 @@ Widget _summaryCards({
   required int invoices,
   required double average,
   double subscriptions = 0,
+  double cost = 0,
+  double customerCredits = 0,
+  double totalRemaining = 0,
+  double expenses = 0,
+  double grossProfit = 0,
+  double tax = 0,
 }) {
   final cards = [
     _ReportStat(
@@ -87,7 +95,22 @@ Widget _summaryCards({
       'ر.س',
       Icons.savings,
       profit >= 0 ? AppColors.primaryGradient : AppColors.dangerGradient,
+      // نُفصّل الأساس حتى يُعرف من أين جاء الرقم: ربح مساهم − مصروفات
+      subtitle: expenses > 0
+          ? 'مساهم ${grossProfit.toStringAsFixed(2)} − مصروفات '
+                '${expenses.toStringAsFixed(2)}'
+          : (cost > 0 ? 'بعد خصم تكلفة ${cost.toStringAsFixed(2)} ر.س' : null),
     ),
+    // المصروفات التشغيلية — كانت لا تُسجَّل أصلًا ولا تُخصم من الربح
+    if (expenses > 0)
+      _ReportStat(
+        'المصروفات',
+        expenses,
+        'ر.س',
+        Icons.payments_outlined,
+        AppColors.dangerGradient,
+        subtitle: 'تُخصم من صافي الربح',
+      ),
     _ReportStat(
       'الفواتير',
       invoices.toDouble(),
@@ -109,6 +132,33 @@ Widget _summaryCards({
       Icons.card_membership,
       AppColors.inkGradient,
     ),
+    if (totalRemaining > 0)
+      _ReportStat(
+        'ديون الزبائن',
+        totalRemaining,
+        'ر.س',
+        Icons.account_balance,
+        AppColors.dangerGradient,
+      ),
+    if (customerCredits > 0)
+      _ReportStat(
+        'أرصدة الزبائن (مدفوع زائد)',
+        customerCredits,
+        'ر.س',
+        Icons.savings_outlined,
+        AppColors.successGradient,
+      ),
+    // الضريبة المستحقة للهيئة — **ليست إيرادًا** بل التزام، وتُخصم من الربح.
+    // تظهر فقط عند تفعيل الضريبة، فلا تزدحم التقارير ببطاقة صفر.
+    if (tax > 0)
+      _ReportStat(
+        'ضريبة القيمة المضافة',
+        tax,
+        'ر.س',
+        Icons.receipt_outlined,
+        AppColors.inkGradient,
+        subtitle: 'مستحقة للهيئة — خارج الربح',
+      ),
   ];
 
   return LayoutBuilder(
@@ -140,13 +190,17 @@ class _ReportStat {
   final String unit;
   final IconData icon;
   final Gradient gradient;
+
+  /// سطر توضيحي صغير أسفل القيمة (مثال: تكلفة القطع المخصومة)
+  final String? subtitle;
   const _ReportStat(
     this.title,
     this.value,
     this.unit,
     this.icon,
-    this.gradient,
-  );
+    this.gradient, {
+    this.subtitle,
+  });
 }
 
 class _ReportStatCard extends StatelessWidget {
@@ -184,6 +238,21 @@ class _ReportStatCard extends StatelessWidget {
             ],
           ),
           const Spacer(),
+          if (stat.subtitle != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(
+                stat.subtitle!,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontFamily: 'cairo',
+                  fontSize: 9,
+                  color: Colors.white.withValues(alpha: 0.85),
+                ),
+              ),
+            ),
+          const SizedBox(height: 2),
           Text(
             '${stat.value.toStringAsFixed(2)} ${stat.unit}',
             overflow: TextOverflow.ellipsis,
@@ -361,6 +430,131 @@ class _TableCell extends StatelessWidget {
   }
 }
 
+/// مدخل تقارير الذمم: أعمار الديون + المطابقة ودفتر الأستاذ.
+///
+/// وُضعت في شاشة التقارير لأنها المكان الطبيعي الذي يبحث فيه المحاسب عن
+/// تحليل الذمم — فلا يحتاج معرفة مسار مخفي.
+Widget _debtReportsLauncher() {
+  return Container(
+    padding: const EdgeInsets.all(12),
+    decoration: BoxDecoration(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(16),
+      border: Border.all(color: AppColors.border),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(Icons.account_balance_wallet,
+                size: 18, color: AppColors.danger),
+            const SizedBox(width: 7),
+            const Text(
+              'تحليل ذمم الزبائن',
+              style: TextStyle(
+                fontFamily: 'cairo',
+                fontSize: 13.5,
+                fontWeight: FontWeight.bold,
+                color: AppColors.textPrimary,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        const Text(
+          'أعمار الديون تكشف منذ متى الذمة، والمطابقة تكشف أي خلل في الأرصدة.',
+          style: TextStyle(
+            fontFamily: 'cairo',
+            fontSize: 10.5,
+            color: AppColors.textSecondary,
+            height: 1.5,
+          ),
+        ),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            Expanded(
+              child: _debtLauncherTile(
+                icon: Icons.timelapse,
+                color: AppColors.warning,
+                title: 'أعمار الديون',
+                subtitle: 'توزيع الذمم على فئات تأخر',
+                onTap: () => Get.toNamed(AppRoute.debtAging),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _debtLauncherTile(
+                icon: Icons.fact_check_outlined,
+                color: AppColors.info,
+                title: 'المطابقة والدفتر',
+                subtitle: 'فحص الأرصدة وسجل الحركات',
+                onTap: () => Get.toNamed(AppRoute.debtReconciliation),
+              ),
+            ),
+          ],
+        ),
+      ],
+    ),
+  );
+}
+
+Widget _debtLauncherTile({
+  required IconData icon,
+  required Color color,
+  required String title,
+  required String subtitle,
+  required VoidCallback onTap,
+}) {
+  return InkWell(
+    borderRadius: BorderRadius.circular(12),
+    onTap: onTap,
+    child: Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.07),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.25)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 19, color: color),
+          const SizedBox(height: 6),
+          Text(
+            title,
+            style: TextStyle(
+              fontFamily: 'cairo',
+              fontSize: 12.5,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            subtitle,
+            style: const TextStyle(
+              fontFamily: 'cairo',
+              fontSize: 9.5,
+              color: AppColors.textSecondary,
+              height: 1.4,
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+/// حقوق المطوّر — تُعرض أسفل كل تبويب تقارير (لا تدخل في الطباعة)
+Widget _developerFooter() {
+  return const DeveloperCredit(
+    fontSize: 12,
+    padding: EdgeInsets.symmetric(vertical: 18),
+  );
+}
+
 Widget _printButton() {
   return GradientButton(
     label: 'طباعة التقرير',
@@ -440,6 +634,7 @@ class _DailyTabState extends State<_DailyTab> {
               _summaryCards(
                 sales: (report['total_sales'] ?? 0).toDouble(),
                 profit: (report['net_profit'] ?? 0).toDouble(),
+                cost: (report['total_cost'] ?? 0).toDouble(),
                 invoices: report['invoice_count'] ?? 0,
                 average:
                     (report['invoice_count'] ?? 0) > 0
@@ -447,11 +642,19 @@ class _DailyTabState extends State<_DailyTab> {
                             (report['invoice_count'] as int)
                         : 0.0,
                 subscriptions: (report['subscription_revenue'] ?? 0).toDouble(),
+                totalRemaining: (report['total_remaining'] ?? 0).toDouble(),
+                customerCredits: (report['customer_credits'] ?? 0).toDouble(),
+                expenses: (report['expenses'] ?? 0).toDouble(),
+                grossProfit: (report['gross_profit'] ?? 0).toDouble(),
+                tax: (report['total_tax'] ?? 0).toDouble(),
               ),
+              const SizedBox(height: 12),
+              _debtReportsLauncher(),
               const SizedBox(height: 12),
               _breakdownTable(report, 'يومي'),
               const SizedBox(height: 12),
               _printButton(),
+              _developerFooter(),
             ],
           ),
         ),
@@ -522,6 +725,7 @@ class _WeeklyTabState extends State<_WeeklyTab> {
               _summaryCards(
                 sales: (report['total_sales'] ?? 0).toDouble(),
                 profit: (report['net_profit'] ?? 0).toDouble(),
+                cost: (report['total_cost'] ?? 0).toDouble(),
                 invoices: report['invoice_count'] ?? 0,
                 average:
                     (report['invoice_count'] ?? 0) > 0
@@ -529,11 +733,17 @@ class _WeeklyTabState extends State<_WeeklyTab> {
                             (report['invoice_count'] as int)
                         : 0.0,
                 subscriptions: (report['subscription_revenue'] ?? 0).toDouble(),
+                totalRemaining: (report['total_remaining'] ?? 0).toDouble(),
+                customerCredits: (report['customer_credits'] ?? 0).toDouble(),
+                expenses: (report['expenses'] ?? 0).toDouble(),
+                grossProfit: (report['gross_profit'] ?? 0).toDouble(),
+                tax: (report['total_tax'] ?? 0).toDouble(),
               ),
               const SizedBox(height: 12),
               _breakdownTable(report, 'أسبوعي'),
               const SizedBox(height: 12),
               _printButton(),
+              _developerFooter(),
             ],
           ),
         ),
@@ -616,6 +826,7 @@ class _MonthlyTabState extends State<_MonthlyTab> {
               _summaryCards(
                 sales: (report['total_sales'] ?? 0).toDouble(),
                 profit: (report['net_profit'] ?? 0).toDouble(),
+                cost: (report['total_cost'] ?? 0).toDouble(),
                 invoices: report['invoice_count'] ?? 0,
                 average:
                     (report['invoice_count'] ?? 0) > 0
@@ -623,11 +834,17 @@ class _MonthlyTabState extends State<_MonthlyTab> {
                             (report['invoice_count'] as int)
                         : 0.0,
                 subscriptions: (report['subscription_revenue'] ?? 0).toDouble(),
+                totalRemaining: (report['total_remaining'] ?? 0).toDouble(),
+                customerCredits: (report['customer_credits'] ?? 0).toDouble(),
+                expenses: (report['expenses'] ?? 0).toDouble(),
+                grossProfit: (report['gross_profit'] ?? 0).toDouble(),
+                tax: (report['total_tax'] ?? 0).toDouble(),
               ),
               const SizedBox(height: 12),
               _breakdownTable(report, 'شهري'),
               const SizedBox(height: 12),
               _printButton(),
+              _developerFooter(),
             ],
           ),
         ),
@@ -697,6 +914,7 @@ class _AnnualTabState extends State<_AnnualTab> {
               _summaryCards(
                 sales: (report['total_sales'] ?? 0).toDouble(),
                 profit: (report['net_profit'] ?? 0).toDouble(),
+                cost: (report['total_cost'] ?? 0).toDouble(),
                 invoices: report['invoice_count'] ?? 0,
                 average:
                     (report['invoice_count'] ?? 0) > 0
@@ -704,11 +922,17 @@ class _AnnualTabState extends State<_AnnualTab> {
                             (report['invoice_count'] as int)
                         : 0.0,
                 subscriptions: (report['subscription_revenue'] ?? 0).toDouble(),
+                totalRemaining: (report['total_remaining'] ?? 0).toDouble(),
+                customerCredits: (report['customer_credits'] ?? 0).toDouble(),
+                expenses: (report['expenses'] ?? 0).toDouble(),
+                grossProfit: (report['gross_profit'] ?? 0).toDouble(),
+                tax: (report['total_tax'] ?? 0).toDouble(),
               ),
               const SizedBox(height: 12),
               _breakdownTable(report, 'سنوي'),
               const SizedBox(height: 12),
               _printButton(),
+              _developerFooter(),
             ],
           ),
         ),

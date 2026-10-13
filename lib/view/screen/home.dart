@@ -1,15 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:laundry/controller/customersnumbercontroller.dart';
-import 'package:laundry/controller/homecontroller.dart';
-import 'package:laundry/controller/invoicecontroller.dart';
+import 'package:laundry/controller/addeditcategorycontroller.dart';
 import 'package:laundry/controller/shift_controller.dart';
 import 'package:laundry/core/theme/app_colors.dart';
+import 'package:laundry/services/business_info_service.dart';
 import 'package:laundry/view/screen/invoice.dart';
 import 'package:laundry/view/widget/common/animation_wrappers.dart';
 import 'package:laundry/view/widget/common/common_widgets.dart';
 import 'package:laundry/view/widget/home/customdrawer.dart';
 import 'package:laundry/view/widget/home/customshowdialog.dart';
+import 'package:laundry/services/permission/permission_service.dart';
+import 'package:laundry/view/widget/customer/customer_search_dialog.dart';
 
 class Home extends StatelessWidget {
   const Home({super.key});
@@ -65,11 +66,19 @@ class Home extends StatelessWidget {
             children: [
               const Icon(Icons.local_laundry_service, color: Colors.white),
               const SizedBox(width: 8),
-              const Text(
-                "مغاسل النظارة",
-                style: TextStyle(
-                  fontFamily: 'cairo',
-                  fontWeight: FontWeight.bold,
+              // `Flexible` + الحذف: الشريط صار يحمل 4 أزرار، فلا يتجاوز الاسم
+              // عرض الشاشة ويُفسد التوسيط على الهواتف الضيقة.
+              Flexible(
+                child: Text(
+                  BusinessInfoService.instance.name.isNotEmpty
+                      ? BusinessInfoService.instance.name
+                      : 'نظام المغاسل',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontFamily: 'cairo',
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
             ],
@@ -78,11 +87,20 @@ class Home extends StatelessWidget {
         centerTitle: true,
         elevation: 0,
         actions: [
-          IconButton(
-            tooltip: 'لوحة التحكم',
-            onPressed: () => Get.toNamed('/dashboard'),
-            icon: const Icon(Icons.dashboard_outlined, color: Colors.white),
-          ),
+          // 🔎 بحث سريع عن زبون بالاسم أو رقم الجوال ← يفتح حساب الزبون.
+          // الصلاحية هي نفسها صلاحية قائمة الزبائن (انظر `CustomDrawer`).
+          if (PermissionService.canManageCustomers)
+            IconButton(
+              tooltip: 'بحث عن زبون',
+              onPressed: () => showCustomerSearchDialog(context),
+              icon: const Icon(Icons.person_search, color: Colors.white),
+            ),
+          if (PermissionService.canViewDashboard)
+            IconButton(
+              tooltip: 'لوحة التحكم',
+              onPressed: () => Get.toNamed('/dashboard'),
+              icon: const Icon(Icons.dashboard_outlined, color: Colors.white),
+            ),
           IconButton(
             tooltip: 'الفواتير السابقة',
             onPressed: () => Get.toNamed('/invoices'),
@@ -99,30 +117,34 @@ class Home extends StatelessWidget {
         ],
       ),
       endDrawer: const CustomDrawer(),
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          final invoice = const Invoice();
-          final itemsArea = const _ItemsArea();
-          final isWide = constraints.maxWidth >= 980;
+      body: GestureDetector(
+        onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+        behavior: HitTestBehavior.translucent,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final invoice = const Invoice();
+            final itemsArea = const _ItemsArea();
+            final isWide = constraints.maxWidth >= 980;
 
-          if (isWide) {
-            return Row(
+            if (isWide) {
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(flex: 3, child: invoice),
+                  Expanded(flex: 5, child: itemsArea),
+                ],
+              );
+            }
+            return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Expanded(flex: 3, child: invoice),
                 Expanded(flex: 5, child: itemsArea),
+                const SizedBox(height: 6),
+                Expanded(flex: 4, child: invoice),
               ],
             );
-          }
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(flex: 5, child: itemsArea),
-              const SizedBox(height: 6),
-              Expanded(flex: 4, child: invoice),
-            ],
-          );
-        },
+          },
+        ),
       ),
     );
   }
@@ -138,62 +160,14 @@ class _ItemsArea extends StatefulWidget {
 
 class _ItemsAreaState extends State<_ItemsArea> {
   final TextEditingController _searchCtrl = TextEditingController();
-  final List<Map<String, dynamic>> _customerSuggestions = [];
+  final FocusNode _searchFocusNode = FocusNode();
   String _query = '';
-  bool _loadingSuggestions = false;
 
   @override
   void dispose() {
     _searchCtrl.dispose();
+    _searchFocusNode.dispose();
     super.dispose();
-  }
-
-  // ─── اقتراحات أسماء الزبائن من قاعدة البيانات ───
-  Future<void> _loadSuggestions(String value) async {
-    if (value.trim().isEmpty) {
-      if (_customerSuggestions.isNotEmpty || _loadingSuggestions) {
-        setState(() {
-          _customerSuggestions.clear();
-          _loadingSuggestions = false;
-        });
-      }
-      return;
-    }
-    setState(() => _loadingSuggestions = true);
-    final results = await CustomersNumberController().searchSuggestions(value);
-    if (!mounted) return;
-    setState(() {
-      _loadingSuggestions = false;
-      if (_query == value.trim()) {
-        _customerSuggestions
-          ..clear()
-          ..addAll(results);
-      }
-    });
-  }
-
-  // ─── تعيين اسم الزبون المختار في الفاتورة ───
-  void _selectCustomer(Map<String, dynamic> customer) {
-    final invoiceCtrl =
-        Get.isRegistered<InvoiceController>()
-            ? Get.find<InvoiceController>()
-            : Get.put(InvoiceController());
-    invoiceCtrl.customername.text = customer['customer_name'];
-    _searchCtrl.clear();
-    setState(() {
-      _query = '';
-      _customerSuggestions.clear();
-      _loadingSuggestions = false;
-    });
-    Get.snackbar(
-      'تم الاختيار',
-      'تم تعيين اسم الزبون: ${customer['customer_name']}',
-      snackPosition: SnackPosition.BOTTOM,
-      backgroundColor: AppColors.success,
-      colorText: Colors.white,
-      duration: const Duration(seconds: 2),
-      icon: const Icon(Icons.check_circle, color: Colors.white),
-    );
   }
 
   @override
@@ -223,9 +197,9 @@ class _ItemsAreaState extends State<_ItemsArea> {
                 Expanded(
                   child: TextField(
                     controller: _searchCtrl,
+                    focusNode: _searchFocusNode,
                     onChanged: (v) {
                       setState(() => _query = v.trim());
-                      _loadSuggestions(v);
                     },
                     decoration: InputDecoration(
                       hintText: 'ابحث عن صنف...',
@@ -326,233 +300,87 @@ class _ItemsAreaState extends State<_ItemsArea> {
               ),
             );
           }),
-          // ─── اقتراحات أسماء الزبائن ───
-          if (_customerSuggestions.isNotEmpty || _loadingSuggestions)
-            Container(
-              margin: const EdgeInsets.fromLTRB(16, 6, 16, 2),
-              constraints: const BoxConstraints(maxHeight: 210),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.border),
-                boxShadow: AppColors.softShadow(),
-              ),
-              child:
-                  _loadingSuggestions
-                      ? Padding(
-                        padding: EdgeInsets.all(14),
-                        child: Row(
-                          children: [
-                            SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: AppColors.primary,
-                              ),
-                            ),
-                            SizedBox(width: 10),
-                            Text(
-                              'جارٍ البحث عن الزبائن...',
-                              style: TextStyle(
-                                fontFamily: 'cairo',
-                                fontSize: 12,
-                                color: AppColors.textSecondary,
-                              ),
-                            ),
-                          ],
-                        ),
-                      )
-                      : Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 7,
-                            ),
-                            decoration: BoxDecoration(
-                              color: AppColors.surfaceSoft,
-                              borderRadius: BorderRadius.vertical(
-                                top: Radius.circular(12),
-                              ),
-                            ),
-                            child: Text(
-                              'الزبائن المقترحون — اضغط لتعيين الاسم',
-                              style: TextStyle(
-                                fontFamily: 'cairo',
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                color: AppColors.textSecondary,
-                              ),
-                            ),
-                          ),
-                          Flexible(
-                            child: ListView.builder(
-                              shrinkWrap: true,
-                              padding: EdgeInsets.zero,
-                              itemCount: _customerSuggestions.length,
-                              itemBuilder: (context, i) {
-                                final customer = _customerSuggestions[i];
-                                final phone =
-                                    customer['phone_1']?.toString() ?? '';
-                                return InkWell(
-                                  onTap: () => _selectCustomer(customer),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 10,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      border: Border(
-                                        bottom: BorderSide(
-                                          color: AppColors.border.withValues(
-                                            alpha: 0.5,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        Container(
-                                          width: 30,
-                                          height: 30,
-                                          decoration: BoxDecoration(
-                                            gradient: AppColors.violetGradient,
-                                            shape: BoxShape.circle,
-                                          ),
-                                          child: const Icon(
-                                            Icons.person,
-                                            color: Colors.white,
-                                            size: 16,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 10),
-                                        Expanded(
-                                          child: Text(
-                                            customer['customer_name'],
-                                            style: TextStyle(
-                                              fontFamily: 'cairo',
-                                              fontSize: 13,
-                                              fontWeight: FontWeight.w600,
-                                              color: AppColors.textPrimary,
-                                            ),
-                                          ),
-                                        ),
-                                        if (phone.isNotEmpty)
-                                          Text(
-                                            phone,
-                                            style: TextStyle(
-                                              fontFamily: 'cairo',
-                                              fontSize: 11,
-                                              color: AppColors.textMuted,
-                                            ),
-                                          ),
-                                        const SizedBox(width: 8),
-                                        const Icon(
-                                          Icons.add_circle_outline,
-                                          color: AppColors.success,
-                                          size: 19,
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                );
-                              },
-                            ),
-                          ),
-                        ],
-                      ),
-            ),
           Expanded(
-            child: GetBuilder<HomeController>(
-              init: HomeController(),
-              builder:
-                  (controller) => FutureBuilder(
-                    future: controller.readData(),
-                    builder: (context, snapshot) {
-                      if (snapshot.connectionState == ConnectionState.waiting) {
-                        return const Center(
-                          child: CircularProgressIndicator(strokeWidth: 3),
-                        );
-                      }
-                      if (snapshot.hasError) {
-                        return EmptyState(
-                          icon: Icons.error_outline,
-                          title: 'حدث خطأ في جلب البيانات',
-                          color: AppColors.danger,
-                        );
-                      }
-                      final data = List<Map<String, dynamic>>.from(
-                        snapshot.data ?? [],
-                      );
-                      final filtered =
-                          _query.isEmpty
-                              ? data
-                              : data
-                                  .where(
-                                    (item) => (item['clothing_name'] ?? '')
-                                        .toString()
-                                        .contains(_query),
-                                  )
-                                  .toList();
+            // نقرأ من الحالة التفاعلية للأصناف، فأي إضافة/تعديل/حذف ينعكس فوراً
+            child: Obx(() {
+              final catController = Get.put(AddCategoryController());
+              // التحميل مؤجّل لما بعد الإطار: تعديل حالة تفاعلية أثناء البناء
+              // داخل Obx يرفع خطأ في GetX.
+              if (catController.clothing.isEmpty &&
+                  !catController.isLoading.value) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (catController.clothing.isEmpty &&
+                      !catController.isLoading.value) {
+                    catController.loadClothing();
+                  }
+                });
+              }
+              final data =
+                  catController.clothing
+                      .map((e) => Map<String, dynamic>.from(e))
+                      .toList();
+              final filtered =
+                  _query.isEmpty
+                      ? data
+                      : data
+                          .where(
+                            (item) => (item['clothing_name'] ?? '')
+                                .toString()
+                                .contains(_query),
+                          )
+                          .toList();
 
-                      if (filtered.isEmpty) {
-                        return EmptyState(
-                          icon:
-                              _query.isEmpty
-                                  ? Icons.inventory_2_outlined
-                                  : Icons.search_off,
-                          title:
-                              _query.isEmpty
-                                  ? 'لا توجد أصناف'
-                                  : 'لا توجد نتائج',
-                          subtitle:
-                              _query.isEmpty
-                                  ? 'أضف الأصناف من قائمة الإضافة لبس'
-                                  : 'لم نجد صنفاً يطابق البحث "$_query"',
-                          action:
-                              _query.isEmpty
-                                  ? GradientButton(
-                                    label: 'إضافة لبس',
-                                    icon: Icons.add,
-                                    gradient: AppColors.primaryGradient,
-                                    onPressed:
-                                        () => Get.toNamed('/addcategory'),
-                                  )
-                                  : null,
-                        );
-                      }
+              if (catController.isLoading.value && data.isEmpty) {
+                return const Center(
+                  child: CircularProgressIndicator(strokeWidth: 3),
+                );
+              }
 
-                      return LayoutBuilder(
-                        builder: (context, cons) {
-                          final cols = (cons.maxWidth / 210).floor().clamp(
-                            2,
-                            6,
-                          );
-                          return GridView.builder(
-                            padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-                            gridDelegate:
-                                SliverGridDelegateWithFixedCrossAxisCount(
-                                  crossAxisCount: cols,
-                                  childAspectRatio: 2.3,
-                                  crossAxisSpacing: 8,
-                                  mainAxisSpacing: 8,
-                                ),
-                            itemCount: filtered.length,
-                            itemBuilder: (context, index) {
-                              return FadeInUp(
-                                delayMs: (index % 12) * 40,
-                                child: CustomShowDialog(data: filtered[index]),
-                              );
-                            },
-                          );
-                        },
+              if (filtered.isEmpty) {
+                return EmptyState(
+                  icon:
+                      _query.isEmpty
+                          ? Icons.inventory_2_outlined
+                          : Icons.search_off,
+                  title: _query.isEmpty ? 'لا توجد أصناف' : 'لا توجد نتائج',
+                  subtitle:
+                      _query.isEmpty
+                          ? 'أضف الأصناف من قائمة الإضافة لبس'
+                          : 'لم نجد صنفاً يطابق البحث "$_query"',
+                  action:
+                      _query.isEmpty
+                          ? GradientButton(
+                            label: 'إضافة لبس',
+                            icon: Icons.add,
+                            gradient: AppColors.primaryGradient,
+                            onPressed: () => Get.toNamed('/addcategory'),
+                          )
+                          : null,
+                );
+              }
+
+              return LayoutBuilder(
+                builder: (context, cons) {
+                  final cols = (cons.maxWidth / 210).floor().clamp(2, 6);
+                  return GridView.builder(
+                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: cols,
+                      childAspectRatio: 2.3,
+                      crossAxisSpacing: 8,
+                      mainAxisSpacing: 8,
+                    ),
+                    itemCount: filtered.length,
+                    itemBuilder: (context, index) {
+                      return FadeInUp(
+                        delayMs: (index % 12) * 40,
+                        child: CustomShowDialog(data: filtered[index]),
                       );
                     },
-                  ),
-            ),
+                  );
+                },
+              );
+            }),
           ),
         ],
       ),

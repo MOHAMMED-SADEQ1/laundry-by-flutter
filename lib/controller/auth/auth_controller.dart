@@ -4,6 +4,7 @@ import 'package:laundry/core/constant/routes.dart';
 import 'package:laundry/sqldb.dart';
 import 'package:laundry/services/security/security_service.dart';
 import 'package:laundry/services/security/session_manager.dart';
+import 'package:laundry/view/widget/license/license_expiry_notice.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class AuthController extends GetxController {
@@ -87,6 +88,11 @@ class AuthController extends GetxController {
 
     Get.offNamed(AppRoute.homepage);
     isLoading.value = false;
+
+    // تنبيه «قرب انتهاء الاشتراك» مع زر تجديد مباشر — مرة واحدة في اليوم
+    // (انظر `showLicenseExpiryNoticeIfDue`). يُعرض بعد الدخول لا قبله، فلا
+    // يُقاطَع المستخدم أثناء إدخال بياناته.
+    showLicenseExpiryNoticeIfDue();
   }
 
   Future<void> _insertDefaultClothing(SqlDB db) async {

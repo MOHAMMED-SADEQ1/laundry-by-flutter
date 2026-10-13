@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:laundry/controller/auth/auth_controller.dart';
+import 'package:laundry/config/app_info.dart';
 import 'package:laundry/core/theme/app_colors.dart';
+import 'package:laundry/services/business_info_service.dart';
 import 'package:laundry/view/widget/common/animation_wrappers.dart';
+import 'package:laundry/view/widget/common/developer_credit.dart';
 
 class LoginScreen extends StatelessWidget {
   LoginScreen({super.key});
@@ -64,24 +67,29 @@ class LoginScreen extends StatelessWidget {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          // الشعار
-                          Container(
-                            width: 84,
-                            height: 84,
-                            decoration: BoxDecoration(
-                              gradient: AppColors.primaryGradient,
-                              shape: BoxShape.circle,
-                              boxShadow: AppColors.softShadow(blur: 18, y: 6),
-                            ),
-                            child: const Icon(
-                              Icons.local_laundry_service,
-                              size: 42,
-                              color: Colors.white,
+                          // الشعار — الضغط عليه يفتح نافذة «عن النظام»
+                          GestureDetector(
+                            onTap: showAboutAppDialog,
+                            child: Container(
+                              width: 84,
+                              height: 84,
+                              decoration: BoxDecoration(
+                                gradient: AppColors.primaryGradient,
+                                shape: BoxShape.circle,
+                                boxShadow: AppColors.softShadow(blur: 18, y: 6),
+                              ),
+                              child: const Icon(
+                                Icons.local_laundry_service,
+                                size: 42,
+                                color: Colors.white,
+                              ),
                             ),
                           ),
                           const SizedBox(height: 16),
-                          const Text(
-                            "مغاسل النظارة",
+                          Text(
+                            BusinessInfoService.instance.name.isNotEmpty
+                                ? BusinessInfoService.instance.name
+                                : 'نظام إدارة المغاسل',
                             style: TextStyle(
                               fontSize: 26,
                               fontFamily: 'DTHULUTH',
@@ -176,13 +184,16 @@ class LoginScreen extends StatelessWidget {
                           ),
                           const SizedBox(height: 14),
                           Text(
-                            "نظام إدارة المغاسل — الإصدار 1.2.0",
+                            "نظام إدارة المغاسل — الإصدار ${AppInfo.version}",
                             style: TextStyle(
                               fontSize: 11,
                               fontFamily: 'cairo',
                               color: AppColors.textMuted,
                             ),
                           ),
+                          // حقوق المطوّر — أسفل بطاقة تسجيل الدخول
+                          const SizedBox(height: 10),
+                          const DeveloperCredit(fontSize: 11.5),
                         ],
                       ),
                     ),

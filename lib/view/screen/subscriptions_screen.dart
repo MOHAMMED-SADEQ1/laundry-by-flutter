@@ -1,8 +1,13 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
 import 'package:laundry/controller/subscriptions_controller.dart';
+import 'package:laundry/core/constant/routes.dart';
 import 'package:laundry/core/theme/app_colors.dart';
+import 'package:laundry/services/security/session_manager.dart';
+import 'package:laundry/services/subscription/subscription_service.dart';
 import 'package:laundry/view/widget/common/animation_wrappers.dart';
 import 'package:laundry/view/widget/common/common_widgets.dart';
 import 'package:laundry/view/widget/customappbar.dart';
@@ -19,6 +24,11 @@ class SubscriptionsScreen extends StatelessWidget {
       appBar: CustomAppbar(
         title: 'الاشتراكات الشهرية',
         subtitle: 'متابعة فواتير الاشتراكات واستحقاقاتها',
+        actions: IconButton(
+          tooltip: 'لوحة الاشتراكات',
+          icon: const Icon(Icons.insights_outlined, color: Colors.white),
+          onPressed: () => Get.toNamed(AppRoute.subscriptionDashboard),
+        ),
       ),
       body: Container(
         decoration: BoxDecoration(
@@ -49,12 +59,12 @@ class SubscriptionsScreen extends StatelessWidget {
           final active = controller.subscriptions.length;
           final monthlyTotal = controller.subscriptions.fold<double>(
             0,
-            (sum, s) => sum + (s['amount'] ?? 0).toDouble(),
+            (sum, s) => sum + ((s['amount'] ?? 0) as num).toDouble(),
           );
 
           return Column(
             children: [
-Padding(
+              Padding(
                 padding: const EdgeInsets.fromLTRB(14, 12, 14, 4),
                 child: Row(
                   children: [
@@ -78,22 +88,93 @@ Padding(
                   ],
                 ),
               ),
+
+              // ─── 💰 شريط المؤشرات المالية: إيراد مُعترف به + التزام متبقٍّ ───
+              // كانت هذه الأرقام غائبة تمامًا: الشاشة تعرض ما سيُقبَض، ولا
+              // تعرض ما استُهلك فعلًا ولا ما بقي واجبًا على المحل تقديمه.
+              Obx(() {
+                final fin = controller.financials.value;
+                if (fin == null) return const SizedBox.shrink();
+                return Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 6, 14, 2),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 9,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.surface,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.border),
+                      boxShadow: AppColors.softShadow(blur: 8, y: 2),
+                    ),
+                    child: Row(
+                      children: [
+                        _finCell(
+                          'خدمة مُقدَّمة',
+                          fin.recognized,
+                          AppColors.info,
+                        ),
+                        _divider(),
+                        _finCell(
+                          'محصَّل',
+                          fin.collected,
+                          AppColors.success,
+                        ),
+                        _divider(),
+                        _finCell(
+                          'التزام متبقٍّ',
+                          fin.deferred,
+                          AppColors.violet,
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }),
+
               const SizedBox(height: 8),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 14),
-                child: OutlinedButton.icon(
-                  style: OutlinedButton.styleFrom(
-                    minimumSize: const Size.fromHeight(42),
-                    side: BorderSide(
-                      color: AppColors.primary.withValues(alpha: 0.5),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: const Size.fromHeight(42),
+                          side: BorderSide(
+                            color: AppColors.primary.withValues(alpha: 0.5),
+                          ),
+                        ),
+                        onPressed: () => _showStudyDialog(controller),
+                        icon: const Icon(Icons.assessment, size: 17),
+                        label: const Text(
+                          'دراسة نهاية الشهر',
+                          style: TextStyle(fontFamily: 'cairo', fontSize: 12.5),
+                        ),
+                      ),
                     ),
-                  ),
-                  onPressed: () => _showStudyDialog(controller),
-                  icon: const Icon(Icons.assessment, size: 17),
-                  label: const Text(
-                    'دراسة نهاية الشهر',
-                    style: TextStyle(fontFamily: 'cairo', fontSize: 12.5),
-                  ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: const Size.fromHeight(42),
+                          side: BorderSide(
+                            color: AppColors.violet.withValues(alpha: 0.5),
+                          ),
+                        ),
+                        onPressed: () => _showDueRenewals(controller),
+                        icon: const Icon(
+                          Icons.notifications_active_outlined,
+                          size: 17,
+                        ),
+                        label: const Text(
+                          'مستحقّ التجديد',
+                          style: TextStyle(fontFamily: 'cairo', fontSize: 12.5),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
               Expanded(
@@ -132,6 +213,192 @@ Padding(
           ),
         ),
       ),
+    );
+  }
+
+  Widget _finCell(String label, double value, Color color) {
+    return Expanded(
+      child: Column(
+        children: [
+          Text(
+            value.toStringAsFixed(0),
+            style: TextStyle(
+              fontFamily: 'cairo',
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+          Text(
+            label,
+            style: TextStyle(
+              fontFamily: 'cairo',
+              fontSize: 9.5,
+              color: AppColors.textSecondary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _divider() => Container(
+    width: 1,
+    height: 26,
+    color: AppColors.border,
+  );
+
+  /// الاشتراكات المستحقّة للتجديد خلال 7 أيام — تنبيه مبكّر للإدارة.
+  void _showDueRenewals(SubscriptionsController controller) {
+    final due = controller.subscriptions.where((s) {
+      final d = SubscriptionService.daysRemaining(s);
+      return d >= 0 && d <= 7;
+    }).toList()
+      ..sort(
+        (a, b) => SubscriptionService.daysRemaining(
+          a,
+        ).compareTo(SubscriptionService.daysRemaining(b)),
+      );
+
+    Get.dialog(
+      Dialog(
+        backgroundColor: AppColors.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 520, maxHeight: 560),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.fromLTRB(18, 14, 18, 12),
+                decoration: const BoxDecoration(
+                  gradient: AppColors.violetGradient,
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.notifications_active_outlined,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 8),
+                    const Expanded(
+                      child: Text(
+                        'اشتراكات تستحقّ التجديد خلال 7 أيام',
+                        style: TextStyle(
+                          fontFamily: 'cairo',
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => Get.back(),
+                      icon: const Icon(Icons.close, color: Colors.white),
+                    ),
+                  ],
+                ),
+              ),
+              Flexible(
+                child: due.isEmpty
+                    ? Padding(
+                        padding: const EdgeInsets.all(28),
+                        child: Text(
+                          'لا يوجد اشتراك يستحقّ التجديد خلال الأيام السبعة '
+                          'القادمة.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontFamily: 'cairo',
+                            fontSize: 12.5,
+                            height: 1.7,
+                            color: AppColors.textMuted,
+                          ),
+                        ),
+                      )
+                    : ListView.separated(
+                        padding: const EdgeInsets.fromLTRB(14, 12, 14, 16),
+                        itemCount: due.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 8),
+                        itemBuilder: (context, i) {
+                          final s = due[i];
+                          final d = SubscriptionService.daysRemaining(s);
+                          return Container(
+                            padding: const EdgeInsets.all(11),
+                            decoration: BoxDecoration(
+                              color: AppColors.surfaceSoft,
+                              borderRadius: BorderRadius.circular(11),
+                              border: Border.all(
+                                color: d <= 2
+                                    ? AppColors.warning.withValues(alpha: 0.5)
+                                    : AppColors.border,
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(7),
+                                  decoration: BoxDecoration(
+                                    color: (d <= 2
+                                            ? AppColors.warning
+                                            : AppColors.info)
+                                        .withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(9),
+                                  ),
+                                  child: Icon(
+                                    d <= 2 ? Icons.warning_amber : Icons.schedule,
+                                    size: 15,
+                                    color: d <= 2
+                                        ? AppColors.warning
+                                        : AppColors.info,
+                                  ),
+                                ),
+                                const SizedBox(width: 9),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        '${s['customer_name']}',
+                                        style: TextStyle(
+                                          fontFamily: 'cairo',
+                                          fontSize: 12.5,
+                                          fontWeight: FontWeight.bold,
+                                          color: AppColors.textPrimary,
+                                        ),
+                                      ),
+                                      Text(
+                                        '${(s['amount'] ?? 0)} ر.س — يغطي حتى '
+                                        '${DateFormat('yyyy-MM-dd').format(SubscriptionService.paidUntil(s))}',
+                                        style: TextStyle(
+                                          fontFamily: 'cairo',
+                                          fontSize: 10,
+                                          color: AppColors.textSecondary,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                LabelChip(
+                                  text: d == 0 ? 'اليوم' : 'بعد $d يوم',
+                                  color: d <= 2
+                                      ? AppColors.warning
+                                      : AppColors.info,
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      barrierColor: Colors.black54,
     );
   }
 
@@ -317,10 +584,200 @@ Padding(
     );
   }
 
+  // ═══════════ دراسة مشترك: فواتيره كاملة + مقارنة المدفوع بالقيمة ═══════════
+  // (static — تُستدعى من بطاقة _SubscriptionCard)
+  static Future<void> showSubscriberStudyDialog(
+    SubscriptionsController controller,
+    Map<String, dynamic> sub,
+  ) async {
+    final study = await controller.subscriberStudy(sub);
+    final invoices = study['invoices'] as List<Map<String, dynamic>>;
+    final itemsValue = (study['items_value'] as double);
+    final paid = (study['paid_this_month'] as double);
+    final price = (study['price'] as double);
+    final diff = (study['difference'] as double);
+
+    if (!Get.isRegistered<SubscriptionsController>()) return;
+    Get.dialog(
+      Dialog(
+        backgroundColor: AppColors.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 620, maxHeight: 680),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.fromLTRB(18, 14, 18, 12),
+                decoration: const BoxDecoration(
+                  gradient: AppColors.violetGradient,
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.person_search, color: Colors.white, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'دراسة: ${study['customer_name']} — '
+                            '${DateFormat('yyyy-MM').format(DateTime.now())}',
+                        style: const TextStyle(
+                          fontFamily: 'cairo',
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => Get.back(),
+                      icon: const Icon(Icons.close, color: Colors.white),
+                    ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 12, 14, 6),
+                child: Row(
+                  children: [
+                    _MiniStat(
+                      label: 'قيمة غسيله',
+                      value: itemsValue.toStringAsFixed(0),
+                      color: AppColors.info,
+                    ),
+                    const SizedBox(width: 8),
+                    _MiniStat(
+                      label: 'مدفوع',
+                      value: paid.toStringAsFixed(0),
+                      color: AppColors.success,
+                    ),
+                    const SizedBox(width: 8),
+                    _MiniStat(
+                      label: diff >= 0 ? 'نسبة لنا' : 'علينا',
+                      value: diff.abs().toStringAsFixed(0),
+                      color: diff >= 0 ? AppColors.success : AppColors.danger,
+                    ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                child: Text(
+                  'الاشتراك: ${price.toStringAsFixed(0)} ر.س — '
+                  '${invoices.length} فاتورة هذا الشهر، '
+                  'قيمة غسيله الفعلية ${itemsValue.toStringAsFixed(2)} ر.س '
+                  '(التغطية: ${price.toStringAsFixed(0)} ر.س)',
+                  style: TextStyle(
+                    fontFamily: 'cairo',
+                    fontSize: 10.5,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ),
+              const Divider(height: 18),
+              Flexible(
+                child: invoices.isEmpty
+                    ? Padding(
+                        padding: const EdgeInsets.all(28),
+                        child: Text(
+                          'لا توجد فواتير مرتبطة بهذا الاشتراك هذا الشهر',
+                          style: TextStyle(
+                            fontFamily: 'cairo',
+                            fontSize: 13,
+                            color: AppColors.textMuted,
+                          ),
+                        ),
+                      )
+                    : ListView.separated(
+                        padding: const EdgeInsets.fromLTRB(14, 0, 14, 18),
+                        itemCount: invoices.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 8),
+                        itemBuilder: (context, i) {
+                          final inv = invoices[i];
+                          final value = (inv['_value'] as double? ?? 0);
+                          final pieces = (inv['_pieces'] as int? ?? 0);
+                          List items = [];
+                          try {
+                            items = inv['list_data']?.toString().isNotEmpty == true
+                                ? (jsonDecode(inv['list_data'].toString()) as List)
+                                : [];
+                          } catch (_) {}
+                          return Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: AppColors.surfaceSoft,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: AppColors.border),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Text(
+                                      'فاتورة #${inv['invoices_id']}',
+                                      style: TextStyle(
+                                        fontFamily: 'cairo',
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                        color: AppColors.textPrimary,
+                                      ),
+                                    ),
+                                    const Spacer(),
+                                    Text(
+                                      '$pieces قطعة — ${value.toStringAsFixed(2)} ر.س',
+                                      style: const TextStyle(
+                                        fontFamily: 'cairo',
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                        color: AppColors.info,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                if (items.isNotEmpty) ...[
+                                  const SizedBox(height: 4),
+                                  ...items.map(
+                                    (it) => Padding(
+                                      padding: const EdgeInsets.only(
+                                        bottom: 2,
+                                      ),
+                                      child: Text(
+                                        '• ${it['vestments']} (${it['content']}) '
+                                            '× ${it['count']} = '
+                                            '${it['total_price']} ر.س'
+                                            '${'${it['note'] ?? ''}'.trim().isNotEmpty ? '  📝 ${it['note']}' : ''}',
+                                        style: TextStyle(
+                                          fontFamily: 'cairo',
+                                          fontSize: 10.5,
+                                          color: AppColors.textSecondary,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      barrierColor: Colors.black54,
+    );
+  }
+
   void _showAddDialog(SubscriptionsController controller) {
     final nameCtrl = TextEditingController();
     final amountCtrl = TextEditingController(text: '50');
     final periodCtrl = TextEditingController(text: '30');
+    // سقف الاستخدام (اختياري) — القطع والقيمة معاً، ويُطبَّق أيهما ينفد أولاً
+    final limitPiecesCtrl = TextEditingController();
+    final limitValueCtrl = TextEditingController();
     int? selectedId;
     String selectedName = '';
 
@@ -452,6 +909,54 @@ Padding(
                   ),
                 ],
               ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: limitPiecesCtrl,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'سقف القطع (اختياري)',
+                        helperText: '0 = بلا حدود',
+                        helperStyle: TextStyle(
+                          fontFamily: 'cairo',
+                          fontSize: 10,
+                        ),
+                        labelStyle: TextStyle(
+                          fontFamily: 'cairo',
+                          fontSize: 12,
+                        ),
+                        isDense: true,
+                        prefixIcon: Icon(Icons.checkroom, size: 18),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: TextField(
+                      controller: limitValueCtrl,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      decoration: const InputDecoration(
+                        labelText: 'سقف القيمة (اختياري)',
+                        helperText: '0 = بلا حدود',
+                        helperStyle: TextStyle(
+                          fontFamily: 'cairo',
+                          fontSize: 10,
+                        ),
+                        labelStyle: TextStyle(
+                          fontFamily: 'cairo',
+                          fontSize: 12,
+                        ),
+                        isDense: true,
+                        prefixIcon: Icon(Icons.speed, size: 18),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
               const SizedBox(height: 16),
               Row(
                 children: [
@@ -505,6 +1010,13 @@ Padding(
                                   : selectedName,
                           amount: amount,
                           periodDays: period,
+                          usageLimitPieces:
+                              int.tryParse(limitPiecesCtrl.text.trim()) ?? 0,
+                          usageLimitValue:
+                              double.tryParse(
+                                limitValueCtrl.text.replaceAll(',', '.'),
+                              ) ??
+                              0,
                         );
                         Get.back();
                       },
@@ -588,22 +1100,33 @@ class _SubscriptionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final amount = (sub['amount'] ?? 0).toDouble();
     final days = controller.daysRemaining(sub);
-    final hasPaid = controller.hasPayment(sub);
-    final overdue = !hasPaid || days < 0;
-    final statusColor =
-        hasPaid && !overdue
-            ? days <= 7
-                  ? AppColors.warning
-                  : AppColors.success
-            : AppColors.danger;
-    final statusText =
-        !hasPaid
-            ? 'لم يُسدد بعد'
-            : overdue
-            ? 'متأخر عن السداد'
-            : days <= 7
-            ? 'سداد قريب ($days يوم)'
-            : 'نشط ($days يوم)';
+    final status = SubscriptionService.statusOf(
+      sub,
+      usedPieces: (sub['pieces_count'] as num?)?.toInt(),
+      usedValue: (sub['used_value'] as num?)?.toDouble(),
+    );
+    final overdue = status == SubStatus.overdue || status == SubStatus.pending;
+    final statusColor = switch (status) {
+      SubStatus.active => days <= 7 ? AppColors.warning : AppColors.success,
+      SubStatus.capped => AppColors.warning,
+      SubStatus.overdue => AppColors.danger,
+      SubStatus.pending => AppColors.slate,
+      SubStatus.cancelled => AppColors.textMuted,
+    };
+    final statusText = switch (status) {
+      SubStatus.pending => 'لم يُسدد بعد',
+      SubStatus.overdue => 'متأخر عن السداد',
+      SubStatus.capped => 'استُهلك السقف',
+      SubStatus.active => days <= 7 ? 'سداد قريب ($days يوم)' : 'نشط ($days يوم)',
+      SubStatus.cancelled => 'ملغى',
+    };
+
+    final ratio = (sub['usage_ratio'] as num?)?.toDouble() ?? 0;
+    final limitP = SubscriptionService.limitPieces(sub);
+    final limitV = SubscriptionService.limitValue(sub);
+    final usedP = (sub['pieces_count'] as num?)?.toInt() ?? 0;
+    final usedV = (sub['used_value'] as num?)?.toDouble() ?? 0;
+    final hasLimit = limitP > 0 || limitV > 0;
 
     return SoftCard(
       margin: const EdgeInsets.symmetric(vertical: 5),
@@ -693,7 +1216,8 @@ class _SubscriptionCard extends StatelessWidget {
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
-                        'قطع الغسيل في آخر فترة: ${sub['pieces_count'] ?? 0} قطعة',
+                        'استهلاك الدورة: $usedP قطعة'
+                        '${hasLimit && limitP > 0 ? ' / $limitP' : ''}',
                         style: const TextStyle(
                           fontFamily: 'cairo',
                           fontSize: 11.5,
@@ -702,20 +1226,73 @@ class _SubscriptionCard extends StatelessWidget {
                         ),
                       ),
                     ),
+                    if (limitV > 0)
+                      Text(
+                        '${usedV.toStringAsFixed(0)} / '
+                        '${limitV.toStringAsFixed(0)} ر.س',
+                        style: const TextStyle(
+                          fontFamily: 'cairo',
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.violet,
+                        ),
+                      ),
                   ],
                 ),
-                if (sub['top_pieces'] != null &&
-                    '${sub['top_pieces']}'.trim().isNotEmpty) ...[
-                  const SizedBox(height: 3),
-                  Text(
-                    '${sub['top_pieces']}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontFamily: 'cairo',
-                      fontSize: 10,
-                      color: AppColors.textSecondary,
+                // ─── شريط السقف: يُظهر للكاشير كم بقي قبل المنع ───
+                if (hasLimit) ...[
+                  const SizedBox(height: 7),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: LinearProgressIndicator(
+                      value: ratio.clamp(0.0, 1.0),
+                      minHeight: 6,
+                      backgroundColor: AppColors.border,
+                      valueColor: AlwaysStoppedAnimation(
+                        ratio >= 1
+                            ? AppColors.danger
+                            : ratio >= 0.8
+                            ? AppColors.warning
+                            : AppColors.success,
+                      ),
                     ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    ratio >= 1
+                        ? 'السقف مستهلك بالكامل — لن تُقبل فاتورة جديدة إلا '
+                              'بموافقة مدير أو تجديد'
+                        : 'استُهلك ${(ratio * 100).round()}% من السقف',
+                    style: TextStyle(
+                      fontFamily: 'cairo',
+                      fontSize: 9.5,
+                      fontWeight: ratio >= 0.8
+                          ? FontWeight.bold
+                          : FontWeight.normal,
+                      color: ratio >= 0.8
+                          ? AppColors.danger
+                          : AppColors.textSecondary,
+                    ),
+                  ),
+                ] else ...[
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.all_inclusive,
+                        size: 12,
+                        color: AppColors.textMuted,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        'بلا سقف استخدام — يُنصح بتحديد حدّ',
+                        style: TextStyle(
+                          fontFamily: 'cairo',
+                          fontSize: 9.5,
+                          color: AppColors.textMuted,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
                 const SizedBox(height: 5),
@@ -737,14 +1314,83 @@ class _SubscriptionCard extends StatelessWidget {
                         ),
                       ),
                     ),
+                    if (status == SubStatus.active ||
+                        status == SubStatus.capped)
+                      Text(
+                        'حتى ${DateFormat('yyyy-MM-dd').format(SubscriptionService.paidUntil(sub))}',
+                        style: TextStyle(
+                          fontFamily: 'cairo',
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.info,
+                        ),
+                      ),
                   ],
                 ),
               ],
             ),
           ),
           const SizedBox(height: 10),
+          // ─── فواتير المشترك هذا الشهر (تُحفظ بأسعارها داخلياً) ───
           Row(
             children: [
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 7,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.violet.withValues(alpha: 0.06),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: AppColors.violet.withValues(alpha: 0.35),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.receipt_long,
+                        size: 14,
+                        color: AppColors.violet,
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          'فواتير هذا الشهر: ${sub['invoices_count'] ?? 0} '
+                          'بقيمة ${(sub['invoices_value'] ?? 0).toStringAsFixed(0)} ر.س '
+                          '(محفوظة داخلياً — تُطبع بدون أسعار)',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontFamily: 'cairo',
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.violet,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: _ActionBtn(
+                  label: 'فواتير ودراسة',
+                  icon: Icons.assessment_outlined,
+                  color: AppColors.info,
+                  onTap: () => SubscriptionsScreen.showSubscriberStudyDialog(
+                    controller,
+                    sub,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
               Expanded(
                 child: _ActionBtn(
                   label: 'تسجيل دفعة',
@@ -754,28 +1400,497 @@ class _SubscriptionCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              _ActionBtn(
-                label: 'إلغاء',
-                icon: Icons.close,
-                color: AppColors.danger,
-                onTap: () {
-                  Get.defaultDialog(
-                    title: 'إلغاء الاشتراك؟',
-                    middleText: 'سيتم تعطيل اشتراك ${sub['customer_name']}',
-                    textConfirm: 'إلغاء الاشتراك',
-                    textCancel: 'تراجع',
-                    confirmTextColor: Colors.white,
-                    buttonColor: AppColors.danger,
-                    onConfirm: () {
-                      Get.back();
-                      controller.cancel(sub['subscription_id']);
-                    },
-                  );
-                },
+              Expanded(
+                child: _ActionBtn(
+                  label: 'السقف',
+                  icon: Icons.speed,
+                  color: AppColors.violet,
+                  onTap: () => _showLimitsDialog(controller, sub),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: _ActionBtn(
+                  label: 'إلغاء بتسوية',
+                  icon: Icons.cancel_outlined,
+                  color: AppColors.danger,
+                  onTap: () => _confirmCancel(controller, sub),
+                ),
               ),
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  /// حوار تعديل سقف الاستخدام — قرار إداري يحتاج صلاحية وأثرًا تدقيقيًا.
+  void _showLimitsDialog(SubscriptionsController controller, sub) {
+    if (!SessionManager.isManager) {
+      Get.snackbar(
+        'صلاحية غير كافية',
+        'تعديل سقف الاستخدام قرار إداري — لا يملكه إلا مدير.',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: AppColors.danger,
+        colorText: Colors.white,
+        duration: const Duration(seconds: 4),
+      );
+      return;
+    }
+
+    final piecesCtrl = TextEditingController(
+      text: SubscriptionService.limitPieces(sub) > 0
+          ? '${SubscriptionService.limitPieces(sub)}'
+          : '',
+    );
+    final valueCtrl = TextEditingController(
+      text: SubscriptionService.limitValue(sub) > 0
+          ? SubscriptionService.limitValue(sub).toStringAsFixed(0)
+          : '',
+    );
+
+    Get.dialog(
+      Dialog(
+        backgroundColor: AppColors.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'سقف الاستخدام — ${sub['customer_name']}',
+                style: TextStyle(
+                  fontFamily: 'cairo',
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'السقف يحمي من اشتراك صغير يستهلك غسيلًا بلا حدّ. '
+                'اتركه فارغًا أو صفرًا لإلغاء السقف. يُطبَّق أيّهما استُنفد أولًا.',
+                style: TextStyle(
+                  fontFamily: 'cairo',
+                  fontSize: 10.5,
+                  height: 1.65,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: piecesCtrl,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'سقف القطع',
+                        hintText: 'مثال: 50',
+                        labelStyle: TextStyle(
+                          fontFamily: 'cairo',
+                          fontSize: 12,
+                        ),
+                        isDense: true,
+                        prefixIcon: Icon(Icons.checkroom, size: 18),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: TextField(
+                      controller: valueCtrl,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      decoration: const InputDecoration(
+                        labelText: 'سقف القيمة (ر.س)',
+                        hintText: 'مثال: 150',
+                        labelStyle: TextStyle(
+                          fontFamily: 'cairo',
+                          fontSize: 12,
+                        ),
+                        isDense: true,
+                        prefixIcon: Icon(Icons.attach_money, size: 18),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: AppColors.violet.withValues(alpha: 0.06),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  'الحالي: '
+                  '${SubscriptionService.limitPieces(sub) > 0 ? '${SubscriptionService.limitPieces(sub)} قطعة' : 'بلا سقف قطع'}'
+                  ' — '
+                  '${SubscriptionService.limitValue(sub) > 0 ? '${SubscriptionService.limitValue(sub).toStringAsFixed(0)} ر.س' : 'بلا سقف قيمة'}',
+                  style: TextStyle(
+                    fontFamily: 'cairo',
+                    fontSize: 10.5,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Get.back(),
+                      child: const Text(
+                        'إلغاء',
+                        style: TextStyle(fontFamily: 'cairo'),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.violet,
+                      ),
+                      onPressed: () async {
+                        final p = int.tryParse(piecesCtrl.text.trim()) ?? 0;
+                        final v =
+                            double.tryParse(
+                              valueCtrl.text.replaceAll(',', '.').trim(),
+                            ) ??
+                            0;
+                        await controller.updateUsageLimits(
+                          subscriptionId: sub['subscription_id'] as int,
+                          limitPieces: p < 0 ? 0 : p,
+                          limitValue: v < 0 ? 0 : v,
+                        );
+                        if (Get.isDialogOpen == true) Get.back();
+                        Get.snackbar(
+                          'تم التحديث',
+                          'سقف الاستخدام: '
+                          '${p > 0 ? '$p قطعة' : 'بلا سقف قطع'} — '
+                          '${v > 0 ? '${v.toStringAsFixed(0)} ر.س' : 'بلا سقف قيمة'}',
+                          snackPosition: SnackPosition.BOTTOM,
+                          backgroundColor: AppColors.success,
+                          colorText: Colors.white,
+                        );
+                      },
+                      child: const Text(
+                        'حفظ السقف',
+                        style: TextStyle(
+                          fontFamily: 'cairo',
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+      barrierColor: Colors.black54,
+    );
+  }
+
+  /// تأكيد الإلغاء **بتسوية**: عرض قيمة الأيام غير المُقدَّمة وطريقة ردّها.
+  ///
+  /// الإلغاء السابق كان مجرد `is_active = 0`: المبلغ المدفوع مقابل خدمة لن
+  /// تُقدَّم يبقى مسجَّلًا بلا تسوية. الآن يُحسب ويُعاد رصيدًا أو نقدًا.
+  void _confirmCancel(SubscriptionsController controller, sub) {
+    final remaining = controller.daysRemaining(sub);
+    final price = (sub['amount'] ?? 0).toDouble();
+    final periodDays = ((sub['period_days'] ?? 30) as num).toInt();
+    final days = periodDays <= 0 ? 30 : periodDays;
+    final refund = remaining > 0 && price > 0
+        ? (price / days) * remaining
+        : 0.0;
+    bool refundAsCredit = true;
+
+    Get.dialog(
+      StatefulBuilder(
+        builder: (context, setState) {
+          return Dialog(
+            backgroundColor: AppColors.surface,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(24),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: AppColors.danger.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(
+                          Icons.cancel_outlined,
+                          color: AppColors.danger,
+                          size: 18,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'إلغاء بتسوية — ${sub['customer_name']}',
+                          style: TextStyle(
+                            fontFamily: 'cairo',
+                            fontSize: 14.5,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  if (refund > 0) ...[
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppColors.warning.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(11),
+                        border: Border.all(
+                          color: AppColors.warning.withValues(alpha: 0.35),
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              const Expanded(
+                                child: Text(
+                                  'قيمة الأيام غير المُقدَّمة',
+                                  style: TextStyle(
+                                    fontFamily: 'cairo',
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                              Text(
+                                '${refund.toStringAsFixed(2)} ر.س',
+                                style: const TextStyle(
+                                  fontFamily: 'cairo',
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.warning,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 5),
+                          Text(
+                            'متبقٍّ $remaining يوم من أصل $days — '
+                            '${(price / days).toStringAsFixed(2)} ر.س/يوم. '
+                            'هذا المبلغ مقابل خدمة لن تُقدَّم، فلا يصحّ أن يبقى '
+                            'إيرادًا للمحل.',
+                            style: TextStyle(
+                              fontFamily: 'cairo',
+                              fontSize: 10.5,
+                              height: 1.65,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'طريقة التسوية',
+                      style: TextStyle(
+                        fontFamily: 'cairo',
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 7),
+                    _settlementOption(
+                      title: 'رصيد لدى المحل (مُوصى به)',
+                      subtitle:
+                          'يبقى في الدرج كسلفة للزبون، ويُخصم تلقائيًا من '
+                          'فواتيره القادمة. لا يُخرج نقدية.',
+                      icon: Icons.account_balance_wallet_outlined,
+                      selected: refundAsCredit,
+                      color: AppColors.success,
+                      onTap: () => setState(() => refundAsCredit = true),
+                    ),
+                    const SizedBox(height: 6),
+                    _settlementOption(
+                      title: 'استرداد نقدي',
+                      subtitle:
+                          'يُخرج المبلغ من الدرج ويُسجَّل في المصروفات، '
+                          'فيظهر في إقفال الوردية.',
+                      icon: Icons.payments_outlined,
+                      selected: !refundAsCredit,
+                      color: AppColors.danger,
+                      onTap: () => setState(() => refundAsCredit = false),
+                    ),
+                  ] else
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppColors.surfaceSoft,
+                        borderRadius: BorderRadius.circular(11),
+                        border: Border.all(color: AppColors.border),
+                      ),
+                      child: Text(
+                        remaining <= 0
+                            ? 'لا توجد أيام مدفوعة متبقّية — الإلغاء تعطيل '
+                                  'بسيط بلا استرداد.'
+                            : 'سعر الاشتراك صفر — لا يمكن احتساب قيمة أيام '
+                                  'للتسوية.',
+                        style: TextStyle(
+                          fontFamily: 'cairo',
+                          fontSize: 11.5,
+                          height: 1.65,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => Get.back(),
+                          child: const Text(
+                            'تراجع',
+                            style: TextStyle(fontFamily: 'cairo'),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.danger,
+                          ),
+                          onPressed: () async {
+                            final result = await controller.cancel(
+                              sub['subscription_id'] as int,
+                              refundAsCredit: refundAsCredit,
+                              reason: 'إلغاء من شاشة الاشتراكات',
+                            );
+                            if (Get.isDialogOpen == true) Get.back();
+                            Get.snackbar(
+                              'تم الإلغاء',
+                              result.hasRefund
+                                  ? 'أُعيد ${result.refundedAmount.toStringAsFixed(2)} ر.س '
+                                        '${result.refundAsCredit ? 'رصيدًا لدى المحل' : 'نقدًا'} '
+                                        'عن ${result.remainingDays} يوم غير مُقدَّم.'
+                                  : 'عُطِّل الاشتراك بلا استرداد.',
+                              snackPosition: SnackPosition.BOTTOM,
+                              backgroundColor: AppColors.success,
+                              colorText: Colors.white,
+                              duration: const Duration(seconds: 5),
+                            );
+                          },
+                          child: const Text(
+                            'تأكيد الإلغاء',
+                            style: TextStyle(
+                              fontFamily: 'cairo',
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+      barrierColor: Colors.black54,
+    );
+  }
+
+  Widget _settlementOption({
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required bool selected,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(11),
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(11),
+        decoration: BoxDecoration(
+          color: selected
+              ? color.withValues(alpha: 0.07)
+              : AppColors.surfaceSoft,
+          borderRadius: BorderRadius.circular(11),
+          border: Border.all(
+            color: selected ? color : AppColors.border,
+            width: selected ? 1.4 : 1,
+          ),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, size: 17, color: selected ? color : AppColors.textMuted),
+            const SizedBox(width: 9),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontFamily: 'cairo',
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.bold,
+                      color: selected ? color : AppColors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      fontFamily: 'cairo',
+                      fontSize: 9.5,
+                      height: 1.55,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              selected
+                  ? Icons.radio_button_checked
+                  : Icons.radio_button_unchecked,
+              size: 17,
+              color: selected ? color : AppColors.textMuted,
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -1,30 +1,47 @@
-// This is a basic Flutter widget test.
+// اختبار دخاني (smoke test) لمعلومات النظام وحقوق المطوّر.
 //
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
+// كان هذا الملف قالب Flutter الافتراضي يختبر «عدّادًا» (Counter) لا وجود له
+// في نظام المغاسل إطلاقًا، فكان `flutter test` يفشل دائمًا بلا علاقة بالتطبيق.
+// استُبدل باختبار حقيقي يتحقّق من: مصدر واحد لرقم الإصدار، ومصدر واحد لجملة
+// حقوق المطوّر، وأن الـWidget يعرضها فعلًا.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:laundry/main.dart';
+import 'package:laundry/config/app_info.dart';
+import 'package:laundry/view/widget/common/developer_credit.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  test('الإصدار له قيمة احتياطية صالحة حتى قبل قراءته من الحزمة', () {
+    expect(AppInfo.version.trim(), isNotEmpty);
+    expect(AppInfo.fallbackVersion.trim(), isNotEmpty);
+    expect(AppInfo.full, contains(AppInfo.version));
+  });
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+  test('جملة حقوق المطوّر ومعلومات التواصل معرّفة في مصدر واحد', () {
+    expect(AppInfo.developerCredit, 'برمجة وتطوير المهندس محمد صادق');
+    expect(AppInfo.developerCredit, contains('محمد صادق'));
+    expect(AppInfo.developerName, contains('محمد صادق'));
+    expect(AppInfo.developerEmail, contains('@'));
+    expect(AppInfo.developerPhone, isNotEmpty);
+  });
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+  testWidgets('DeveloperCredit يعرض الجملة على خلفية فاتحة', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(home: Scaffold(body: DeveloperCredit())),
+    );
+    expect(find.text(AppInfo.developerCredit), findsOneWidget);
+  });
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+  testWidgets('DeveloperCredit يعرض الجملة على خلفية داكنة', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          backgroundColor: Colors.black,
+          body: DeveloperCredit(onDark: true, showIcon: false),
+        ),
+      ),
+    );
+    expect(find.text(AppInfo.developerCredit), findsOneWidget);
   });
 }

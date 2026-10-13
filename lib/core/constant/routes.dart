@@ -15,4 +15,17 @@ class AppRoute {
   static const String settings = "/settings";
   static const String processing = "/processing";
   static const String subscriptions = "/subscriptions";
+  static const String subscriptionDashboard = "/subscription-dashboard";
+  static const String onboarding = "/onboarding";
+  static const String users = "/users";
+  static const String dailyCash = "/daily-cash";
+  static const String expenses = "/expenses";
+  static const String auditLog = "/audit-log";
+  static const String profile = "/profile";
+  static const String customerAccount = "/customer-account";
+  static const String debtAging = "/debt-aging";
+  static const String debtReconciliation = "/debt-reconciliation";
+  static const String licenseLog = "/license-log";
+  static const String backup = "/backup";
+  static const String discounts = "/discounts";
 }

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:laundry/controller/splashcontroller.dart';
 import 'package:laundry/core/theme/app_colors.dart';
+import 'package:laundry/services/business_info_service.dart';
+import 'package:laundry/view/widget/common/developer_credit.dart';
 
 class SplashScreen extends StatelessWidget {
   SplashScreen({super.key});
@@ -89,8 +91,10 @@ class SplashScreen extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(height: 24),
-                        const Text(
-                          "مغاسل النظارة",
+                        Text(
+                          BusinessInfoService.instance.name.isNotEmpty
+                              ? BusinessInfoService.instance.name
+                              : 'نظام إدارة المغاسل',
                           style: TextStyle(
                             fontSize: 42,
                             color: Colors.white,
@@ -116,6 +120,9 @@ class SplashScreen extends StatelessWidget {
                             fontWeight: FontWeight.w600,
                           ),
                         ),
+                        // حقوق المطوّر — تظهر أسفل شعار النظام عند كل فتح للتطبيق
+                        const SizedBox(height: 6),
+                        const DeveloperCredit(onDark: true, fontSize: 12),
                       ],
                     ),
                   ),

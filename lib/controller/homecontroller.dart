@@ -1,45 +1,57 @@
+import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:intl/intl.dart' hide TextDirection;
+import 'package:laundry/core/theme/app_colors.dart';
 import 'package:laundry/sqldb.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 // abstract class HomeController extends GetxController {}
 
 class HomeController extends GetxController {
   late String pathfile;
 
+  /// علَم يضمن تنفيذ تنظيف الفواتير القديمة مرة واحدة فقط لكل تشغيل،
+  /// بدل تنفيذه مع كل إعادة بناء للشاشة الرئيسية.
+  static bool _cleanupDone = false;
+
+  /// آخر نتيجة تنظيف — تُعرَض مرة واحدة في الشاشة الرئيسية.
+  final Rxn<InvoiceCleanupResult> lastCleanup = Rxn<InvoiceCleanupResult>();
+
   Future<List<Map<String, dynamic>>> readData() async {
     SqlDB db = SqlDB();
     List<Map<String, dynamic>> response = await db.readData(
       'SELECT * FROM "clothing" WHERE is_active = 1',
     );
-    await db.deleteOldInvoices();
+    if (!_cleanupDone) {
+      _cleanupDone = true;
+      try {
+        final result = await db.deleteOldInvoices();
+        if (result.hasChanges) {
+          lastCleanup.value = result;
+          // إشعار **مرئي** بدل الحذف الصامت — المستخدم يعرف أن فواتير
+          // قديمة أُزيلت ومقدارها، فيفسّر أي فرق في التقارير.
+          Get.snackbar(
+            'تنظيف تلقائي للفواتير',
+            'أُزيلت ${result.count} فاتورة قديمة بإجمالي '
+            '${NumberFormat('#,##0.00').format(result.totalAmount)} ر.س '
+            'وفق سياسة الاحتفاظ بالفواتير.',
+            snackPosition: SnackPosition.BOTTOM,
+            backgroundColor: AppColors.warning,
+            colorText: Colors.white,
+            duration: const Duration(seconds: 6),
+            icon: const Icon(Icons.info_outline, color: Colors.white),
+          );
+        }
+      } catch (e) {
+        debugPrint('invoice cleanup error: $e');
+      }
+    }
     return response;
   }
 
-  Future<void> emailLauncher() async {
-    {
-      Get.back();
-      final Uri launchUri = Uri(
-        scheme: 'mailto',
-        path: 'mohammadsadekaljafri@gmail.com',
-        queryParameters: <String, String>{'body': Uri.encodeComponent("")},
-      );
-      await launchUrl(launchUri);
-    }
-  }
-
-  Future<void> whatsappLauncher() async {
-    Get.back();
-    final Uri launchUri = Uri(
-      scheme: 'https',
-      host: 'wa.me',
-      path: '+966537498756', // رقم الهاتف بصيغة دولية بدون "+"، استبدل بـ رقمك
-      queryParameters: <String, String>{
-        'text': Uri.encodeComponent("."), // نص الرسالة
-      },
-    );
-    await launchUrl(launchUri);
-  }
+  // ملاحظة: `emailLauncher` و`whatsappLauncher` أُزيلتا من هنا.
+  // كانتا مكرّرتين: معلومات التواصل صارت في `AppInfo` (مصدر وحيد)، وفتح
+  // البريد/واتساب يتم في `showDeveloperDialog` — وكانتا تُستدعيان فقط من
+  // ملف ميّت (`customappdevloper.dart`) أُزيل.
 
   @override
   void onInit() async {

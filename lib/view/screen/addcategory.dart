@@ -124,6 +124,15 @@ class AddCategory extends StatelessWidget {
                           ),
                         ],
                       ),
+                      const SizedBox(height: 10),
+                      // تكلفة القطعة الواحدة — أساس حساب الربح الفعلي.
+                      // بدونها تبقى تكلفة كل الفواتير صفرًا و«صافي الربح»
+                      // يساوي المبيعات.
+                      CustomTextFormField(
+                        valueinput: controller.costprice,
+                        lable: 'تكلفة القطعة (مواد + تشغيل)',
+                        inputtype: TextInputType.number,
+                      ),
                       const SizedBox(height: 20),
                       Row(
                         children: [
@@ -145,11 +154,11 @@ class AddCategory extends StatelessWidget {
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: AppColors.success,
                               ),
-                              onPressed: () {
-                                if (formstate.currentState!.validate()) {
-                                  controller.writeData();
-                                  controller.messageSuccessfully();
-                                }
+                              onPressed: () async {
+                                if (!formstate.currentState!.validate()) return;
+                                // نغلق الشاشة بعد نجاح الحفظ فقط، والقائمة تتحدث تلقائياً
+                                final saved = await controller.writeData();
+                                if (saved) Get.back();
                               },
                               child: const Text(
                                 "حفظ الصنف",

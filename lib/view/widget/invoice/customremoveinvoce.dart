@@ -55,6 +55,9 @@ class CustomRemoveInvoce extends StatelessWidget {
                 buttonColor: AppColors.danger,
                 cancelTextColor: AppColors.textSecondary,
                 onConfirm: () {
+                  // إغلاق حوار التأكيد أولاً — بدونه كان الحوار يبقى معلّقاً
+                  // فوق الشاشة بعد الحذف.
+                  Get.back();
                   invcontroller.deleteInvoice();
                 },
               );

@@ -4,10 +4,11 @@ import 'package:get/get.dart';
 import 'package:laundry/controller/previousinvoicecontroller.dart';
 import 'package:laundry/controller/printInvoicecontroller.dart';
 import 'package:laundry/core/theme/app_colors.dart';
+import 'package:laundry/core/services/invoice_share_service.dart';
+import 'package:laundry/services/business_info_service.dart';
 import 'package:laundry/view/widget/common/animation_wrappers.dart';
 import 'package:laundry/view/widget/common/common_widgets.dart';
 import 'package:laundry/view/widget/customappbar.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 class PreviousInvoice extends StatefulWidget {
   const PreviousInvoice({super.key});
@@ -123,6 +124,15 @@ class _PreviousInvoiceState extends State<PreviousInvoice> {
                         selected: _paymentFilter == 'آجل',
                         color: AppColors.warning,
                         onTap: () => setState(() => _paymentFilter = 'آجل'),
+                      ),
+                      const SizedBox(width: 6),
+                      _FilterChipBtn(
+                        label: 'اشتراك',
+                        selected: _paymentFilter == 'اشتراك شهري',
+                        color: AppColors.violet,
+                        onTap: () => setState(
+                          () => _paymentFilter = 'اشتراك شهري',
+                        ),
                       ),
                     ],
                   ),
@@ -264,7 +274,7 @@ class _FilterChipBtn extends StatelessWidget {
   }
 }
 
-/// زر مشاركة الفاتورة عبر واتساب
+/// زر مشاركة الفاتورة عبر واتساب — يرسل مباشرة لرقم الزبون إن وُجد
 class _WhatsAppShareBtn extends StatelessWidget {
   final Map<String, dynamic> invoice;
   final List<Map<String, dynamic>> listdata;
@@ -277,50 +287,13 @@ class _WhatsAppShareBtn extends StatelessWidget {
   });
 
   Future<void> _share() async {
-    final lines = StringBuffer();
-    lines.writeln('🧺 *فاتورة مغاسل النظارة #${invoice['invoices_id']}*');
-    final customer = (mapdata['customername'] ?? '').toString();
-    if (customer.isNotEmpty) lines.writeln('👤 الزبون: $customer');
-    lines.writeln('📅 ${mapdata['date'] ?? ''}');
-    lines.writeln('─────────────────');
-    for (final item in listdata.take(10)) {
-      lines.writeln(
-        '• ${item['vestments']} (${item['content']}) × ${item['count']} = ${item['price']}',
-      );
-      if (item['note'] != null && '${item['note']}'.trim().isNotEmpty) {
-        lines.writeln('   📝 ${item['note']}');
-      }
-    }
-    if (listdata.length > 10) {
-      lines.writeln('... و${listdata.length - 10} أصناف أخرى');
-    }
-    lines.writeln('─────────────────');
-    final total = double.tryParse(mapdata['summation']?.toString() ?? '0') ?? 0;
-    lines.writeln('💰 الإجمالي: ${total.toStringAsFixed(2)} ر.س');
-    final paid = invoice['paid_amount']?.toString();
-    final remaining = invoice['remaining_amount']?.toString();
-    final method = (mapdata['payment'] ?? '').toString();
-    lines.writeln('💳 الدفع: $method${paid != null ? ' (مدفوع: $paid)' : ''}');
-    if ((double.tryParse(remaining ?? '0') ?? 0) > 0) {
-      lines.writeln('⚠️ متبقي: $remaining ر.س');
-    }
-    final code = invoice['pickup_code']?.toString() ?? '';
-    if (code.isNotEmpty) lines.writeln('🔑 رمز استلام الغسيل: $code');
-
-    final uri = Uri.parse(
-      'https://wa.me/?text=${Uri.encodeComponent(lines.toString())}',
-    );
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    } else {
-      Get.snackbar(
-        'خطأ',
-        'تعذر فتح واتساب',
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: AppColors.danger,
-        colorText: Colors.white,
-      );
-    }
+    // نستخدم خدمة المشاركة المركزية: تُنظّف الرقم لصيغة واتساب الدولية
+    // (05xxxxxxxx → 9665xxxxxxxx) وتبني الرسالة موحّدة مع بقية الشاشات.
+    //
+    // **الخطأ السابق:** كان يرسل `wa.me/$cleanPhone` بالأرقام الخام بلا
+    // رمز الدولة. واتساب يتجاهل الرقم المحلي بلا كود دولي فلا تُسلَّم
+    // الرسالة — وهي المشكلة الجوهرية في زر الواتساب.
+    await InvoiceShareService.sendInvoiceToCustomer(invoice);
   }
 
   @override
@@ -531,6 +504,10 @@ class _InvoiceCard extends StatelessWidget {
                               'invoiceNumber': invoice['invoices_id'],
                               'customername': mapdata['customername'],
                               'date': mapdata['date'],
+                              'bizName': BusinessInfoService.instance.name,
+                              'bizPhone': BusinessInfoService.instance.phone,
+                              'bizAddress': BusinessInfoService.instance.address,
+                              'createdByName': '',
                             };
                             Get.find<PreviousInvoiceController>().printPDF(
                               data,

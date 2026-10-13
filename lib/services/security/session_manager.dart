@@ -36,10 +36,7 @@ class SessionManager {
     await prefs.remove(AppConstants.spUsername);
     await prefs.remove(AppConstants.spUserRole);
     await prefs.remove(AppConstants.spLogin);
-    await prefs.remove(AppConstants.spShiftActive);
-    await prefs.remove(AppConstants.spActiveShiftId);
-    await prefs.remove(AppConstants.spShiftStartTimeQuery);
-    await prefs.remove(AppConstants.spShiftStartTimeDisplay);
+    // لا نحذف بيانات الوردية — الوردية كيان تجاري مستقل عن المستخدم
   }
 
   static Future<void> restoreSession() async {
@@ -54,7 +51,6 @@ class SessionManager {
   static bool canDeleteInvoice() => isAdmin || isManager;
   static bool canManageCategories() => isAdmin || isManager;
   static bool canManageCustomers() => isAdmin || isManager;
-  static bool canManageInventory() => isAdmin || isManager;
   static bool canManageExpenses() => isAdmin || isManager;
   static bool canViewReports() => isAdmin || isManager;
   static bool canManageEmployees() => isAdmin;

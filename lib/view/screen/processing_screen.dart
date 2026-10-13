@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:laundry/controller/processing_controller.dart';
 import 'package:laundry/core/theme/app_colors.dart';
+import 'package:laundry/services/business_info_service.dart';
 import 'package:laundry/view/widget/common/animation_wrappers.dart';
 import 'package:laundry/view/widget/common/common_widgets.dart';
 import 'package:laundry/view/widget/customappbar.dart';
@@ -524,9 +525,9 @@ class _WorkerPicker extends StatelessWidget {
                   (w) => DropdownMenuItem<int>(
                     value: int.tryParse('${w['user_id']}'),
                     child: Text(
-                      w['full_name']?.toString() ??
-                          w['username']?.toString() ??
-                          '',
+                      (w['full_name']?.toString().trim().isNotEmpty ?? false)
+                          ? w['full_name'].toString()
+                          : (w['username']?.toString() ?? ''),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -576,7 +577,7 @@ class _NotifyWaBtn extends StatelessWidget {
       color: const Color(0xFF25D366),
       onTap: () async {
         final msg = Uri.encodeComponent(
-          '🧺 مغاسل النظارة\n'
+          '🧺 ${BusinessInfoService.instance.name.isNotEmpty ? BusinessInfoService.instance.name : 'نظام المغاسل'}\n'
           'السلام عليكم ${invoice['customer_name'] ?? ''}،\n'
           'غسيلكم جاهز للاستلام 💯\n'
           '📌 فاتورة #${invoice['invoices_id']}\n'

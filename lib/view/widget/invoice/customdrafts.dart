@@ -5,12 +5,46 @@ import 'package:laundry/controller/invoicecontroller.dart';
 import 'package:laundry/core/theme/app_colors.dart';
 import 'package:laundry/sqldb.dart';
 
+/// رقم المسودة المُستعادة حاليًا — تُحذف **عند إصدار الفاتورة بنجاح**، لا عند
+/// الاستعادة. (كانت تُحذف فور الاستعادة فتضيع لو أغلق المستخدم التطبيق أو
+/// عدّل رأيه قبل الإصدار.) مستوى المكتبة حتى تصل إليه كل الأصناف في الملف.
+int? _pendingDraftId;
+
+/// هل توجد مسودة مُستعادة بانتظار الإصدار؟
+bool get hasPendingDraft => _pendingDraftId != null;
+
 /// حفظ واستعادة مسودات الفواتير (فاتورة غير مكتملة)
 class CustomDrafts extends StatelessWidget {
   final InvoiceController invcontroller;
   CustomDrafts({super.key, required this.invcontroller});
 
   final SqlDB db = SqlDB();
+
+  /// يحذف المسودة المستعادة بعد إصدار الفاتورة بنجاح.
+  ///
+  /// يُستدعى من مسار إصدار الفاتورة. لو فشل الإصدار، تبقى المسودة سليمة
+  /// فلا يضيع عمل المستخدم.
+  static Future<void> linkDraftToInvoice() async {
+    final id = _pendingDraftId;
+    if (id == null) return;
+    try {
+      await SqlDB().safeDelete(
+        'invoice_drafts',
+        where: 'draft_id = ?',
+        whereArgs: [id],
+      );
+    } catch (e) {
+      debugPrint('draft cleanup skipped: $e');
+    } finally {
+      _pendingDraftId = null;
+    }
+  }
+
+  /// حذف المسودة الجارية إن وُجدت (الاسم البديل المستخدم في مسار الإصدار)
+  static Future<void> consumePendingDraft() => linkDraftToInvoice();
+
+  /// رقم المسودة المُستعادة حاليًا (للاختبار والتشخيص)
+  static int? get pendingDraftId => _pendingDraftId;
 
   Future<void> _saveDraft() async {
     if (invcontroller.invoice.isEmpty) {
@@ -27,7 +61,8 @@ class CustomDrafts extends StatelessWidget {
     await db.safeInsert('invoice_drafts', {
       'customer_name': name.isEmpty ? 'بدون زبون' : name,
       'items_json': jsonEncode(List<dynamic>.from(invcontroller.invoice)),
-      'total_price': invcontroller.summation.value,
+      // المجموع مشتق من البنود — لا يعتمد على حقل مخزَّن
+      'total_price': invcontroller.totalValue(),
       'created_at': DateTime.now().toIso8601String(),
     });
     Get.snackbar(
@@ -204,26 +239,30 @@ class _DraftsDialog extends StatelessWidget {
     required this.drafts,
   });
 
+  /// استعادة مسودة إلى شاشة البيع.
+  ///
+  /// **إصلاح:** كانت تحذف المسودة **فورًا** عند الاستعادة. فلو استعادها
+  /// المستخدم ثم أغلق التطبيق أو عدّل رأيه قبل إصدار الفاتورة، ضاعت المسودة
+  /// بلا رجعة. الصحيح: تُستعاد في الذاكنة وتبقى في القاعدة، وتُحذف **عند
+  /// إصدار الفاتورة فعلًا** (عبر [_linkDraftToInvoice]).
   void _restore(Map<String, dynamic> draft) {
     Get.back();
     try {
       final items = List<Map<String, dynamic>>.from(
         jsonDecode(draft['items_json'].toString()),
       );
-      invcontroller.invoice
-        ..clear()
-        ..addAll(items);
+      // `setItems` تُزامن المجموع مع البنود المستعادة تلقائيًا
+      invcontroller.setItems(items);
       invcontroller.customername.text =
           draft['customer_name']?.toString() ?? '';
       invcontroller.update();
-      db.safeDelete(
-        'invoice_drafts',
-        where: 'draft_id = ?',
-        whereArgs: [draft['draft_id']],
-      );
+
+      // نُعلّق المسودة بالفاتورة الجارية — تُحذف لاحقًا عند الإصدار
+      _pendingDraftId = draft['draft_id'] as int?;
+
       Get.snackbar(
         'تم الاستعادة',
-        'استُعيدت المسودة بكل بنودها',
+        'استُعيدت المسودة — ستُحذف تلقائيًا بعد إصدار الفاتورة',
         snackPosition: SnackPosition.BOTTOM,
         backgroundColor: AppColors.success,
         colorText: Colors.white,
@@ -236,6 +275,9 @@ class _DraftsDialog extends StatelessWidget {
       );
     }
   }
+
+  /// يحذف المسودة المستعادة بعد إصدار الفاتورة بنجاح — يُنفَّذ في [CustomDrafts].
+  /// (كان هنا سابقًا؛ نُقل إلى الصنف العام حتى تستدعيه مسار الإصدار مباشرة.)
 
   @override
   Widget build(BuildContext context) {
