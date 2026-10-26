@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:laundry/core/navigation/route_dismissal.dart';
 import 'package:laundry/core/theme/app_colors.dart';
+import 'package:laundry/services/i18n/l10n.dart';
 
 /// حوار موحد جميل مع رأس متدرج للأشكال (إضافة/تعديل)
 class AppFormDialog extends StatelessWidget {
@@ -64,8 +66,8 @@ class AppFormDialog extends StatelessWidget {
                     ),
                   ),
                   IconButton(
-                    tooltip: 'إغلاق',
-                    onPressed: () => Get.back(),
+                    tooltip: tr('إغلاق'),
+                    onPressed: () => dismissRoute(context),
                     icon: const Icon(Icons.close, color: Colors.white),
                   ),
                 ],
@@ -99,83 +101,94 @@ Future<bool?> showConfirmDialog({
   Color color = AppColors.danger,
   IconData icon = Icons.warning_amber_rounded,
 }) {
-  return Get.dialog(
-    Dialog(
-      backgroundColor: Colors.white,
-      surfaceTintColor: Colors.transparent,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 68,
-              height: 68,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [color, color.withValues(alpha: 0.65)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
+  return Get.dialog<bool>(
+    Builder(
+      // سياق الحوار نفسه: نُغلق مسار الحوار مباشرة بدل `Get.back()` الذي
+      // يغلق رسالة snackbar مفتوحة ويترك الحوار معلّقًا على الشاشة.
+      builder: (dialogContext) => Dialog(
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 68,
+                height: 68,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [color, color.withValues(alpha: 0.65)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  shape: BoxShape.circle,
                 ),
-                shape: BoxShape.circle,
+                child: Icon(icon, color: Colors.white, size: 30),
               ),
-              child: Icon(icon, color: Colors.white, size: 30),
-            ),
-            const SizedBox(height: 14),
-            Text(
-              title,
-              style: TextStyle(
-                fontFamily: 'cairo',
-                fontSize: 17,
-                fontWeight: FontWeight.bold,
-                color: AppColors.textPrimary,
+              const SizedBox(height: 14),
+              Text(
+                title,
+                style: TextStyle(
+                  fontFamily: 'cairo',
+                  fontSize: 17,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textPrimary,
+                ),
               ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontFamily: 'cairo',
-                fontSize: 13,
-                color: AppColors.textSecondary,
-                height: 1.6,
+              const SizedBox(height: 8),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontFamily: 'cairo',
+                  fontSize: 13,
+                  color: AppColors.textSecondary,
+                  height: 1.6,
+                ),
               ),
-            ),
-            const SizedBox(height: 18),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => Get.back(result: false),
-                    style: OutlinedButton.styleFrom(
-                      side: BorderSide(color: AppColors.border),
-                      foregroundColor: AppColors.textSecondary,
-                    ),
-                    child: const Text(
-                      'إلغاء',
-                      style: TextStyle(fontFamily: 'cairo', fontSize: 14),
+              const SizedBox(height: 18),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () =>
+                          dismissRoute(dialogContext, result: false),
+                      style: OutlinedButton.styleFrom(
+                        side: BorderSide(color: AppColors.border),
+                        foregroundColor: AppColors.textSecondary,
+                      ),
+                      child: Text(
+                        tr('إلغاء'),
+                        style: const TextStyle(
+                          fontFamily: 'cairo',
+                          fontSize: 14,
+                        ),
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () => Get.back(result: true),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: color,
-                      foregroundColor: Colors.white,
-                    ),
-                    child: Text(
-                      confirmText,
-                      style: const TextStyle(fontFamily: 'cairo', fontSize: 14),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () => dismissRoute(dialogContext, result: true),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: color,
+                        foregroundColor: Colors.white,
+                      ),
+                      child: Text(
+                        tr(confirmText),
+                        style: const TextStyle(
+                          fontFamily: 'cairo',
+                          fontSize: 14,
+                        ),
+                      ),
                     ),
                   ),
-                ),
-              ],
-            ),
-          ],
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     ),

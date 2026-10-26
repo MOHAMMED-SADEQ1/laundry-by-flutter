@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/widgets.dart';
 import 'package:get/get.dart';
 import 'package:laundry/config/constants.dart';
+import 'package:laundry/services/i18n/l10n.dart';
 import 'package:laundry/services/license/license_status.dart';
 import 'package:laundry/services/security/security_service.dart';
 import 'package:laundry/services/security/session_manager.dart';
@@ -210,23 +211,25 @@ class SystemLicenseController extends GetxController
   /// وصف عربي مختصر للحالة — للعرض في الإعدادات وشاشة القفل.
   String get statusLabel {
     final s = status.value;
-    if (s == null) return 'جارٍ التحقق…';
-    if (s.isUnlimited) return 'غير محدود (بلا تاريخ انتهاء)';
-    if (s.clockTampered) return 'تعذّر التحقق من صحة التاريخ';
+    if (s == null) return tr('جارٍ التحقق…');
+    if (s.isUnlimited) return tr('غير محدود (بلا تاريخ انتهاء)');
+    if (s.clockTampered) return tr('تعذّر التحقق من صحة التاريخ');
     if (s.isExpired) {
       final overdue = s.daysRemaining == null ? 0 : s.daysRemaining!.abs();
-      return overdue <= 0 ? 'منتهٍ' : 'منتهٍ منذ $overdue يوم';
+      return overdue <= 0
+          ? tr('منتهٍ')
+          : trf('منتهٍ منذ {0} يوم', ['$overdue']);
     }
     final d = s.daysRemaining ?? 0;
-    if (d == 0) return 'ينتهي اليوم';
-    return d == 1 ? 'يتبقى يوم واحد' : 'يتبقى $d يومًا';
+    if (d == 0) return tr('ينتهي اليوم');
+    return d == 1
+        ? tr('يتبقى يوم واحد')
+        : trf('يتبقى {0} يومًا', ['$d']);
   }
 
   /// صيغة التخزين: `yyyy-MM-dd` محلية (بلا وقت) — يطابق نمط باقي الإعدادات.
   static String formatDate(DateTime d) =>
-      '${d.year.toString().padLeft(4, '0')}-'
-      '${d.month.toString().padLeft(2, '0')}-'
-      '${d.day.toString().padLeft(2, '0')}';
+      '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
   /// قراءة تاريخ مُخزَّن. يتسامح مع قيمة فارغة (غير محدود) ومع طابع ISO كامل
   /// (يأخذ أول 10 أحرف) لأن قواعد قديمة قد تخزّن الوقت معه.

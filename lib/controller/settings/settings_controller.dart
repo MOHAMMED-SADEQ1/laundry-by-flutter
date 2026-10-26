@@ -1,10 +1,13 @@
 import 'package:get/get.dart';
 import 'package:laundry/config/constants.dart';
+import 'package:laundry/controller/printInvoicecontroller.dart';
 import 'package:laundry/services/database/backup_service.dart';
 import 'package:laundry/services/license/system_license_service.dart';
+import 'package:laundry/services/pdf/doc_template_service.dart';
 import 'package:laundry/services/settings/app_settings_service.dart';
 import 'package:laundry/services/settings/setting_option.dart';
 import 'package:laundry/sqldb.dart';
+import 'package:laundry/services/i18n/l10n.dart';
 
 class SettingsController extends GetxController {
   final SqlDB _db = SqlDB();
@@ -33,7 +36,14 @@ class SettingsController extends GetxController {
   /// **خيارات النظام** ([SettingOptions]) تمرّ عبر [AppSettingsService]:
   /// تطبيع للقيمة حسب نوعها وحدودها + كتابة upsert + كاش + سجل تدقيق.
   /// وغيرها (معلومات النشاط) يُكتب مباشرة كما كان.
-  Future<void> updateSetting(String key, String value) async {
+  ///
+  /// [notify] = false يُسكت رسالة النجاح العامة — يستخدمه من يعرض رسالة
+  /// أخصّ بنفسه (مثل اختيار الطابعة الذي يُفعِّل هذا الخيار تلقائيًا).
+  Future<void> updateSetting(
+    String key,
+    String value, {
+    bool notify = true,
+  }) async {
     try {
       final String applied;
       if (SettingOptions.byKey(key) != null) {
@@ -48,10 +58,20 @@ class SettingsController extends GetxController {
         applied = value;
       }
       settings[key] = applied;
+      // مزامنة القالب: خيارات `invoiceDisplay` صارت مرآة لحقول قالب الفاتورة.
+      // بلا هذا السطر يتناقض المنظران (إخفاء الشعار من هنا يبقى ظاهرًا هناك)
+      // لأن القالب المحفوظ هو المرجع بعد أول تعديل من شاشة «قوالب الطباعة».
+      await DocTemplateService.instance.mirrorLegacy(key, applied);
+      // خطّ الطباعة: يُفرَّغ المحمَّل ويُعاد تحميل الجديد **الآن** لا عند
+      // إعادة التشغيل — وإلا بقيت الفاتورة التالية بالخطّ القديم.
+      if (key == AppConstants.settingPrintFont) {
+        PrintInvoiceController.invalidateFont();
+        await PrintInvoiceController.ensureAssets();
+      }
       _applyRuntimeEffects(key);
-      Get.snackbar('نجاح', 'تم تحديث الإعداد بنجاح');
+      if (notify) Get.snackbar('نجاح', 'تم تحديث الإعداد بنجاح');
     } catch (e) {
-      Get.snackbar('خطأ', 'فشل في تحديث الإعداد: $e');
+      Get.snackbar(tr('خطأ'), trf('فشل في تحديث الإعداد: {0}', [e]));
     }
   }
 

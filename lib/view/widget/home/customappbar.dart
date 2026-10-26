@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:laundry/services/i18n/l10n.dart';
 import 'package:laundry/view/widget/customtextbold.dart';
 
 class CustomHomeAppBar extends StatelessWidget implements PreferredSizeWidget {
@@ -20,10 +21,10 @@ class CustomHomeAppBar extends StatelessWidget implements PreferredSizeWidget {
       //   ],
       // ),
       centerTitle: true,
-      title: CustomTextBold(fontSize: 25, text: 'مغاسل النظارة لغسيل الملابس'),
+      title: CustomTextBold(fontSize: 25, text: tr('مغاسل النظارة لغسيل الملابس')),
       actions: [
         IconButton(
-          tooltip: "فتح القائمة الجانبية",
+          tooltip: tr("فتح القائمة الجانبية"),
           onPressed: () {
             scaffoldKey.currentState!.openEndDrawer();
           },

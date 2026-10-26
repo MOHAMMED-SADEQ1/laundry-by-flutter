@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:laundry/controller/customersnumbercontroller.dart';
+import 'package:laundry/services/i18n/l10n.dart';
 import 'package:laundry/core/theme/app_colors.dart';
 import 'package:laundry/view/widget/common/app_dialog.dart';
 import 'package:laundry/view/widget/customtextformfield.dart';
@@ -25,7 +26,7 @@ Future<void> showAddCustomerDialog({
 
   return Get.dialog(
     AppFormDialog(
-            title: "إضافة زبون جديد",
+            title: tr("إضافة زبون جديد"),
             icon: Icons.person_add_alt_1,
             gradient: AppColors.primaryGradient,
             actions: Row(
@@ -33,8 +34,8 @@ Future<void> showAddCustomerDialog({
                 Expanded(
                   child: OutlinedButton(
                     onPressed: () => Get.back(),
-                    child: const Text(
-                      "إلغاء",
+                    child: Text(
+                      tr('إلغاء'),
                       style: TextStyle(fontFamily: 'cairo', fontSize: 14),
                     ),
                   ),
@@ -50,7 +51,9 @@ Future<void> showAddCustomerDialog({
                       final name = controller.neme.text.trim();
                       final phone = controller.number1.text.trim();
                       if (name.isEmpty) {
-                        controller.messagefailer('اكتب اسم الزبون أولاً');
+                        controller.messagefailer(
+                          tr('اكتب اسم الزبون أولاً'),
+                        );
                         return;
                       }
                       // نغلق الحوار فوراً قبل أي عملية غير متزامنة فلا يبقى
@@ -59,8 +62,8 @@ Future<void> showAddCustomerDialog({
                       final saved = await controller.writeData();
                       if (saved) onAdded?.call(name, phone);
                     },
-                    child: const Text(
-                      "حفظ",
+                    child: Text(
+                      tr('حفظ'),
                       style: TextStyle(fontFamily: 'cairo', fontSize: 14),
                     ),
                   ),
@@ -72,7 +75,7 @@ Future<void> showAddCustomerDialog({
               children: [
                 CustomTextFormField(
                   valueinput: controller.neme,
-                  lable: "اسم الزبون",
+                  lable: tr('اسم الزبون'),
                   inputtype: TextInputType.text,
                 ),
                 const SizedBox(height: 10),
@@ -81,7 +84,7 @@ Future<void> showAddCustomerDialog({
                     Expanded(
                       child: CustomTextFormField(
                         valueinput: controller.number1,
-                        lable: "الرقم الأول",
+                        lable: tr('الرقم الأول'),
                         inputtype: TextInputType.phone,
                       ),
                     ),
@@ -89,7 +92,7 @@ Future<void> showAddCustomerDialog({
                     Expanded(
                       child: CustomTextFormField(
                         valueinput: controller.number2,
-                        lable: "الرقم الثاني",
+                        lable: tr('الرقم الثاني'),
                         inputtype: TextInputType.phone,
                       ),
                     ),
@@ -110,10 +113,10 @@ class CustomAddCustomer extends StatelessWidget {
   Widget build(BuildContext context) {
     return FloatingActionButton.extended(
       backgroundColor: AppColors.primary,
-      tooltip: 'إضافة زبون',
+      tooltip: tr('إضافة زبون'),
       icon: const Icon(Icons.person_add_alt_1),
-      label: const Text(
-        'زبون جديد',
+      label: Text(
+        tr('زبون جديد'),
         style: TextStyle(
           fontFamily: 'cairo',
           color: Colors.white,

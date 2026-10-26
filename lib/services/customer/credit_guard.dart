@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:laundry/services/customer/customer_ledger_service.dart';
+import 'package:laundry/services/i18n/currency.dart';
+import 'package:laundry/services/i18n/l10n.dart';
 import 'package:laundry/services/security/session_manager.dart';
 import 'package:laundry/sqldb.dart';
 
@@ -59,6 +61,10 @@ class CreditGuard {
 
   static final SqlDB _db = SqlDB();
 
+  /// مبلغ منسَّق برمز العملة بلغة الواجهة — يُستعمل في الرسائل الموجّهة للمستخدم.
+  static String _money(double v) =>
+      '${v.toStringAsFixed(2)} ${Currency.symbol}';
+
   /// حدّ الدين الافتراضي حين لا يُحدَّد للزبون (0 = بلا حد).
   /// يُقرأ مرة واحدة ويُخزَّن مؤقتًا لأن استعلام الإعداد ليس مجانيًا.
   static const String _spDefaultLimit = 'default_credit_limit';
@@ -75,8 +81,7 @@ class CreditGuard {
   }) async {
     try {
       final rows = await _db.readData(
-        'SELECT customer_name, COALESCE(credit_limit, 0) AS lim FROM customers '
-        'WHERE customer_id = ?',
+        'SELECT customer_name, COALESCE(credit_limit, 0) AS lim FROM customers WHERE customer_id = ?',
         [customerId],
       );
       if (rows.isEmpty) {
@@ -114,8 +119,10 @@ class CreditGuard {
           limit: 0,
           exceededBy: 0,
           message: current > 0
-              ? '«$name» عليه ذمة قائمة ${current.toStringAsFixed(2)} ر.س. '
-                  'لا حدّ ائتمان مضبوط له — يُنصح بتحديد حدّ.'
+              ? trf(
+                  '«{0}» عليه ذمة قائمة {1}. لا حدّ ائتمان مضبوط له — يُنصح بتحديد حدّ.',
+                  [name, _money(current)],
+                )
               : '',
         );
       }
@@ -145,15 +152,14 @@ class CreditGuard {
         exceededBy: exceeded,
         requiresManagerOverride: !canOverride,
         message: canOverride
-            ? 'تجاوزُ حدّ الائتمان لـ«$name» بمقدار '
-                '${exceeded.toStringAsFixed(2)} ر.س '
-                '(الحد ${limit.toStringAsFixed(2)} — بعد البيع '
-                '${after.toStringAsFixed(2)}). تسجيلك يسمح بالتجاوز.'
-            : '«$name» سيتجاوز حدّ ائتمانه بمقدار '
-                '${exceeded.toStringAsFixed(2)} ر.س '
-                '(الحد ${limit.toStringAsFixed(2)} — بعد البيع '
-                '${after.toStringAsFixed(2)}). '
-                'لا يملك صلاحية التجاوز إلا مدير.',
+            ? trf(
+                'تجاوزُ حدّ الائتمان لـ«{0}» بمقدار {1} (الحد {2} — بعد البيع {3}). تسجيلك يسمح بالتجاوز.',
+                [name, _money(exceeded), _money(limit), _money(after)],
+              )
+            : trf(
+                '«{0}» سيتجاوز حدّ ائتمانه بمقدار {1} (الحد {2} — بعد البيع {3}). لا يملك صلاحية التجاوز إلا مدير.',
+                [name, _money(exceeded), _money(limit), _money(after)],
+              ),
       );
     } catch (e) {
       debugPrint('CreditGuard.check error: $e');
@@ -190,8 +196,7 @@ class CreditGuard {
     if (limit < 0) return false;
     try {
       final before = await _db.readData(
-        'SELECT COALESCE(credit_limit, 0) AS lim FROM customers '
-        'WHERE customer_id = ?',
+        'SELECT COALESCE(credit_limit, 0) AS lim FROM customers WHERE customer_id = ?',
         [customerId],
       );
       final old = before.isEmpty
@@ -225,8 +230,7 @@ class CreditGuard {
   static Future<double> limitOf(int customerId) async {
     try {
       final rows = await _db.readData(
-        'SELECT COALESCE(credit_limit, 0) AS lim FROM customers '
-        'WHERE customer_id = ?',
+        'SELECT COALESCE(credit_limit, 0) AS lim FROM customers WHERE customer_id = ?',
         [customerId],
       );
       if (rows.isEmpty) return 0;
@@ -253,21 +257,7 @@ class CreditGuard {
   static Future<List<Map<String, dynamic>>> overLimitCustomers() async {
     try {
       return await _db.readData(
-        'SELECT c.customer_id, c.customer_name, c.phone_1, '
-        '  COALESCE(c.credit_limit, 0) AS lim, '
-        '  COALESCE((SELECT SUM(i.remaining_amount) FROM invoices i '
-        '    WHERE i.customer_id = c.customer_id '
-        '      AND i.subscription_id IS NULL '
-        '      AND i.remaining_amount > 0.004), 0) AS debt '
-        'FROM customers c '
-        'WHERE COALESCE(c.is_active, 1) = 1 '
-        '  AND COALESCE(c.credit_limit, 0) > 0 '
-        '  AND COALESCE((SELECT SUM(i.remaining_amount) FROM invoices i '
-        '    WHERE i.customer_id = c.customer_id '
-        '      AND i.subscription_id IS NULL '
-        '      AND i.remaining_amount > 0.004), 0) '
-        '    > COALESCE(c.credit_limit, 0) '
-        'ORDER BY debt DESC',
+        'SELECT c.customer_id, c.customer_name, c.phone_1,   COALESCE(c.credit_limit, 0) AS lim,   COALESCE((SELECT SUM(i.remaining_amount) FROM invoices i     WHERE i.customer_id = c.customer_id       AND i.subscription_id IS NULL       AND i.remaining_amount > 0.004), 0) AS debt FROM customers c WHERE COALESCE(c.is_active, 1) = 1   AND COALESCE(c.credit_limit, 0) > 0   AND COALESCE((SELECT SUM(i.remaining_amount) FROM invoices i     WHERE i.customer_id = c.customer_id       AND i.subscription_id IS NULL       AND i.remaining_amount > 0.004), 0)     > COALESCE(c.credit_limit, 0) ORDER BY debt DESC',
       );
     } catch (e) {
       debugPrint('CreditGuard.overLimitCustomers error: $e');

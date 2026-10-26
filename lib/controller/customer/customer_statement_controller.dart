@@ -5,9 +5,14 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
 import 'package:laundry/core/services/preparePDF.dart';
+import 'package:laundry/services/pdf/doc_template.dart';
+import 'package:laundry/services/pdf/doc_template_service.dart';
 import 'package:laundry/core/theme/app_colors.dart';
 import 'package:laundry/services/business_info_service.dart';
 import 'package:laundry/services/customer/customer_statement_service.dart';
+import 'package:laundry/services/i18n/l10n.dart';
+import 'package:laundry/core/services/paper_size.dart';
+import 'package:laundry/services/printer/printer_service.dart';
 import 'package:printing/printing.dart';
 
 /// تصدير كشف حساب الزبون: طباعة PDF أو مشاركته على واتساب.
@@ -24,8 +29,8 @@ class CustomerStatementController extends GetxController {
   /// نصّ الفترة المختارة — للعرض في الواجهة.
   String get rangeLabel {
     final r = selectedRange.value;
-    if (r == null) return 'كل الفترة (بلا تقييد)';
-    return 'من ${_day(r.start)} إلى ${_day(r.end)}';
+    if (r == null) return tr('كل الفترة (بلا تقييد)');
+    return trf('من {0} إلى {1}', [_day(r.start), _day(r.end)]);
   }
 
   /// ضبط الفترة (null = إلغاء التقييد).
@@ -50,13 +55,13 @@ class CustomerStatementController extends GetxController {
         to: r?.end,
       );
       if (st == null) {
-        _info('تعذّر تجهيز كشف الحساب', AppColors.danger);
+        _info(tr('تعذّر تجهيز كشف الحساب'), AppColors.danger);
         return;
       }
       final data = buildPdfData(st);
       final bytes = await PreparePDF.generateCustomerStatementPdf(data);
       if (bytes.isEmpty) {
-        _info('تعذّر توليد ملف الكشف', AppColors.danger);
+        _info(tr('تعذّر توليد ملف الكشف'), AppColors.danger);
         return;
       }
       final filename = 'كشف_حساب_${st.customerId}.pdf';
@@ -65,22 +70,28 @@ class CustomerStatementController extends GetxController {
         await Printing.sharePdf(
           bytes: bytes,
           filename: filename,
-          subject: 'كشف حساب — ${st.customerName}',
+          subject: trf('كشف حساب — {0}', [st.customerName]),
           body: summaryText(st),
         );
       } else {
-        // على الجوال يفتح حوار الطباعة مباشرةً؛ على سطح المكتب يُحفظ الملف.
-        final done = await Printing.layoutPdf(
-          name: filename,
-          onLayout: (_) => bytes,
+        // الطابعة المختارة مباشرةً إن فُعِّل الخيار، وإلا حوار النظام؛ وإن لم
+        // يكتمل (سطح المكتب بلا طابعة) يُحفظ الملف على القرص.
+        final done = await PrinterService.instance.printPdf(
+          bytes,
+          jobName: filename,
+          paper: PaperSizes.a4,
         );
         if (!done) {
+          // سبب الفشل (تعريف نصّي · طابعة متوقفة · مهلة) يُعرض قبل الحفظ،
+          // وإلا ظنّ المستخدم أن الكشف طُبع وهو لم يُطبع.
+          final issue = PrinterService.instance.lastIssue;
+          if (issue != null) _info(issue, AppColors.warning);
           await _saveToDisk(bytes, filename, st.customerName);
         }
       }
     } catch (e) {
       debugPrint('CustomerStatementController.export error: $e');
-      _info('فشل تصدير الكشف: $e', AppColors.danger);
+      _info(trf('فشل تصدير الكشف: {0}', [e]), AppColors.danger);
     } finally {
       isBusy.value = false;
     }
@@ -91,29 +102,33 @@ class CustomerStatementController extends GetxController {
     final b = StringBuffer();
     final biz = BusinessInfoService.instance.name;
     if (biz.isNotEmpty) b.writeln(biz);
-    b.writeln('كشف حساب: ${st.customerName}');
-    if (st.hasRange) b.writeln('الفترة: ${periodLabel(st)}');
+    b.writeln(trf('كشف حساب: {0}', [st.customerName]));
+    if (st.hasRange) b.writeln(trf('الفترة: {0}', [periodLabel(st)]));
     b.writeln('────────────────');
-    b.writeln('إجمالي المشتريات: ${_m(st.totalPurchases)} ريال');
-    b.writeln('المسدَّد: ${_m(st.totalPaidOnInvoices)} ريال');
+    b.writeln(trf('إجمالي المشتريات: {0} ريال', [_m(st.totalPurchases)]));
+    b.writeln(trf('المسدَّد: {0} ريال', [_m(st.totalPaidOnInvoices)]));
     if (st.hasDebt) {
-      b.writeln('الذمة المتبقية (عليه): ${_m(st.totalDebt)} ريال');
+      b.writeln(trf('الذمة المتبقية (عليه): {0} ريال', [_m(st.totalDebt)]));
       if (st.oldestDebtDate != null) {
-        b.writeln('أقدم ذمة: ${_d(st.oldestDebtDate!)}');
+        b.writeln(trf('أقدم ذمة: {0}', [_d(st.oldestDebtDate!)]));
       }
     }
     if (st.hasCredit) {
-      b.writeln('الرصيد الدائن (له): ${_m(st.creditBalance)} ريال');
+      b.writeln(trf('الرصيد الدائن (له): {0} ريال', [_m(st.creditBalance)]));
     }
     b.writeln(
-      'صافي الموقف: ${_m(st.netPosition.abs())} ريال '
-      '${st.netPosition >= 0 ? '(له)' : '(عليه)'}',
+      trf('صافي الموقف: {0} ريال {1}', [
+        _m(st.netPosition.abs()),
+        tr(st.netPosition >= 0 ? '(له)' : '(عليه)'),
+      ]),
     );
     if (st.totalSubscriptionPieces > 0) {
-      b.writeln('قطع الاشتراك المستهلكة: ${st.totalSubscriptionPieces}');
+      b.writeln(
+        trf('قطع الاشتراك المستهلكة: {0}', [st.totalSubscriptionPieces]),
+      );
     }
     b.writeln('────────────────');
-    b.write('مغاسل النظارة — شكرًا لتعاملكم معنا');
+    b.write(tr('مغاسل النظارة — شكرًا لتعاملكم معنا'));
     return b.toString();
   }
 
@@ -122,9 +137,11 @@ class CustomerStatementController extends GetxController {
     final f = st.rangeFrom;
     final t = st.rangeTo;
     if (f == null && t == null) return '';
-    if (f != null && t != null) return 'من ${_day(f)} إلى ${_day(t)}';
-    if (f != null) return 'من ${_day(f)} حتى الآن';
-    return 'حتى ${_day(t!)}';
+    if (f != null && t != null) {
+      return trf('من {0} إلى {1}', [_day(f), _day(t)]);
+    }
+    if (f != null) return trf('من {0} حتى الآن', [_day(f)]);
+    return trf('حتى {0}', [_day(t!)]);
   }
 
   /// خريطة البيانات التي يستهلكها مولّد الـPDF.
@@ -169,7 +186,8 @@ class CustomerStatementController extends GetxController {
           for (final it in inv.items)
             {
               'date': _dt(inv.date),
-              'name': it.name,
+              // الاسم بلغة الواجهة — والـPDF يقرأ ما هنا كما هو.
+              'name': localizedText(it.name, it.nameEn),
               'count': it.count,
               'value': it.value,
             },
@@ -195,6 +213,8 @@ class CustomerStatementController extends GetxController {
             },
           )
           .toList(),
+      // ─── قالب المستند: تفعيل ونصوص كل عنصر (شاشة «قوالب الطباعة») ───
+      ...DocTemplateService.instance.transport(DocKind.statement),
     };
   }
 
@@ -204,10 +224,10 @@ class CustomerStatementController extends GetxController {
   /// محرف الشرطة الطويلة (U+2014) فيُرسم مربّعًا/محرفًا خاطئًا في الـPDF.
   String _sourceLabel(StatementPayment p) {
     final base = switch (p.source) {
-      'credit_use' => 'استهلاك رصيد سلفة',
-      'cancel_refund' => 'استرداد إلغاء اشتراك',
-      'delivery' => 'تحصيل عند التسليم',
-      _ => p.method.isNotEmpty ? p.method : 'دفعة',
+      'credit_use' => tr('استهلاك رصيد سلفة'),
+      'cancel_refund' => tr('استرداد إلغاء اشتراك'),
+      'delivery' => tr('تحصيل عند التسليم'),
+      _ => p.method.isNotEmpty ? p.method : tr('دفعة'),
     };
     final note = p.note.trim();
     return note.isEmpty ? base : '$base – $note';
@@ -222,10 +242,10 @@ class CustomerStatementController extends GetxController {
       final dir = await Directory.systemTemp.createTemp('statement');
       final file = File('${dir.path}/$filename');
       await file.writeAsBytes(bytes);
-      _info('حُفظ الكشف في: ${file.path}', AppColors.info);
+      _info(trf('حُفظ الكشف في: {0}', [file.path]), AppColors.info);
     } catch (e) {
       debugPrint('saveStatement error: $e');
-      _info('تعذّر حفظ الكشف', AppColors.danger);
+      _info(tr('تعذّر حفظ الكشف'), AppColors.danger);
     }
   }
 
@@ -259,7 +279,7 @@ class CustomerStatementController extends GetxController {
 
   void _info(String message, Color color) {
     Get.snackbar(
-      'كشف الحساب',
+      tr('كشف الحساب'),
       message,
       snackPosition: SnackPosition.BOTTOM,
       backgroundColor: color,

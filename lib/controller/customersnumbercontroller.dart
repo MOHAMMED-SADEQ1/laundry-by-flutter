@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 import 'package:laundry/core/theme/app_colors.dart';
 import 'package:laundry/services/customer/customer_search.dart';
 import 'package:laundry/services/customer/customer_ledger_service.dart';
+import 'package:laundry/services/i18n/l10n.dart';
 import 'package:laundry/sqldb.dart';
 
 class CustomersNumberController extends GetxController {
@@ -50,11 +51,7 @@ class CustomersNumberController extends GetxController {
   Future<void> _loadDebts() async {
     try {
       final rows = await _db.readData(
-        'SELECT customer_id, COALESCE(SUM(remaining_amount), 0) AS due '
-        'FROM invoices '
-        'WHERE subscription_id IS NULL AND remaining_amount > 0.004 '
-        'AND customer_id IS NOT NULL '
-        'GROUP BY customer_id',
+        'SELECT customer_id, COALESCE(SUM(remaining_amount), 0) AS due FROM invoices WHERE subscription_id IS NULL AND remaining_amount > 0.004 AND customer_id IS NOT NULL GROUP BY customer_id',
       );
       final map = <int, double>{};
       double total = 0;
@@ -91,7 +88,7 @@ class CustomersNumberController extends GetxController {
   /// حتى يغلق المستدعي الحوار بنفسه (لا نغلقه من داخل طبقة التحكم).
   Future<bool> writeData() async {
     if (neme.text.trim().isEmpty) {
-      messagefailer('اسم الزبون مطلوب');
+      messagefailer(tr('اسم الزبون مطلوب'));
       return false;
     }
     SqlDB db = SqlDB();
@@ -113,7 +110,7 @@ class CustomersNumberController extends GetxController {
       messageSuccessfully();
       return true;
     }
-    messagefailer('لم يتم تنفيذ العملية بنجاح!');
+    messagefailer(tr('لم يتم تنفيذ العملية بنجاح!'));
     return false;
   }
 
@@ -150,10 +147,10 @@ class CustomersNumberController extends GetxController {
       searchByText(query, limit: 6);
 
   /// رسالة نجاح موحّدة — تقبل نصاً مخصّصاً اختيارياً
-  void messageSuccessfully([String message = 'تمت العملية بنجاح']) {
+  void messageSuccessfully([String? message]) {
     Get.snackbar(
-      "تمت العملية",
-      message,
+      tr('تمت العملية'),
+      message ?? tr('تمت العملية بنجاح'),
       snackPosition: SnackPosition.BOTTOM,
       backgroundColor: AppColors.success,
       colorText: Colors.white,
@@ -162,10 +159,10 @@ class CustomersNumberController extends GetxController {
     );
   }
 
-  messagefailer([String message = 'لم يتم تنفيذ العملية بنجاح!']) {
+  messagefailer([String? message]) {
     Get.snackbar(
-      "فشل العملية",
-      message,
+      tr('فشل العملية'),
+      message ?? tr('لم يتم تنفيذ العملية بنجاح!'),
       snackPosition: SnackPosition.BOTTOM,
       backgroundColor: Colors.red,
       colorText: Colors.white,
@@ -184,9 +181,11 @@ class CustomersNumberController extends GetxController {
     if (debt > 0) {
       final amount = CustomerLedgerService.fromCents(debt);
       Get.snackbar(
-        'لا يمكن الحذف',
-        'على هذا الزبون ذمة قائمة بقيمة ${amount.toStringAsFixed(2)} ر.س. '
-            'سدّد الذمم أولًا ثم أعد المحاولة.',
+        tr('لا يمكن الحذف'),
+        trf(
+          'على هذا الزبون ذمة قائمة بقيمة {0} ر.س. سدّد الذمم أولًا ثم أعد المحاولة.',
+          [amount.toStringAsFixed(2)],
+        ),
         snackPosition: SnackPosition.BOTTOM,
         backgroundColor: AppColors.danger,
         colorText: Colors.white,
@@ -210,7 +209,9 @@ class CustomersNumberController extends GetxController {
     );
     if (response > 0) {
       await loadCustomers();
-      messageSuccessfully('تم حذف الزبون — سجل فواتيره محفوظ للتقارير');
+      messageSuccessfully(
+        tr('تم حذف الزبون — سجل فواتيره محفوظ للتقارير'),
+      );
     } else {
       messagefailer();
     }
@@ -219,14 +220,15 @@ class CustomersNumberController extends GetxController {
   Future<bool?> _confirmCreditLoss(double credit) {
     return Get.dialog<bool>(
       AlertDialog(
-        title: const Text(
-          'تنبيه: رصيد غير مستخدم',
-          style: TextStyle(fontFamily: 'cairo', fontSize: 16),
+        title: Text(
+          tr('تنبيه: رصيد غير مستخدم'),
+          style: const TextStyle(fontFamily: 'cairo', fontSize: 16),
         ),
         content: Text(
-          'لهذا الزبون رصيد ${credit.toStringAsFixed(2)} ر.س لم يُستخدَم. '
-          'إذا حذفته سيبقى الرصيد مسجَّلًا لكنه لن يظهر في القائمة. '
-          'هل تريد المتابعة؟',
+          trf(
+            'لهذا الزبون رصيد {0} ر.س لم يُستخدَم. إذا حذفته سيبقى الرصيد مسجَّلًا لكنه لن يظهر في القائمة. هل تريد المتابعة؟',
+            [credit.toStringAsFixed(2)],
+          ),
           style: const TextStyle(
             fontFamily: 'cairo',
             fontSize: 13,
@@ -236,14 +238,17 @@ class CustomersNumberController extends GetxController {
         actions: [
           TextButton(
             onPressed: () => Get.back(result: false),
-            child: const Text('إلغاء', style: TextStyle(fontFamily: 'cairo')),
+            child: Text(
+              tr('إلغاء'),
+              style: const TextStyle(fontFamily: 'cairo'),
+            ),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.danger),
             onPressed: () => Get.back(result: true),
-            child: const Text(
-              'حذف رغم ذلك',
-              style: TextStyle(fontFamily: 'cairo', color: Colors.white),
+            child: Text(
+              tr('حذف رغم ذلك'),
+              style: const TextStyle(fontFamily: 'cairo', color: Colors.white),
             ),
           ),
         ],

@@ -4,13 +4,22 @@ import 'package:flutter/foundation.dart';
 import 'package:laundry/sqldb.dart';
 
 /// بند صنف داخل فاتورة (اسم الصنف + العدد + القيمة).
+///
+/// يحمل **الاسمين** لا اسمًا واحدًا: التجميع والفرز يبقيان على العربي (مفتاح
+/// ثابت لا يتغيّر بتبديل اللغة)، والعرض يختار بـ`localizedText`. لو خُزِّن
+/// الاسم المترجَم هنا لانقسم الصنف الواحد إلى مجموعتين عند تبديل اللغة.
 class StatementItem {
   final String name;
+
+  /// الاسم الإنجليزي (`vestments_en`) — فراغه يعني «لا ترجمة في الفاتورة»،
+  /// فيسقط العرض على القاموس ثم العربي.
+  final String nameEn;
   final int count;
   final double value;
 
   const StatementItem({
     required this.name,
+    this.nameEn = '',
     required this.count,
     required this.value,
   });
@@ -99,10 +108,11 @@ class StatementUsage {
 /// إجمالي صنف على مستوى الكشف كله (الأصناف التي أخذها الزبون مجمَّعة).
 class ItemSummary {
   final String name;
+  final String nameEn;
   int count = 0;
   double value = 0;
 
-  ItemSummary(this.name);
+  ItemSummary(this.name, [this.nameEn = '']);
 }
 
 /// كشف حساب زبون كامل — كل الأرقام مشتقّة من الفواتير ودفتر الدفعات.
@@ -274,11 +284,7 @@ class CustomerStatementService {
 
       // ─── الفواتير (غير الاشتراكية) ───
       final invRows = await _db.readData(
-        'SELECT invoices_id, invoice_date, final_amount, paid_amount, '
-        '  remaining_amount, payment_method, subscription_id '
-        'FROM invoices WHERE customer_id = ? AND subscription_id IS NULL'
-        '${andRange('invoice_date')} '
-        'ORDER BY invoice_date ASC',
+        'SELECT invoices_id, invoice_date, final_amount, paid_amount,   remaining_amount, payment_method, subscription_id FROM invoices WHERE customer_id = ? AND subscription_id IS NULL${andRange('invoice_date')} ORDER BY invoice_date ASC',
         [customerId, ...rangeArgs],
       );
 
@@ -288,27 +294,31 @@ class CustomerStatementService {
       final itemRows = await _db.readData(
         "SELECT i.invoices_id AS iid, "
         "  json_extract(j.value, '\$.vestments') AS name, "
+        "  json_extract(j.value, '\$.vestments_en') AS name_en, "
         "  CAST(json_extract(j.value, '\$.count') AS INTEGER) AS qty, "
         "  CAST(json_extract(j.value, '\$.total_price') AS REAL) AS val "
-        'FROM invoices i, json_each(i.list_data) j '
-        'WHERE i.customer_id = ? AND i.subscription_id IS NULL'
-        '${andRange('i.invoice_date')} '
-        'ORDER BY i.invoice_date ASC',
+        'FROM invoices i, json_each(i.list_data) j WHERE i.customer_id = ? AND i.subscription_id IS NULL${andRange('i.invoice_date')} ORDER BY i.invoice_date ASC',
         [customerId, ...rangeArgs],
       );
       for (final r in itemRows) {
         final iid = (r['iid'] as num?)?.toInt();
         if (iid == null) continue;
         final name = '${r['name'] ?? ''}'.trim();
+        final nameEn = '${r['name_en'] ?? ''}'.trim();
         final qty = (r['qty'] as num?)?.toInt() ?? 0;
         final val = (r['val'] as num?)?.toDouble() ?? 0;
         if (name.isEmpty && qty == 0) continue;
 
         (itemsByInvoice[iid] ??= <StatementItem>[]).add(
-          StatementItem(name: name.isEmpty ? 'غير محدد' : name, count: qty, value: val),
+          StatementItem(
+            name: name.isEmpty ? 'غير محدد' : name,
+            nameEn: nameEn,
+            count: qty,
+            value: val,
+          ),
         );
         if (name.isNotEmpty) {
-          final s = summary.putIfAbsent(name, () => ItemSummary(name));
+          final s = summary.putIfAbsent(name, () => ItemSummary(name, nameEn));
           s.count += qty;
           s.value += val;
         }
@@ -333,12 +343,7 @@ class CustomerStatementService {
 
       // ─── دفتر الدفعات ───
       final payRows = await _db.readData(
-        'SELECT cp.payment_date, cp.amount, cp.payment_method, cp.source, '
-        '  cp.notes, cp.invoice_id, COALESCE(u.full_name, \'\') AS user_name '
-        'FROM customer_payments cp '
-        'LEFT JOIN users u ON cp.recorded_by = u.user_id '
-        'WHERE cp.customer_id = ?${andRange('cp.payment_date')} '
-        'ORDER BY cp.payment_date ASC',
+        'SELECT cp.payment_date, cp.amount, cp.payment_method, cp.source,   cp.notes, cp.invoice_id, COALESCE(u.full_name, \'\') AS user_name FROM customer_payments cp LEFT JOIN users u ON cp.recorded_by = u.user_id WHERE cp.customer_id = ?${andRange('cp.payment_date')} ORDER BY cp.payment_date ASC',
         [customerId, ...rangeArgs],
       );
       final payments = payRows
@@ -357,8 +362,7 @@ class CustomerStatementService {
 
       // ─── سجل استهلاك الاشتراكات (القطع التي غُسلت) ───
       final useRows = await _db.readData(
-        'SELECT created_at, subscription_id, pieces, amount, reference_id '
-        'FROM subscription_coverage_log '
+        'SELECT created_at, subscription_id, pieces, amount, reference_id FROM subscription_coverage_log '
         "WHERE customer_id = ? AND event = 'usage'${andRange('created_at')} "
         'ORDER BY created_at ASC',
         [customerId, ...rangeArgs],
@@ -377,16 +381,14 @@ class CustomerStatementService {
 
       // ─── اشتراكاته (للعرض في الترويسة) ───
       final subs = await _db.readData(
-        'SELECT * FROM subscriptions WHERE customer_id = ? '
-        'ORDER BY subscription_id DESC',
+        'SELECT * FROM subscriptions WHERE customer_id = ? ORDER BY subscription_id DESC',
         [customerId],
       );
 
       // ─── الذمة **الآن** (غير مقيَّدة بالفترة) ───
       // مجموع مستقل حتى لا تُخلط «ذمة الفترة» بالذمة كلها.
       final debtRows = await _db.readData(
-        'SELECT COALESCE(SUM(remaining_amount), 0) AS debt FROM invoices '
-        'WHERE customer_id = ? AND subscription_id IS NULL',
+        'SELECT COALESCE(SUM(remaining_amount), 0) AS debt FROM invoices WHERE customer_id = ? AND subscription_id IS NULL',
         [customerId],
       );
       final debtNow = ((debtRows.isEmpty ? 0 : debtRows.first['debt']) as num?)
@@ -417,15 +419,7 @@ class CustomerStatementService {
   Future<List<Map<String, dynamic>>> debtorsWithBalance() async {
     try {
       return await _db.readData(
-        'SELECT c.customer_id, c.customer_name, c.phone_1, '
-        '  COALESCE(c.balance, 0) AS balance, '
-        '  COALESCE((SELECT SUM(i.remaining_amount) FROM invoices i '
-        '    WHERE i.customer_id = c.customer_id '
-        '      AND i.subscription_id IS NULL '
-        '      AND i.remaining_amount > 0.004), 0) AS debt '
-        'FROM customers c '
-        'WHERE COALESCE(c.is_active, 1) = 1 '
-        'ORDER BY c.customer_name',
+        'SELECT c.customer_id, c.customer_name, c.phone_1,   COALESCE(c.balance, 0) AS balance,   COALESCE((SELECT SUM(i.remaining_amount) FROM invoices i     WHERE i.customer_id = c.customer_id       AND i.subscription_id IS NULL       AND i.remaining_amount > 0.004), 0) AS debt FROM customers c WHERE COALESCE(c.is_active, 1) = 1 ORDER BY c.customer_name',
       );
     } catch (e) {
       debugPrint('debtorsWithBalance error: $e');

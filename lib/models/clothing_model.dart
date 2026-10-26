@@ -1,6 +1,9 @@
+import 'package:laundry/services/i18n/l10n.dart';
+
 class ClothingModel {
   final int? clothingId;
   final String clothingName;
+  final String clothingNameEn;
   final double normalWashingAndIroningPrice;
   final double urgentWashingAndIroningPrice;
   final double normalIroningPrice;
@@ -11,6 +14,7 @@ class ClothingModel {
   ClothingModel({
     this.clothingId,
     required this.clothingName,
+    this.clothingNameEn = '',
     this.normalWashingAndIroningPrice = 0.0,
     this.urgentWashingAndIroningPrice = 0.0,
     this.normalIroningPrice = 0.0,
@@ -23,6 +27,7 @@ class ClothingModel {
     return ClothingModel(
       clothingId: map['clothing_id'],
       clothingName: map['clothing_name'] ?? '',
+      clothingNameEn: map['clothing_name_en'] ?? '',
       normalWashingAndIroningPrice:
           (map['normal_washing_and_ironing_price'] ?? 0).toDouble(),
       urgentWashingAndIroningPrice:
@@ -34,10 +39,14 @@ class ClothingModel {
     );
   }
 
+  String get displayName => L10n.pick(clothingName, clothingNameEn);
+
   Map<String, dynamic> toMap() {
     return {
       'clothing_id': clothingId,
       'clothing_name': clothingName,
+      'clothing_name_en':
+          clothingNameEn.trim().isEmpty ? null : clothingNameEn.trim(),
       'normal_washing_and_ironing_price': normalWashingAndIroningPrice,
       'urgent_washing_and_ironing_price': urgentWashingAndIroningPrice,
       'normal_ironing_price': normalIroningPrice,
@@ -65,15 +74,15 @@ class ClothingModel {
   String getServiceName(String serviceType) {
     switch (serviceType) {
       case 'normalwashingironing':
-        return 'غسيل وكوي عادي';
+        return tr('غسيل وكوي عادي');
       case 'urgentwashingironing':
-        return 'غسيل وكوي مستعجل';
+        return tr('غسيل وكوي مستعجل');
       case 'normalironing':
-        return 'كوي عادي';
+        return tr('كوي عادي');
       case 'urgentironing':
-        return 'كوي مستعجل';
+        return tr('كوي مستعجل');
       default:
-        return 'غسيل وكوي عادي';
+        return tr('غسيل وكوي عادي');
     }
   }
 }

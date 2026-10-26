@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart' hide TextDirection;
 import 'package:laundry/core/theme/app_colors.dart';
+import 'package:laundry/services/i18n/currency.dart';
+import 'package:laundry/services/i18n/l10n.dart';
 import 'package:laundry/sqldb.dart';
 
 // abstract class HomeController extends GetxController {}
@@ -30,10 +32,11 @@ class HomeController extends GetxController {
           // إشعار **مرئي** بدل الحذف الصامت — المستخدم يعرف أن فواتير
           // قديمة أُزيلت ومقدارها، فيفسّر أي فرق في التقارير.
           Get.snackbar(
-            'تنظيف تلقائي للفواتير',
-            'أُزيلت ${result.count} فاتورة قديمة بإجمالي '
-            '${NumberFormat('#,##0.00').format(result.totalAmount)} ر.س '
-            'وفق سياسة الاحتفاظ بالفواتير.',
+            tr('تنظيف تلقائي للفواتير'),
+            trf('أُزيلت {0} فاتورة قديمة بإجمالي {1} وفق سياسة الاحتفاظ بالفواتير.', [
+              result.count,
+              '${NumberFormat('#,##0.00').format(result.totalAmount)} ${Currency.symbol}',
+            ]),
             snackPosition: SnackPosition.BOTTOM,
             backgroundColor: AppColors.warning,
             colorText: Colors.white,

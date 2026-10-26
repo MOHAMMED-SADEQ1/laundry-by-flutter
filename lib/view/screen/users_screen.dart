@@ -1,8 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:laundry/controller/users/users_controller.dart';
+import 'package:laundry/core/navigation/route_dismissal.dart';
 import 'package:laundry/core/theme/app_colors.dart';
+import 'package:laundry/services/i18n/l10n.dart';
+import 'package:laundry/services/permission/permission_catalog.dart';
+import 'package:laundry/services/permission/permission_service.dart';
 import 'package:laundry/services/security/session_manager.dart';
+import 'package:laundry/view/screen/users/user_permissions_sheet.dart';
+import 'package:laundry/view/widget/common/app_dialog.dart';
 import 'package:laundry/view/widget/customappbar.dart';
 
 class UsersScreen extends StatefulWidget {
@@ -25,8 +31,8 @@ class _UsersScreenState extends State<UsersScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: CustomAppbar(
-        title: 'إدارة المستخدمين',
-        subtitle: 'إضافة وتعديل وحذف المستخدمين',
+        title: tr('إدارة المستخدمين'),
+        subtitle: tr('إضافة وتعديل وحذف المستخدمين'),
       ),
       body: Container(
         decoration: BoxDecoration(
@@ -46,9 +52,9 @@ class _UsersScreenState extends State<UsersScreen> {
                 child: ElevatedButton.icon(
                   onPressed: () => _showAddDialog(context),
                   icon: const Icon(Icons.person_add, color: Colors.white),
-                  label: const Text(
-                    'إضافة مستخدم جديد',
-                    style: TextStyle(
+                  label: Text(
+                    tr('إضافة مستخدم جديد'),
+                    style: const TextStyle(
                       fontFamily: 'cairo',
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
@@ -71,10 +77,13 @@ class _UsersScreenState extends State<UsersScreen> {
                   return const Center(child: CircularProgressIndicator());
                 }
                 if (controller.users.isEmpty) {
-                  return const Center(
+                  return Center(
                     child: Text(
-                      'لا يوجد مستخدمين',
-                      style: TextStyle(fontFamily: 'cairo', fontSize: 16),
+                      tr('لا يوجد مستخدمين'),
+                      style: const TextStyle(
+                        fontFamily: 'cairo',
+                        fontSize: 16,
+                      ),
                     ),
                   );
                 }
@@ -99,9 +108,11 @@ class _UsersScreenState extends State<UsersScreen> {
     final usernameCtrl = TextEditingController();
     final passwordCtrl = TextEditingController();
     String selectedRole = 'cashier';
+    bool saving = false;
+    StateSetter? dialogSetState;
 
     Get.defaultDialog(
-      title: 'إضافة مستخدم جديد',
+      title: tr('إضافة مستخدم جديد'),
       titleStyle: const TextStyle(
         fontFamily: 'cairo',
         fontWeight: FontWeight.bold,
@@ -109,61 +120,84 @@ class _UsersScreenState extends State<UsersScreen> {
       ),
       content: StatefulBuilder(
         builder: (context, setState) {
+          dialogSetState = setState;
           return Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                _buildTextField(nameCtrl, 'الاسم الكامل', Icons.person),
+                _buildTextField(nameCtrl, tr('الاسم الكامل'), Icons.person),
                 const SizedBox(height: 12),
-                _buildTextField(usernameCtrl, 'اسم المستخدم', Icons.account_circle),
+                _buildTextField(
+                  usernameCtrl,
+                  tr('اسم المستخدم'),
+                  Icons.account_circle,
+                ),
                 const SizedBox(height: 12),
-                _buildTextField(passwordCtrl, 'كلمة المرور', Icons.lock, obscure: true),
+                _buildTextField(
+                  passwordCtrl,
+                  tr('كلمة المرور'),
+                  Icons.lock,
+                  obscure: true,
+                ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
                   initialValue: selectedRole,
                   decoration: InputDecoration(
-                    labelText: 'الدور',
+                    labelText: tr('الدور'),
                     labelStyle: const TextStyle(fontFamily: 'cairo'),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
                     ),
                     prefixIcon: const Icon(Icons.work),
                   ),
-                  items: const [
-                    DropdownMenuItem(value: 'admin', child: Text('مدير النظام', style: TextStyle(fontFamily: 'cairo'))),
-                    DropdownMenuItem(value: 'manager', child: Text('مدير', style: TextStyle(fontFamily: 'cairo'))),
-                    DropdownMenuItem(value: 'accountant', child: Text('محاسب', style: TextStyle(fontFamily: 'cairo'))),
-                    DropdownMenuItem(value: 'cashier', child: Text('كاشير', style: TextStyle(fontFamily: 'cairo'))),
-                    DropdownMenuItem(value: 'worker', child: Text('عامل', style: TextStyle(fontFamily: 'cairo'))),
+                  // الأدوار من القاعدة لا مكتوبة: أي دور جديد يظهر هنا فورًا.
+                  items: [
+                    for (final r in controller.roleOptions)
+                      DropdownMenuItem(
+                        value: r.name,
+                        child: Text(r.label,
+                            style: const TextStyle(fontFamily: 'cairo')),
+                      ),
                   ],
                   onChanged: (value) {
                     setState(() => selectedRole = value!);
                   },
                 ),
+                if (saving) ...[
+                  const SizedBox(height: 12),
+                  const LinearProgressIndicator(minHeight: 3),
+                ],
               ],
             ),
           );
         },
       ),
-      textConfirm: 'إضافة',
-      textCancel: 'إلغاء',
+      textConfirm: tr('إضافة'),
+      textCancel: tr('إلغاء'),
       confirmTextColor: Colors.white,
       buttonColor: AppColors.primary,
       onConfirm: () async {
+        if (saving) return;
         if (nameCtrl.text.isEmpty || usernameCtrl.text.isEmpty || passwordCtrl.text.isEmpty) {
-          Get.snackbar('خطأ', 'أدخل جميع البيانات المطلوبة',
+          Get.snackbar(tr('خطأ'), tr('أدخل جميع البيانات المطلوبة'),
               snackPosition: SnackPosition.BOTTOM);
           return;
         }
+        saving = true;
+        dialogSetState?.call(() {});
         final success = await controller.addUser(
           fullName: nameCtrl.text.trim(),
           username: usernameCtrl.text.trim(),
           password: passwordCtrl.text.trim(),
           role: selectedRole,
         );
-        if (success && Get.isDialogOpen == true) {
-          Get.back();
+        if (success) {
+          // `Get.back()` يغلق رسالة النجاح بدل الحوار، فنغلق المسار مباشرة.
+          dismissOpenDialog();
+        } else {
+          saving = false;
+          dialogSetState?.call(() {});
         }
       },
     );
@@ -262,7 +296,7 @@ class _UserCard extends StatelessWidget {
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(
-                          UsersController.roleLabel(role),
+                          controller.labelForRole(role),
                           style: TextStyle(
                             fontFamily: 'cairo',
                             fontSize: 11,
@@ -284,22 +318,46 @@ class _UserCard extends StatelessWidget {
               ),
               onSelected: (value) => _handleMenu(value, context),
               itemBuilder: (context) => [
-                const PopupMenuItem(
+                PopupMenuItem(
                   value: 'edit',
                   child: ListTile(
-                    leading: Icon(Icons.edit, size: 20),
-                    title: Text('تعديل', style: TextStyle(fontFamily: 'cairo')),
+                    leading: const Icon(Icons.edit, size: 20),
+                    title: Text(
+                      tr('تعديل'),
+                      style: const TextStyle(fontFamily: 'cairo'),
+                    ),
                     dense: true,
                     contentPadding: EdgeInsets.zero,
                   ),
                 ),
+                // 🛡️ الصلاحيات: تظهر لمن يملك إدارة الأدوار — لأن تعديل
+                // تجاوز فردي هو تعديل صلاحية، لا تعديل بيانات حساب.
+                if (PermissionService.can(PermissionKeys.rolesManage))
+                  PopupMenuItem(
+                    value: 'permissions',
+                    child: ListTile(
+                      leading: const Icon(Icons.shield_outlined, size: 20),
+                      title: Text(
+                        tr('الصلاحيات'),
+                        style: const TextStyle(fontFamily: 'cairo'),
+                      ),
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                  ),
                 if (user['user_id'] != SessionManager.currentUserId)
-                  const PopupMenuItem(
+                  PopupMenuItem(
                     value: 'delete',
                     child: ListTile(
-                      leading: Icon(Icons.delete, size: 20, color: Colors.red),
-                      title: Text('حذف',
-                          style: TextStyle(fontFamily: 'cairo', color: Colors.red)),
+                      leading:
+                          const Icon(Icons.delete, size: 20, color: Colors.red),
+                      title: Text(
+                        tr('حذف'),
+                        style: const TextStyle(
+                          fontFamily: 'cairo',
+                          color: Colors.red,
+                        ),
+                      ),
                       dense: true,
                       contentPadding: EdgeInsets.zero,
                     ),
@@ -315,6 +373,19 @@ class _UserCard extends StatelessWidget {
   void _handleMenu(String value, BuildContext context) {
     if (value == 'edit') {
       _showEditDialog(context);
+    } else if (value == 'permissions') {
+      Get.bottomSheet(
+        UserPermissionsSheet(
+          userId: user['user_id'] as int,
+          userName: user['full_name']?.toString().isNotEmpty == true
+              ? user['full_name'].toString()
+              : user['username'].toString(),
+          role: user['role']?.toString() ?? 'cashier',
+          controller: controller,
+        ),
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+      );
     } else if (value == 'delete') {
       _showDeleteDialog(context);
     }
@@ -326,9 +397,11 @@ class _UserCard extends StatelessWidget {
     final passwordCtrl = TextEditingController();
     String selectedRole = user['role'] ?? 'cashier';
     bool isActive = (user['is_active'] ?? 1) == 1;
+    bool saving = false;
+    StateSetter? dialogSetState;
 
     Get.defaultDialog(
-      title: 'تعديل المستخدم',
+      title: tr('تعديل المستخدم'),
       titleStyle: const TextStyle(
         fontFamily: 'cairo',
         fontWeight: FontWeight.bold,
@@ -336,33 +409,45 @@ class _UserCard extends StatelessWidget {
       ),
       content: StatefulBuilder(
         builder: (context, setState) {
+          dialogSetState = setState;
           return Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                _buildTextField(nameCtrl, 'الاسم الكامل', Icons.person),
+                _buildTextField(nameCtrl, tr('الاسم الكامل'), Icons.person),
                 const SizedBox(height: 12),
-                _buildTextField(usernameCtrl, 'اسم المستخدم', Icons.account_circle),
+                _buildTextField(
+                  usernameCtrl,
+                  tr('اسم المستخدم'),
+                  Icons.account_circle,
+                ),
                 const SizedBox(height: 12),
-                _buildTextField(passwordCtrl, 'كلمة المرور الجديدة (اتركها فارغة)', Icons.lock, obscure: true),
+                _buildTextField(
+                  passwordCtrl,
+                  tr('كلمة المرور الجديدة (اتركها فارغة)'),
+                  Icons.lock,
+                  obscure: true,
+                ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
                   initialValue: selectedRole,
                   decoration: InputDecoration(
-                    labelText: 'الدور',
+                    labelText: tr('الدور'),
                     labelStyle: const TextStyle(fontFamily: 'cairo'),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
                     ),
                     prefixIcon: const Icon(Icons.work),
                   ),
-                  items: const [
-                    DropdownMenuItem(value: 'admin', child: Text('مدير النظام', style: TextStyle(fontFamily: 'cairo'))),
-                    DropdownMenuItem(value: 'manager', child: Text('مدير', style: TextStyle(fontFamily: 'cairo'))),
-                    DropdownMenuItem(value: 'accountant', child: Text('محاسب', style: TextStyle(fontFamily: 'cairo'))),
-                    DropdownMenuItem(value: 'cashier', child: Text('كاشير', style: TextStyle(fontFamily: 'cairo'))),
-                    DropdownMenuItem(value: 'worker', child: Text('عامل', style: TextStyle(fontFamily: 'cairo'))),
+                  // الأدوار من القاعدة لا مكتوبة — نفس مصدر منتقي الإضافة.
+                  items: [
+                    for (final r in controller.roleOptions)
+                      DropdownMenuItem(
+                        value: r.name,
+                        child: Text(r.label,
+                            style: const TextStyle(fontFamily: 'cairo')),
+                      ),
                   ],
                   onChanged: (value) {
                     setState(() => selectedRole = value!);
@@ -371,7 +456,10 @@ class _UserCard extends StatelessWidget {
                 const SizedBox(height: 12),
                 Row(
                   children: [
-                    const Text('نشط:', style: TextStyle(fontFamily: 'cairo')),
+                    Text(
+                      tr('نشط:'),
+                      style: const TextStyle(fontFamily: 'cairo'),
+                    ),
                     const Spacer(),
                     Switch(
                       value: isActive,
@@ -380,21 +468,28 @@ class _UserCard extends StatelessWidget {
                     ),
                   ],
                 ),
+                if (saving) ...[
+                  const SizedBox(height: 12),
+                  const LinearProgressIndicator(minHeight: 3),
+                ],
               ],
             ),
           );
         },
       ),
-      textConfirm: 'حفظ',
-      textCancel: 'إلغاء',
+      textConfirm: tr('حفظ'),
+      textCancel: tr('إلغاء'),
       confirmTextColor: Colors.white,
       buttonColor: AppColors.primary,
       onConfirm: () async {
+        if (saving) return;
         if (nameCtrl.text.isEmpty || usernameCtrl.text.isEmpty) {
-          Get.snackbar('خطأ', 'أدخل البيانات المطلوبة',
+          Get.snackbar(tr('خطأ'), tr('أدخل البيانات المطلوبة'),
               snackPosition: SnackPosition.BOTTOM);
           return;
         }
+        saving = true;
+        dialogSetState?.call(() {});
         final success = await controller.updateUser(
           userId: user['user_id'],
           fullName: nameCtrl.text.trim(),
@@ -403,33 +498,29 @@ class _UserCard extends StatelessWidget {
           role: selectedRole,
           isActive: isActive,
         );
-        if (success) Get.back();
+        if (success) {
+          dismissOpenDialog();
+        } else {
+          saving = false;
+          dialogSetState?.call(() {});
+        }
       },
     );
   }
 
-  void _showDeleteDialog(BuildContext context) {
-    Get.defaultDialog(
-      title: 'حذف المستخدم',
-      titleStyle: const TextStyle(
-        fontFamily: 'cairo',
-        fontWeight: FontWeight.bold,
-        fontSize: 18,
-        color: Colors.red,
-      ),
-      middleText: 'هل أنت متأكد من حذف "${user['full_name'] ?? user['username']}"؟',
-      textConfirm: 'حذف',
-      textCancel: 'إلغاء',
-      confirmTextColor: Colors.white,
-      buttonColor: Colors.red,
-      onConfirm: () async {
-        await controller.deleteUser(
-          user['user_id'],
-          user['full_name']?.toString() ?? user['username']?.toString() ?? '',
-        );
-        Get.back();
-      },
+  Future<void> _showDeleteDialog(BuildContext context) async {
+    final name = user['full_name']?.toString() ??
+        user['username']?.toString() ??
+        '';
+    // حوار تأكيد موحّد يغلق نفسه بنفسه، ثم ينفّذ الحذف — فلا يبقى معلّقًا
+    // إذا كانت رسالة snackbar سابقة معروضة.
+    final confirmed = await showConfirmDialog(
+      title: tr('حذف المستخدم'),
+      message: trf('هل أنت متأكد من حذف "{0}"؟', [name]),
+      confirmText: tr('حذف'),
     );
+    if (confirmed != true) return;
+    await controller.deleteUser(user['user_id'], name);
   }
 
   static Widget _buildTextField(

@@ -88,6 +88,7 @@ class ShowDialogController extends GetxController {
   _addToInvoice(Map<String, dynamic> data, String content, dynamic price) {
     final item = <String, dynamic>{
       "vestments": data["clothing_name"],
+      "vestments_en": data["clothing_name_en"],
       "content": content,
       "count": count,
       "price": price,

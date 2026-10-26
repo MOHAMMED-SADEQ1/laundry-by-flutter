@@ -2,23 +2,17 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:laundry/services/customer/customer_ledger_service.dart';
+import 'package:laundry/services/i18n/l10n.dart';
+import 'package:laundry/services/invoice/processing_status.dart';
 import 'package:laundry/services/security/session_manager.dart';
 import 'package:laundry/sqldb.dart';
-
-/// حالات فاتورة المصنعية
-class ProcessingStatuses {
-  static const String received = 'تم الاستلام';
-  static const String inProgress = 'قيد التنفيذ';
-  static const String ready = 'جاهز للاستلام';
-  static const String delivered = 'تم التسليم';
-}
 
 class ProcessingController extends GetxController {
   final SqlDB db = SqlDB();
   final RxList<Map<String, dynamic>> invoices = <Map<String, dynamic>>[].obs;
   final RxList<Map<String, dynamic>> workers = <Map<String, dynamic>>[].obs;
   final RxBool isLoading = false.obs;
-  final RxString tab = ProcessingStatuses.inProgress.obs;
+  final RxString tab = ProcessingStatuses.inProgress.key.obs;
   final RxString query = ''.obs;
 
   @override
@@ -51,7 +45,7 @@ class ProcessingController extends GetxController {
       final rows = await db.safeRead(
         'invoices',
         where: 'status != ?',
-        whereArgs: [ProcessingStatuses.delivered],
+        whereArgs: [ProcessingStatuses.delivered.key],
         orderBy: 'invoice_date DESC',
       );
       invoices.assignAll(rows);
@@ -92,7 +86,7 @@ class ProcessingController extends GetxController {
       final delivered = await db.safeRead(
         'invoices',
         where: 'status = ? AND status_updated_at IS NOT NULL',
-        whereArgs: [ProcessingStatuses.delivered],
+        whereArgs: [ProcessingStatuses.delivered.key],
         orderBy: 'invoice_date DESC',
         limit: 50,
       );
@@ -112,9 +106,13 @@ class ProcessingController extends GetxController {
       }
       if (count == 0) return '';
       final avg = totalMinutes / count;
-      if (avg >= 1440) return '${(avg / 1440).toStringAsFixed(1)} يوم';
-      if (avg >= 60) return '${(avg / 60).toStringAsFixed(0)} ساعة';
-      return '${avg.toStringAsFixed(0)} دقيقة';
+      if (avg >= 1440) {
+        return trf('{0} يوم', [(avg / 1440).toStringAsFixed(1)]);
+      }
+      if (avg >= 60) {
+        return trf('{0} ساعة', [(avg / 60).toStringAsFixed(0)]);
+      }
+      return trf('{0} دقيقة', [avg.toStringAsFixed(0)]);
     } catch (_) {
       return '';
     }
@@ -148,10 +146,10 @@ class ProcessingController extends GetxController {
     try {
       final t = DateTime.parse(updated);
       final d = DateTime.now().difference(t);
-      if (d.inDays > 0) return '${d.inDays} يوم';
-      if (d.inHours > 0) return '${d.inHours} ساعة';
-      if (d.inMinutes > 0) return '${d.inMinutes} دقيقة';
-      return 'لحظات';
+      if (d.inDays > 0) return trf('{0} يوم', [d.inDays]);
+      if (d.inHours > 0) return trf('{0} ساعة', [d.inHours]);
+      if (d.inMinutes > 0) return trf('{0} دقيقة', [d.inMinutes]);
+      return tr('لحظات');
     } catch (_) {
       return '';
     }
@@ -191,10 +189,13 @@ class ProcessingController extends GetxController {
 
       await loadInvoices();
       Get.snackbar(
-        'تم',
-        status == ProcessingStatuses.delivered
-            ? 'تم تسليم الفاتورة رقم #$invoiceId'
-            : 'تم تحديث حالة الفاتورة رقم #$invoiceId إلى "$status"',
+        tr('تم'),
+        status == ProcessingStatuses.delivered.key
+            ? trf('تم تسليم الفاتورة رقم #{0}', [invoiceId])
+            : trf('تم تحديث حالة الفاتورة رقم #{0} إلى "{1}"', [
+                invoiceId,
+                ProcessingStatuses.label(status),
+              ]),
         snackPosition: SnackPosition.BOTTOM,
         backgroundColor: const Color(0xFF16A34A),
         colorText: const Color(0xFFFFFFFF),
@@ -236,9 +237,9 @@ class ProcessingController extends GetxController {
         await db.safeInsert('customer_payments', {
           'customer_id': customerId,
           'amount': remaining,
-          'payment_method': 'كاش',
+          'payment_method': 'cash',
           'payment_date': now,
-          'notes': 'سداد عند تسليم الفاتورة #$invoiceId',
+          'notes': trf('سداد عند تسليم الفاتورة #{0}', [invoiceId]),
           'recorded_by': userId,
           'source': 'delivery',
           'invoice_id': invoiceId,
@@ -270,7 +271,7 @@ class ProcessingController extends GetxController {
       }
     }
 
-    await updateStatus(invoiceId, ProcessingStatuses.delivered);
+    await updateStatus(invoiceId, ProcessingStatuses.delivered.key);
   }
 
   Future<void> assignWorker(int invoiceId, int? workerId) async {

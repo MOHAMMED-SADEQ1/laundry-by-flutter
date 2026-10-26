@@ -5,6 +5,8 @@ import 'package:laundry/config/app_info.dart';
 import 'package:laundry/controller/shift_controller.dart';
 import 'package:laundry/core/theme/app_colors.dart';
 import 'package:laundry/services/business_info_service.dart';
+import 'package:laundry/services/i18n/l10n.dart';
+import 'package:laundry/services/permission/permission_catalog.dart';
 import 'package:laundry/services/permission/permission_service.dart';
 import 'package:laundry/view/screen/shifts_history_screen.dart';
 import 'package:laundry/view/widget/common/developer_credit.dart';
@@ -60,7 +62,7 @@ class CustomDrawer extends StatelessWidget {
                       Text(
                         BusinessInfoService.instance.name.isNotEmpty
                             ? BusinessInfoService.instance.name
-                            : 'نظام المغاسل',
+                            : tr('نظام المغاسل'),
                         style: const TextStyle(
                           color: Colors.white,
                           fontFamily: 'cairo',
@@ -72,7 +74,9 @@ class CustomDrawer extends StatelessWidget {
                       Obx(() {
                         final user = authController.username.value;
                         return Text(
-                          user.isEmpty ? 'نظام إدارة المغاسل' : 'مرحباً، $user',
+                          user.isEmpty
+                              ? tr('نظام إدارة المغاسل')
+                              : trf('مرحباً، {0}', [user]),
                           style: TextStyle(
                             color: Colors.white.withValues(alpha: 0.75),
                             fontFamily: 'cairo',
@@ -110,14 +114,14 @@ class CustomDrawer extends StatelessWidget {
                 IconButton(
                   onPressed: () => Get.back(),
                   icon: const Icon(Icons.close, color: Colors.white),
-                  tooltip: 'إغلاق القائمة',
+                  tooltip: tr('إغلاق القائمة'),
                 ),
               ],
             ),
           ),
 
           // ─── حالة الوردية ───
-          if (PermissionService.canManageShifts)
+          if (PermissionService.can(PermissionKeys.shiftOpen))
             Padding(
               padding: const EdgeInsets.fromLTRB(14, 14, 14, 6),
               child: Obx(() {
@@ -149,7 +153,11 @@ class CustomDrawer extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              active ? "وردية مفتوحة الآن" : "لا توجد وردية نشطة",
+                              tr(
+                                active
+                                    ? 'وردية مفتوحة الآن'
+                                    : 'لا توجد وردية نشطة',
+                              ),
                               style: const TextStyle(
                                 fontFamily: 'cairo',
                                 fontSize: 13,
@@ -159,7 +167,9 @@ class CustomDrawer extends StatelessWidget {
                             ),
                             if (active)
                               Text(
-                                "منذ: ${shiftController.shiftStartTime.value}",
+                                trf('منذ: {0}', [
+                                  shiftController.shiftStartTime.value,
+                                ]),
                                 style: TextStyle(
                                   fontFamily: 'cairo',
                                   fontSize: 11,
@@ -186,7 +196,7 @@ class CustomDrawer extends StatelessWidget {
                               vertical: 7,
                             ),
                             child: Text(
-                              active ? "إغلاق" : "فتح وردية",
+                              tr(active ? 'إغلاق' : 'فتح وردية'),
                               style: const TextStyle(
                                 fontFamily: 'cairo',
                                 fontSize: 12,
@@ -209,28 +219,28 @@ class CustomDrawer extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
               children: [
                 // ─── الإدارة ───
-                if (PermissionService.canViewDashboard ||
-                    PermissionService.canManageCategories)
+                if (PermissionService.can(PermissionKeys.dashboardView) ||
+                    PermissionService.can(PermissionKeys.categoryManage))
                   ...[
-                    _SectionLabel('الإدارة'),
-                    if (PermissionService.canViewDashboard)
+                    _SectionLabel(tr('الإدارة')),
+                    if (PermissionService.can(PermissionKeys.dashboardView))
                       _DrawerItem(
                         icon: Icons.dashboard_outlined,
-                        title: 'لوحة التحكم',
+                        title: tr('لوحة التحكم'),
                         color: AppColors.primary,
                         route: '/dashboard',
                       ),
-                    if (PermissionService.canManageCategories)
+                    if (PermissionService.can(PermissionKeys.categoryManage))
                       _DrawerItem(
                         icon: Icons.add_card_outlined,
-                        title: 'إضافة لبس',
+                        title: tr('إضافة لبس'),
                         color: AppColors.success,
                         route: '/addcategory',
                       ),
-                    if (PermissionService.canManageCategories)
+                    if (PermissionService.can(PermissionKeys.categoryManage))
                       _DrawerItem(
                         icon: Icons.edit_outlined,
-                        title: 'حذف وتعديل لبس',
+                        title: tr('حذف وتعديل لبس'),
                         color: AppColors.warning,
                         route: '/category',
                       ),
@@ -238,69 +248,69 @@ class CustomDrawer extends StatelessWidget {
                   ],
 
                 // ─── العمليات ───
-                _SectionLabel('العمليات'),
-                if (PermissionService.canManageCustomers)
+                _SectionLabel(tr('العمليات')),
+                if (PermissionService.can(PermissionKeys.customerManage))
                   _DrawerItem(
                     icon: Icons.contact_phone_outlined,
-                    title: 'الزبائن',
+                    title: tr('الزبائن'),
                     color: AppColors.secondary,
                     route: '/customernumber',
                   ),
                 _DrawerItem(
                   icon: Icons.receipt_long_outlined,
-                  title: 'الفواتير',
+                  title: tr('الفواتير'),
                   color: AppColors.info,
                   route: '/invoices',
                 ),
-                if (PermissionService.canProcessLaundry)
+                if (PermissionService.can(PermissionKeys.processingUpdate))
                   _DrawerItem(
                     icon: Icons.local_laundry_service_outlined,
-                    title: 'لوحة المصنعية',
+                    title: tr('لوحة المصنعية'),
                     color: AppColors.violet,
                     route: '/processing',
                   ),
-                if (PermissionService.canManageSubscriptions)
+                if (PermissionService.can(PermissionKeys.subscriptionManage))
                   _DrawerItem(
                     icon: Icons.card_membership,
-                    title: 'الاشتراكات الشهرية',
+                    title: tr('الاشتراكات الشهرية'),
                     color: AppColors.warning,
                     route: '/subscriptions',
                   ),
-                if (PermissionService.canViewReports)
+                if (PermissionService.can(PermissionKeys.reportsView))
                   _DrawerItem(
                     icon: Icons.insights_outlined,
-                    title: 'لوحة الاشتراكات',
+                    title: tr('لوحة الاشتراكات'),
                     color: AppColors.violet,
                     route: '/subscription-dashboard',
                   ),
                 const SizedBox(height: 8),
 
                 // ─── التقارير ───
-                if (PermissionService.canViewReports) ...[
-                  _SectionLabel('التقارير'),
+                if (PermissionService.can(PermissionKeys.reportsView)) ...[
+                  _SectionLabel(tr('التقارير')),
                   _DrawerItem(
                     icon: Icons.money_rounded,
-                    title: 'صندوق اليوم',
+                    title: tr('صندوق اليوم'),
                     color: AppColors.success,
                     route: '/daily-cash',
                   ),
-                  if (PermissionService.canManageExpenses)
+                  if (PermissionService.can(PermissionKeys.expenseManage))
                     _DrawerItem(
                       icon: Icons.payments_outlined,
-                      title: 'المصروفات',
+                      title: tr('المصروفات'),
                       color: AppColors.danger,
                       route: '/expenses',
                     ),
                   _DrawerItem(
                     icon: Icons.bar_chart_rounded,
-                    title: 'التقارير',
+                    title: tr('التقارير'),
                     color: AppColors.info,
                     route: '/reports',
                   ),
-                  if (PermissionService.canManageShifts)
+                  if (PermissionService.can(PermissionKeys.shiftOpen))
                     _DrawerItem(
                       icon: Icons.history_edu_outlined,
-                      title: 'سجل الورديات',
+                      title: tr('سجل الورديات'),
                       color: AppColors.indigo,
                       onTap: () {
                         Get.back();
@@ -311,47 +321,56 @@ class CustomDrawer extends StatelessWidget {
                 ],
 
                 // ─── النظام ───
-                _SectionLabel('النظام'),
+                _SectionLabel(tr('النظام')),
                 _DrawerItem(
                   icon: Icons.person_outline,
-                  title: 'الملف الشخصي',
+                  title: tr('الملف الشخصي'),
                   color: AppColors.primary,
                   route: '/profile',
                 ),
-                if (PermissionService.canManageUsers)
+                if (PermissionService.can(PermissionKeys.usersManage))
                   _DrawerItem(
                     icon: Icons.people_outlined,
-                    title: 'إدارة المستخدمين',
+                    title: tr('إدارة المستخدمين'),
                     color: AppColors.violet,
                     route: '/users',
                   ),
-                if (PermissionService.canManageSettings)
+                // 🛡️ الأدوار والصلاحيات: مدخل مستقل عن «إدارة المستخدمين»
+                // لأن من يرتّب الصلاحيات ليس بالضرورة من يُنشئ الحسابات.
+                if (PermissionService.can(PermissionKeys.rolesManage))
+                  _DrawerItem(
+                    icon: Icons.shield_outlined,
+                    title: tr('الأدوار والصلاحيات'),
+                    color: AppColors.indigo,
+                    route: '/roles',
+                  ),
+                if (PermissionService.can(PermissionKeys.settingsManage))
                   _DrawerItem(
                     icon: Icons.settings_outlined,
-                    title: 'الإعدادات',
+                    title: tr('الإعدادات'),
                     color: AppColors.slate,
                     route: '/settings',
                   ),
                 // سجل التدقيق: يعرض ما سجّله النظام فعلًا من تجاوزات
                 // وحذف وإلغاءات — كان يُكتب في 24 موضعًا ولا يُقرأ في أي شاشة.
-                if (PermissionService.canManageSettings)
+                if (PermissionService.can(PermissionKeys.settingsManage))
                   _DrawerItem(
                     icon: Icons.fact_check_outlined,
-                    title: 'سجل التدقيق',
+                    title: tr('سجل التدقيق'),
                     color: AppColors.warning,
                     route: '/audit-log',
                   ),
                 _DrawerItem(
                   icon: Icons.logout_rounded,
-                  title: 'تسجيل الخروج',
+                  title: tr('تسجيل الخروج'),
                   color: AppColors.danger,
                   onTap: () {
                     Get.back();
                     Get.defaultDialog(
-                      title: 'تسجيل الخروج',
-                      middleText: 'هل أنت متأكد من تسجيل الخروج من النظام؟',
-                      textConfirm: 'تسجيل الخروج',
-                      textCancel: 'إلغاء',
+                      title: tr('تسجيل الخروج'),
+                      middleText: tr('هل أنت متأكد من تسجيل الخروج من النظام؟'),
+                      textConfirm: tr('تسجيل الخروج'),
+                      textCancel: tr('إلغاء'),
                       confirmTextColor: Colors.white,
                       buttonColor: AppColors.danger,
                       onConfirm: () {
@@ -379,7 +398,7 @@ class CustomDrawer extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text(
-                      "الإصدار ${AppInfo.version}  •  ",
+                      trf('الإصدار {0}  •  ', [AppInfo.version]),
                       style: const TextStyle(
                         fontFamily: 'cairo',
                         fontSize: 11,
@@ -389,10 +408,10 @@ class CustomDrawer extends StatelessWidget {
                     InkWell(
                       onTap: showDeveloperDialog,
                       borderRadius: BorderRadius.circular(8),
-                      child: const Padding(
-                        padding: EdgeInsets.all(4),
+                      child: Padding(
+                        padding: const EdgeInsets.all(4),
                         child: Text(
-                          "مطوّر النظام",
+                          tr('مطوّر النظام'),
                           style: TextStyle(
                             fontFamily: 'cairo',
                             fontSize: 11,

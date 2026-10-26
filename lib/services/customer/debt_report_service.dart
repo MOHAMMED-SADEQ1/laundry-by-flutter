@@ -219,15 +219,7 @@ class DebtReportService {
       // نستبعد فواتير الاشتراك: تغطيتها الشهرية تسدّدها فلا ذمة عليها.
       // نستبعد أيضًا الزبائن المحذوفين ناعمًا حتى لا يُشوّهوا إجمالي الذمم.
       final rows = await _db.readData(
-        'SELECT i.invoices_id, i.customer_id, i.customer_name, '
-        '       i.remaining_amount, i.invoice_date, '
-        '       c.customer_name AS reg_name, c.phone_1, c.phone_2 '
-        'FROM invoices i '
-        'LEFT JOIN customers c ON c.customer_id = i.customer_id '
-        'WHERE i.subscription_id IS NULL '
-        '  AND COALESCE(i.remaining_amount, 0) > 0.004 '
-        '  AND i.customer_id IS NOT NULL '
-        'ORDER BY i.invoice_date ASC',
+        'SELECT i.invoices_id, i.customer_id, i.customer_name,        i.remaining_amount, i.invoice_date,        c.customer_name AS reg_name, c.phone_1, c.phone_2 FROM invoices i LEFT JOIN customers c ON c.customer_id = i.customer_id WHERE i.subscription_id IS NULL   AND COALESCE(i.remaining_amount, 0) > 0.004   AND i.customer_id IS NOT NULL ORDER BY i.invoice_date ASC',
       );
 
       // تجميع في الذاكرة: استعلام واحد + حلقة واحدة، بدل استعلام لكل زبون
@@ -298,14 +290,7 @@ class DebtReportService {
   Future<ReconciliationReport> reconcile() async {
     try {
       final rows = await _db.readData(
-        'SELECT c.customer_id, c.customer_name, COALESCE(c.balance, 0) AS bal, '
-        '  COALESCE((SELECT SUM(i.remaining_amount) FROM invoices i '
-        '    WHERE i.customer_id = c.customer_id '
-        '      AND i.subscription_id IS NULL '
-        '      AND i.remaining_amount > 0.004), 0) AS debt '
-        'FROM customers c '
-        'WHERE COALESCE(c.is_active, 1) = 1 '
-        'ORDER BY c.customer_name',
+        'SELECT c.customer_id, c.customer_name, COALESCE(c.balance, 0) AS bal,   COALESCE((SELECT SUM(i.remaining_amount) FROM invoices i     WHERE i.customer_id = c.customer_id       AND i.subscription_id IS NULL       AND i.remaining_amount > 0.004), 0) AS debt FROM customers c WHERE COALESCE(c.is_active, 1) = 1 ORDER BY c.customer_name',
       );
 
       final out = <ReconciliationRow>[];
@@ -371,12 +356,7 @@ class DebtReportService {
   Future<double> totalOutstandingDebt() async {
     try {
       final rows = await _db.readData(
-        'SELECT COALESCE(SUM(i.remaining_amount), 0) AS total '
-        'FROM invoices i, customers c '
-        'WHERE i.customer_id = c.customer_id '
-        '  AND COALESCE(c.is_active, 1) = 1 '
-        '  AND i.subscription_id IS NULL '
-        '  AND i.remaining_amount > 0.004',
+        'SELECT COALESCE(SUM(i.remaining_amount), 0) AS total FROM invoices i, customers c WHERE i.customer_id = c.customer_id   AND COALESCE(c.is_active, 1) = 1   AND i.subscription_id IS NULL   AND i.remaining_amount > 0.004',
       );
       if (rows.isEmpty) return 0;
       return ((rows.first['total'] ?? 0) as num).toDouble();

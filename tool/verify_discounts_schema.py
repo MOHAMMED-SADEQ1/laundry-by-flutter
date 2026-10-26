@@ -27,7 +27,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 SQLDB = os.path.join(HERE, '..', 'lib', 'sqldb.dart')
 
 EXPECTED_COLUMNS = [
-    'discount_id', 'name', 'type', 'value', 'code',
+    # `name_en` جزء من المخطط الآن (دعم اللغتين) — تُكتب في المواضع الثلاثة.
+    'discount_id', 'name', 'name_en', 'type', 'value', 'code',
     'start_date', 'end_date', 'is_active', 'max_uses', 'current_uses',
 ]
 

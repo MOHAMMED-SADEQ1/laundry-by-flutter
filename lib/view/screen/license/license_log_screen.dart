@@ -4,6 +4,7 @@ import 'package:intl/intl.dart' hide TextDirection;
 import 'package:laundry/config/constants.dart';
 import 'package:laundry/controller/license/license_log_controller.dart';
 import 'package:laundry/core/theme/app_colors.dart';
+import 'package:laundry/services/i18n/l10n.dart';
 import 'package:laundry/services/license/license_event.dart';
 import 'package:laundry/services/license/system_license_service.dart';
 import 'package:laundry/view/widget/common/animation_wrappers.dart';
@@ -34,8 +35,8 @@ class _LicenseLogScreenState extends State<LicenseLogScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: CustomAppbar(
-        title: 'سجل الترخيص',
-        subtitle: 'حالة الاشتراك وتغييرات تاريخ الانتهاء',
+        title: tr('سجل الترخيص'),
+        subtitle: tr('حالة الاشتراك وتغييرات تاريخ الانتهاء'),
       ),
       body: Container(
         decoration: const BoxDecoration(
@@ -99,10 +100,10 @@ class _LicenseLogScreenState extends State<LicenseLogScreen> {
           ? ''
           : SystemLicenseController.formatDate(expiry);
       final source = unlimited
-          ? 'غير محدود'
+          ? tr('غير محدود')
           : (codeDefault.isNotEmpty && currentRaw == codeDefault)
-          ? 'مطابق للتاريخ المضمَّن في الكود'
-          : 'مُعيَّن يدويًا من داخل النظام';
+          ? tr('مطابق للتاريخ المضمَّن في الكود')
+          : tr('مُعيَّن يدويًا من داخل النظام');
 
       return Container(
         padding: const EdgeInsets.all(16),
@@ -121,9 +122,9 @@ class _LicenseLogScreenState extends State<LicenseLogScreen> {
                   size: 20,
                 ),
                 const SizedBox(width: 8),
-                const Text(
-                  'حالة الترخيص',
-                  style: TextStyle(
+                Text(
+                  tr('حالة الترخيص'),
+                  style: const TextStyle(
                     fontFamily: 'cairo',
                     fontSize: 13.5,
                     color: Colors.white70,
@@ -174,7 +175,7 @@ class _LicenseLogScreenState extends State<LicenseLogScreen> {
                 Padding(
                   padding: const EdgeInsets.only(bottom: 5),
                   child: Text(
-                    unlimited ? 'بلا حد' : 'يومًا متبقيًا',
+                    unlimited ? tr('بلا حد') : tr('يومًا متبقيًا'),
                     style: const TextStyle(
                       fontFamily: 'cairo',
                       fontSize: 12.5,
@@ -187,8 +188,10 @@ class _LicenseLogScreenState extends State<LicenseLogScreen> {
             const SizedBox(height: 6),
             Text(
               expiry == null
-                  ? 'لا يوجد تاريخ انتهاء'
-                  : 'تاريخ الانتهاء: ${SystemLicenseController.formatDate(expiry)}',
+                  ? tr('لا يوجد تاريخ انتهاء')
+                  : trf('تاريخ الانتهاء: {0}', [
+                      SystemLicenseController.formatDate(expiry),
+                    ]),
               style: const TextStyle(
                 fontFamily: 'cairo',
                 fontSize: 13,
@@ -217,9 +220,9 @@ class _LicenseLogScreenState extends State<LicenseLogScreen> {
       children: [
         const Icon(Icons.history, size: 18, color: AppColors.violet),
         const SizedBox(width: 7),
-        const Text(
-          'سجل التغييرات',
-          style: TextStyle(
+        Text(
+          tr('سجل التغييرات'),
+          style: const TextStyle(
             fontFamily: 'cairo',
             fontSize: 14,
             fontWeight: FontWeight.bold,
@@ -228,10 +231,13 @@ class _LicenseLogScreenState extends State<LicenseLogScreen> {
         ),
         const Spacer(),
         if (c.seedCount > 0)
-          _chip('${c.seedCount} تطبيق كود', AppColors.info),
+          _chip(trf('{0} تطبيق كود', ['${c.seedCount}']), AppColors.info),
         if (c.seedCount > 0 && c.manualCount > 0) const SizedBox(width: 6),
         if (c.manualCount > 0)
-          _chip('${c.manualCount} تجديد', AppColors.success),
+          _chip(
+            trf('{0} تجديد', ['${c.manualCount}']),
+            AppColors.success,
+          ),
       ],
     );
   }
@@ -266,9 +272,9 @@ class _LicenseLogScreenState extends State<LicenseLogScreen> {
             color: AppColors.textMuted.withValues(alpha: 0.6),
           ),
           const SizedBox(height: 10),
-          const Text(
-            'لا توجد تغييرات مسجّلة على الترخيص',
-            style: TextStyle(
+          Text(
+            tr('لا توجد تغييرات مسجّلة على الترخيص'),
+            style: const TextStyle(
               fontFamily: 'cairo',
               fontSize: 13,
               color: AppColors.textSecondary,
@@ -278,8 +284,9 @@ class _LicenseLogScreenState extends State<LicenseLogScreen> {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24),
             child: Text(
-              'يُسجَّل هنا كل تطبيق لتاريخ الكود وكل تجديد أو تعديل يدوي، '
-              'باسم من نفّذه ووقته.',
+              tr(
+                'يُسجَّل هنا كل تطبيق لتاريخ الكود وكل تجديد أو تعديل يدوي، باسم من نفّذه ووقته.',
+              ),
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontFamily: 'cairo',
@@ -339,7 +346,7 @@ class _LicenseLogScreenState extends State<LicenseLogScreen> {
                 const SizedBox(height: 3),
                 if (e.hasParseError)
                   Text(
-                    'تعذّر قراءة تفاصيل الحدث',
+                    tr('تعذّر قراءة تفاصيل الحدث'),
                     style: TextStyle(
                       fontFamily: 'cairo',
                       fontSize: 11,
@@ -389,8 +396,8 @@ class _LicenseLogScreenState extends State<LicenseLogScreen> {
 
   /// سطر «من → إلى».
   Widget _changeLine(LicenseEvent e) {
-    final from = e.oldExpiry.isEmpty ? 'غير محدود' : e.oldExpiry;
-    final to = e.newExpiry.isEmpty ? 'غير محدود' : e.newExpiry;
+    final from = e.oldExpiry.isEmpty ? tr('غير محدود') : e.oldExpiry;
+    final to = e.newExpiry.isEmpty ? tr('غير محدود') : e.newExpiry;
     return Row(
       children: [
         Flexible(
@@ -432,6 +439,8 @@ class _LicenseLogScreenState extends State<LicenseLogScreen> {
   /// من نفّذ التغيير. البذر يقع غالبًا **قبل** تسجيل الدخول فلا مستخدم له.
   String _actorLabel(LicenseEvent e) {
     if (e.userName.trim().isNotEmpty) return e.userName;
-    return e.isSeed ? 'تلقائي — عند تشغيل النظام' : 'غير معروف';
+    return e.isSeed
+        ? tr('تلقائي — عند تشغيل النظام')
+        : tr('غير معروف');
   }
 }

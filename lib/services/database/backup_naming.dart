@@ -73,12 +73,9 @@ class BackupNaming {
   static String buildBackupFileName(DateTime when, {String? label}) {
     final d = when.toLocal();
     final date =
-        '${d.year.toString().padLeft(4, '0')}-'
-        '${d.month.toString().padLeft(2, '0')}-'
-        '${d.day.toString().padLeft(2, '0')}';
+        '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
     final time =
-        '${d.hour.toString().padLeft(2, '0')}'
-        '${d.minute.toString().padLeft(2, '0')}';
+        '${d.hour.toString().padLeft(2, '0')}${d.minute.toString().padLeft(2, '0')}';
 
     final base = '${prefix}_${date}_$time';
     final tag = (label ?? '').trim();
@@ -90,13 +87,9 @@ class BackupNaming {
   static String buildSafetyFileName(DateTime when) {
     final d = when.toLocal();
     final date =
-        '${d.year.toString().padLeft(4, '0')}-'
-        '${d.month.toString().padLeft(2, '0')}-'
-        '${d.day.toString().padLeft(2, '0')}';
+        '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
     final time =
-        '${d.hour.toString().padLeft(2, '0')}'
-        '${d.minute.toString().padLeft(2, '0')}'
-        '${d.second.toString().padLeft(2, '0')}';
+        '${d.hour.toString().padLeft(2, '0')}${d.minute.toString().padLeft(2, '0')}${d.second.toString().padLeft(2, '0')}';
     return '${safetyPrefix}_${date}_$time.$extension';
   }
 

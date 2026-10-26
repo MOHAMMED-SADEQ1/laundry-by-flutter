@@ -1,24 +1,52 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:laundry/controller/editcategorycontroller.dart';
+import 'package:laundry/core/navigation/route_dismissal.dart';
 import 'package:laundry/core/theme/app_colors.dart';
+import 'package:laundry/services/i18n/l10n.dart';
 import 'package:laundry/view/widget/common/animation_wrappers.dart';
 import 'package:laundry/view/widget/customappbar.dart';
 import 'package:laundry/view/widget/customtextformfield.dart';
 
-class EditCategory extends StatelessWidget {
+class EditCategory extends StatefulWidget {
   final Map<String, dynamic> data;
-  EditCategory({super.key, required this.data});
-  GlobalKey<FormState> formstate = GlobalKey();
+  const EditCategory({super.key, required this.data});
+
+  @override
+  State<EditCategory> createState() => _EditCategoryState();
+}
+
+class _EditCategoryState extends State<EditCategory> {
+  final formstate = GlobalKey<FormState>();
+  late final EditController controller;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    controller = Get.put(EditController());
+    controller.moveValues(widget.data);
+  }
+
+  Future<void> _save() async {
+    if (_saving) return;
+    if (!(formstate.currentState?.validate() ?? false)) return;
+    setState(() => _saving = true);
+    final saved = await controller.updateCategory(widget.data['clothing_id']);
+    if (!mounted) return;
+    if (saved) {
+      dismissRoute(context);
+    } else {
+      setState(() => _saving = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final EditController controller = Get.put(EditController());
-    controller.moveValues(data);
     return Scaffold(
       appBar: CustomAppbar(
-        title: "تعديل الصنف",
-        subtitle: '${data['clothing_name']}',
+        title: tr('تعديل الصنف'),
+        subtitle: localized(widget.data, 'clothing_name'),
       ),
       body: Center(
         child: SingleChildScrollView(
@@ -59,7 +87,7 @@ class EditCategory extends StatelessWidget {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  'تعديل بيانات الصنف',
+                                  tr('تعديل بيانات الصنف'),
                                   style: TextStyle(
                                     fontFamily: 'cairo',
                                     fontSize: 16,
@@ -68,7 +96,7 @@ class EditCategory extends StatelessWidget {
                                   ),
                                 ),
                                 Text(
-                                  'عدّل الأسعار ثم احفظ التغييرات',
+                                  tr('عدّل الأسعار ثم احفظ التغييرات'),
                                   style: TextStyle(
                                     fontFamily: 'cairo',
                                     fontSize: 11,
@@ -83,7 +111,16 @@ class EditCategory extends StatelessWidget {
                       const Divider(height: 26),
                       CustomTextFormField(
                         valueinput: controller.name,
-                        lable: "اسم اللبس",
+                        lable: tr('اسم اللبس'),
+                        inputtype: TextInputType.text,
+                      ),
+                      const SizedBox(height: 12),
+                      // الاسم الإنجليزي — بدونه لا يستطيع المستخدم ترجمة
+                      // صنف أُنشئ قبل دعم اللغتين، فيبقى عربيًّا إلى الأبد.
+                      CustomTextFormField(
+                        key: const Key('item-name-en-edit'),
+                        valueinput: controller.nameEn,
+                        lable: tr('الاسم بالإنجليزية (اختياري)'),
                         inputtype: TextInputType.text,
                       ),
                       const SizedBox(height: 12),
@@ -92,7 +129,7 @@ class EditCategory extends StatelessWidget {
                           Expanded(
                             child: CustomTextFormField(
                               valueinput: controller.urgentwashingprice,
-                              lable: 'سعر الغسيل مستعجل',
+                              lable: tr('سعر الغسيل مستعجل'),
                               inputtype: TextInputType.number,
                             ),
                           ),
@@ -100,7 +137,7 @@ class EditCategory extends StatelessWidget {
                           Expanded(
                             child: CustomTextFormField(
                               valueinput: controller.washingprice,
-                              lable: 'سعر الغسيل عادي',
+                              lable: tr('سعر الغسيل عادي'),
                               inputtype: TextInputType.number,
                             ),
                           ),
@@ -112,7 +149,7 @@ class EditCategory extends StatelessWidget {
                           Expanded(
                             child: CustomTextFormField(
                               valueinput: controller.urgentironingprice,
-                              lable: 'سعر الكوي مستعجل',
+                              lable: tr('سعر الكوي مستعجل'),
                               inputtype: TextInputType.number,
                             ),
                           ),
@@ -120,7 +157,7 @@ class EditCategory extends StatelessWidget {
                           Expanded(
                             child: CustomTextFormField(
                               valueinput: controller.ironingprice,
-                              lable: 'سعر الكوي عادي',
+                              lable: tr('سعر الكوي عادي'),
                               inputtype: TextInputType.number,
                             ),
                           ),
@@ -139,9 +176,11 @@ class EditCategory extends StatelessWidget {
                         children: [
                           Expanded(
                             child: OutlinedButton(
-                              onPressed: () => Get.back(),
-                              child: const Text(
-                                "إلغاء",
+                              onPressed: _saving
+                                  ? null
+                                  : () => dismissRoute(context),
+                              child: Text(
+                                tr("إلغاء"),
                                 style: TextStyle(
                                   fontFamily: 'cairo',
                                   fontSize: 15,
@@ -155,20 +194,23 @@ class EditCategory extends StatelessWidget {
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: AppColors.success,
                               ),
-                              onPressed: () {
-                                if (formstate.currentState!.validate()) {
-                                  controller.updateCategory(
-                                    data['clothing_id'],
-                                  );
-                                }
-                              },
-                              child: const Text(
-                                "حفظ التعديل",
-                                style: TextStyle(
-                                  fontFamily: 'cairo',
-                                  fontSize: 15,
-                                ),
-                              ),
+                              onPressed: _saving ? null : _save,
+                              child: _saving
+                                  ? const SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Colors.white,
+                                      ),
+                                    )
+                                  : Text(
+                                      tr("حفظ التعديل"),
+                                      style: TextStyle(
+                                        fontFamily: 'cairo',
+                                        fontSize: 15,
+                                      ),
+                                    ),
                             ),
                           ),
                         ],

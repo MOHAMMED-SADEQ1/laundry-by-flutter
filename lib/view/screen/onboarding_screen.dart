@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:laundry/core/theme/app_colors.dart';
 import 'package:laundry/services/business_info_service.dart';
+import 'package:laundry/services/i18n/l10n.dart';
 import 'package:laundry/sqldb.dart';
 import 'package:laundry/view/widget/common/developer_credit.dart';
+import 'package:laundry/services/i18n/ui_direction.dart';
 
 /// شاشة ترحيب لإدخال معلومات النشاط التجاري عند أول تشغيل للنظام
 class OnboardingScreen extends StatefulWidget {
@@ -49,8 +51,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       Get.offAllNamed('/login');
     } catch (e) {
       Get.snackbar(
-        'خطأ',
-        'حدث خطأ أثناء الحفظ: $e',
+        tr('خطأ'),
+        trf('حدث خطأ أثناء الحفظ: {0}', ['$e']),
         snackPosition: SnackPosition.BOTTOM,
         backgroundColor: AppColors.danger,
         colorText: Colors.white,
@@ -63,7 +65,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   @override
   Widget build(BuildContext context) {
     return Directionality(
-      textDirection: TextDirection.rtl,
+      textDirection: appTextDirection,
       child: Scaffold(
         body: Container(
           decoration: const BoxDecoration(gradient: AppColors.darkGradient),
@@ -97,9 +99,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                           ),
                         ),
                         const SizedBox(height: 20),
-                        const Text(
-                          'مرحباً بك في نظام إدارة المغاسل',
-                          style: TextStyle(
+                        Text(
+                          tr('مرحباً بك في نظام إدارة المغاسل'),
+                          style: const TextStyle(
                             fontSize: 22,
                             color: Colors.white,
                             fontFamily: 'cairo',
@@ -109,7 +111,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          'أدخل معلومات نشاطك التجاري لتبدأ',
+                          tr('أدخل معلومات نشاطك التجاري لتبدأ'),
                           style: TextStyle(
                             fontSize: 14,
                             color: Colors.white.withValues(alpha: 0.75),
@@ -137,19 +139,20 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                               // اسم النشاط
                               TextFormField(
                                 controller: _nameCtrl,
-                                textDirection: TextDirection.rtl,
+                                textDirection: appTextDirection,
                                 style: const TextStyle(
                                   fontFamily: 'cairo',
                                   fontSize: 14,
                                 ),
-                                decoration: const InputDecoration(
-                                  labelText: 'اسم النشاط التجاري',
-                                  hintText: 'مثال: مغاسل النظارة',
-                                  prefixIcon: Icon(Icons.storefront_outlined),
+                                decoration: InputDecoration(
+                                  labelText: tr('اسم النشاط التجاري'),
+                                  hintText: tr('مثال: مغاسل النظارة'),
+                                  prefixIcon:
+                                      const Icon(Icons.storefront_outlined),
                                 ),
                                 validator: (v) {
                                   if (v == null || v.trim().isEmpty) {
-                                    return 'أدخل اسم النشاط';
+                                    return tr('أدخل اسم النشاط');
                                   }
                                   return null;
                                 },
@@ -160,19 +163,22 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                               TextFormField(
                                 controller: _phoneCtrl,
                                 keyboardType: TextInputType.phone,
-                                textDirection: TextDirection.rtl,
+                                textDirection: L10n.isRtl
+                                    ? appTextDirection
+                                    : TextDirection.ltr,
                                 style: const TextStyle(
                                   fontFamily: 'cairo',
                                   fontSize: 14,
                                 ),
-                                decoration: const InputDecoration(
-                                  labelText: 'رقم الهاتف',
-                                  hintText: 'مثال: 05XXXXXXXX',
-                                  prefixIcon: Icon(Icons.phone_outlined),
+                                decoration: InputDecoration(
+                                  labelText: tr('رقم الهاتف'),
+                                  hintText: tr('مثال: 05XXXXXXXX'),
+                                  prefixIcon:
+                                      const Icon(Icons.phone_outlined),
                                 ),
                                 validator: (v) {
                                   if (v == null || v.trim().isEmpty) {
-                                    return 'أدخل رقم الهاتف';
+                                    return tr('أدخل رقم الهاتف');
                                   }
                                   return null;
                                 },
@@ -182,19 +188,23 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                               // العنوان
                               TextFormField(
                                 controller: _addressCtrl,
-                                textDirection: TextDirection.rtl,
+                                textDirection: L10n.isRtl
+                                    ? appTextDirection
+                                    : TextDirection.ltr,
                                 style: const TextStyle(
                                   fontFamily: 'cairo',
                                   fontSize: 14,
                                 ),
-                                decoration: const InputDecoration(
-                                  labelText: 'العنوان',
-                                  hintText: 'مثال: الرياض - حي اشبيليا',
-                                  prefixIcon: Icon(Icons.location_on_outlined),
+                                decoration: InputDecoration(
+                                  labelText: tr('العنوان'),
+                                  hintText:
+                                      tr('مثال: الرياض - حي اشبيليا'),
+                                  prefixIcon:
+                                      const Icon(Icons.location_on_outlined),
                                 ),
                                 validator: (v) {
                                   if (v == null || v.trim().isEmpty) {
-                                    return 'أدخل العنوان';
+                                    return tr('أدخل العنوان');
                                   }
                                   return null;
                                 },
@@ -204,15 +214,21 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                               // الموقع (Google Maps)
                               TextFormField(
                                 controller: _locationCtrl,
-                                textDirection: TextDirection.rtl,
+                                textDirection: L10n.isRtl
+                                    ? appTextDirection
+                                    : TextDirection.ltr,
                                 style: const TextStyle(
                                   fontFamily: 'cairo',
                                   fontSize: 14,
                                 ),
-                                decoration: const InputDecoration(
-                                  labelText: 'رابط الموقع على خرائط جوجل',
-                                  hintText: 'اختياري — الصق رابط Google Maps',
-                                  prefixIcon: Icon(Icons.map_outlined),
+                                decoration: InputDecoration(
+                                  labelText:
+                                      tr('رابط الموقع على خرائط جوجل'),
+                                  hintText: tr(
+                                    'اختياري — الصق رابط Google Maps',
+                                  ),
+                                  prefixIcon:
+                                      const Icon(Icons.map_outlined),
                                 ),
                               ),
                               const SizedBox(height: 24),
@@ -244,7 +260,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                                             color: Colors.white,
                                           ),
                                         )
-                                      : const Text('بدء الاستخدام'),
+                                      : Text(tr('بدء الاستخدام')),
                                 ),
                               ),
                             ],
@@ -252,7 +268,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                         ),
                         const SizedBox(height: 16),
                         Text(
-                          'يمكنك تعديل هذه المعلومات لاحقاً من الإعدادات',
+                          tr('يمكنك تعديل هذه المعلومات لاحقاً من الإعدادات'),
                           style: TextStyle(
                             fontSize: 12,
                             color: Colors.white.withValues(alpha: 0.6),

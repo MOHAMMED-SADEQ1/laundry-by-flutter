@@ -28,7 +28,15 @@ class InvoiceCounterService {
   static final SqlDB _db = SqlDB();
 
   static Future<void> _initSharedPreferences() async {
-    _prefsInstance ??= await SharedPreferences.getInstance();
+    if (_prefsInstance != null) return;
+    // التفضيلات **كاش** لا مصدر حقيقة: مصدر العداد هو `MAX(invoices_id)`.
+    // فلو تعذّر فتحها (ملفّ تالف لم يُصلَح، أو صلاحيات) نكمل بلا كاش بدل
+    // إسقاط البيع كله — كان الاستثناء هنا يمنع إصدار أي فاتورة.
+    try {
+      _prefsInstance = await SharedPreferences.getInstance();
+    } catch (e) {
+      debugPrint('التفضيلات غير متاحة — العداد من القاعدة فقط: $e');
+    }
   }
 
   /// يهيّئ العداد = max(أقصى فاتورة في القاعدة، invoice_start، القيمة المحفوظة).
@@ -37,7 +45,7 @@ class InvoiceCounterService {
   /// قد نُفِّذ قبل `findInvoiceNo`، فالدالة تُهيّئ نفسها عند الحاجة.
   static Future<void> loadInitialCounter() async {
     await _initSharedPreferences();
-    _storedValue = _prefsInstance!.getInt(_counterKey) ?? 0;
+    _storedValue = _prefsInstance?.getInt(_counterKey) ?? 0;
 
     var dbMax = 0;
     var startFrom = 0;
@@ -64,8 +72,7 @@ class InvoiceCounterService {
     _currentCounterValue = floorValue;
 
     debugPrint(
-      'ترقيم الفواتير: قاعدة=$dbMax، إعداد=$startFrom، '
-      'محفوظ=$_storedValue ⇒ البداية=$floorValue',
+      'ترقيم الفواتير: قاعدة=$dbMax، إعداد=$startFrom، محفوظ=$_storedValue ⇒ البداية=$floorValue',
     );
   }
 
@@ -92,7 +99,8 @@ class InvoiceCounterService {
 
     _currentCounterValue = candidate;
     // حفظ **مُنتظر** — الحفظ غير المُنتظَر كان يسمح بضياع العداد عند الإغلاق.
-    await _prefsInstance!.setInt(_counterKey, _currentCounterValue);
+    // واختياري: غياب التفضيلات لا يوقف الترقيم (القاعدة هي المرجع).
+    await _prefsInstance?.setInt(_counterKey, _currentCounterValue);
     return _currentCounterValue;
   }
 

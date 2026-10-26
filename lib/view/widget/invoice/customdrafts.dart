@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:laundry/controller/invoicecontroller.dart';
 import 'package:laundry/core/theme/app_colors.dart';
+import 'package:laundry/services/i18n/l10n.dart';
 import 'package:laundry/sqldb.dart';
 
 /// رقم المسودة المُستعادة حاليًا — تُحذف **عند إصدار الفاتورة بنجاح**، لا عند
@@ -49,8 +50,8 @@ class CustomDrafts extends StatelessWidget {
   Future<void> _saveDraft() async {
     if (invcontroller.invoice.isEmpty) {
       Get.snackbar(
-        'تنبيه',
-        'الفاتورة فارغة — لا يوجد ما يُحفظ',
+        tr('تنبيه'),
+        tr('الفاتورة فارغة — لا يوجد ما يُحفظ'),
         snackPosition: SnackPosition.BOTTOM,
         backgroundColor: AppColors.warning,
         colorText: Colors.white,
@@ -59,15 +60,15 @@ class CustomDrafts extends StatelessWidget {
     }
     final name = invcontroller.customername.text.trim();
     await db.safeInsert('invoice_drafts', {
-      'customer_name': name.isEmpty ? 'بدون زبون' : name,
+      'customer_name': name,
       'items_json': jsonEncode(List<dynamic>.from(invcontroller.invoice)),
       // المجموع مشتق من البنود — لا يعتمد على حقل مخزَّن
       'total_price': invcontroller.totalValue(),
       'created_at': DateTime.now().toIso8601String(),
     });
     Get.snackbar(
-      'تم الحفظ',
-      'حُفظت المسودة بنجاح — يمكنك استعادتها لاحقاً',
+      tr('تم الحفظ'),
+      tr('حُفظت المسودة بنجاح — يمكنك استعادتها لاحقاً'),
       snackPosition: SnackPosition.BOTTOM,
       backgroundColor: AppColors.success,
       colorText: Colors.white,
@@ -82,8 +83,8 @@ class CustomDrafts extends StatelessWidget {
     );
     if (drafts.isEmpty) {
       Get.snackbar(
-        'لا توجد مسودات',
-        'لم تحفظ أي مسودات بعد',
+        tr('لا توجد مسودات'),
+        tr('لم تحفظ أي مسودات بعد'),
         snackPosition: SnackPosition.BOTTOM,
         backgroundColor: AppColors.info,
         colorText: Colors.white,
@@ -125,8 +126,8 @@ class CustomDrafts extends StatelessWidget {
                 Icon(Icons.save_outlined, color: AppColors.primary, size: 20),
                 SizedBox(width: 6),
                 Text(
-                  "مسودات",
-                  style: TextStyle(
+                  tr('مسودات'),
+                  style: const TextStyle(
                     fontFamily: 'cairo',
                     fontSize: 15,
                     fontWeight: FontWeight.bold,
@@ -175,17 +176,17 @@ class _DraftActionsSheet extends StatelessWidget {
               ),
               child: const Icon(Icons.save, color: Colors.white, size: 20),
             ),
-            title: const Text(
-              'حفظ المسودة الحالية',
-              style: TextStyle(
+            title: Text(
+              tr('حفظ المسودة الحالية'),
+              style: const TextStyle(
                 fontFamily: 'cairo',
                 fontSize: 14.5,
                 fontWeight: FontWeight.bold,
               ),
             ),
-            subtitle: const Text(
-              'احفظ الفاتورة الحالية للاستكمال لاحقاً',
-              style: TextStyle(fontFamily: 'cairo', fontSize: 11.5),
+            subtitle: Text(
+              tr('احفظ الفاتورة الحالية للاستكمال لاحقاً'),
+              style: const TextStyle(fontFamily: 'cairo', fontSize: 11.5),
             ),
             onTap: () {
               Get.back();
@@ -205,17 +206,17 @@ class _DraftActionsSheet extends StatelessWidget {
               ),
               child: const Icon(Icons.restore, color: Colors.white, size: 20),
             ),
-            title: const Text(
-              'استعادة مسودة محفوظة',
-              style: TextStyle(
+            title: Text(
+              tr('استعادة مسودة محفوظة'),
+              style: const TextStyle(
                 fontFamily: 'cairo',
                 fontSize: 14.5,
                 fontWeight: FontWeight.bold,
               ),
             ),
-            subtitle: const Text(
-              'اختر مسودة سابقة وتابع العمل عليها',
-              style: TextStyle(fontFamily: 'cairo', fontSize: 11.5),
+            subtitle: Text(
+              tr('اختر مسودة سابقة وتابع العمل عليها'),
+              style: const TextStyle(fontFamily: 'cairo', fontSize: 11.5),
             ),
             onTap: () {
               Get.back();
@@ -261,19 +262,25 @@ class _DraftsDialog extends StatelessWidget {
       _pendingDraftId = draft['draft_id'] as int?;
 
       Get.snackbar(
-        'تم الاستعادة',
-        'استُعيدت المسودة — ستُحذف تلقائيًا بعد إصدار الفاتورة',
+        tr('تم الاستعادة'),
+        tr('استُعيدت المسودة — ستُحذف تلقائيًا بعد إصدار الفاتورة'),
         snackPosition: SnackPosition.BOTTOM,
         backgroundColor: AppColors.success,
         colorText: Colors.white,
       );
     } catch (e) {
       Get.snackbar(
-        'خطأ',
-        'تعذر استعادة المسودة',
+        tr('خطأ'),
+        tr('تعذر استعادة المسودة'),
         snackPosition: SnackPosition.BOTTOM,
       );
     }
+  }
+
+  String _draftCustomerName(dynamic raw) {
+    final name = (raw ?? '').toString().trim();
+    if (name.isEmpty || name == 'بدون زبون') return tr('بدون زبون');
+    return name;
   }
 
   /// يحذف المسودة المستعادة بعد إصدار الفاتورة بنجاح — يُنفَّذ في [CustomDrafts].
@@ -304,9 +311,9 @@ class _DraftsDialog extends StatelessWidget {
                     size: 20,
                   ),
                   const SizedBox(width: 8),
-                  const Text(
-                    'المسودات المحفوظة',
-                    style: TextStyle(
+                  Text(
+                    tr('المسودات المحفوظة'),
+                    style: const TextStyle(
                       fontFamily: 'cairo',
                       fontSize: 14.5,
                       fontWeight: FontWeight.bold,
@@ -362,8 +369,8 @@ class _DraftsDialog extends StatelessWidget {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  d['customer_name'] ?? 'بدون زبون',
-                                  style: TextStyle(
+                                  _draftCustomerName(d['customer_name']),
+                                  style: const TextStyle(
                                     fontFamily: 'cairo',
                                     fontSize: 13,
                                     fontWeight: FontWeight.bold,
@@ -372,9 +379,19 @@ class _DraftsDialog extends StatelessWidget {
                                 ),
                                 const SizedBox(height: 3),
                                 Text(
-                                  '${d['created_at']?.toString().split('T').first ?? ''} — '
-                                  '${(double.tryParse('${d['total_price'] ?? 0}') ?? 0).toStringAsFixed(2)} ر.س',
-                                  style: TextStyle(
+                                  trf('{0} — {1} ر.س', [
+                                    d['created_at']
+                                            ?.toString()
+                                            .split('T')
+                                            .first ??
+                                        '',
+                                    (double.tryParse(
+                                              '${d['total_price'] ?? 0}',
+                                            ) ??
+                                            0)
+                                        .toStringAsFixed(2),
+                                  ]),
+                                  style: const TextStyle(
                                     fontFamily: 'cairo',
                                     fontSize: 11,
                                     color: AppColors.textSecondary,

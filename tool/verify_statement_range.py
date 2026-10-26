@@ -303,24 +303,30 @@ def main():
     ok("بيانات الـPDF تحمل period", "'period': periodLabel(st)," in ctrl)
 
     ok("الـPDF يقرأ period", "final period = '${data['period'] ?? ''}';" in pdf)
-    ok("الـPDF يطبع سطر الفترة", "tx('الفترة: $period'" in pdf)
+    # 2026-10-23: بادئة «الفترة» صارت حقلًا في القالب (`kPeriod`).
+    ok(
+        "الـPDF يطبع سطر الفترة من القالب",
+        "doc.text(DocCatalog.kPeriod)" in pdf and 'period' in pdf,
+    )
 
     # ─── الموضع: الملخّص **بعد** كل الجداول ───
-    # ⚠️ نبحث عن **نصّ التسمية** لا عن صيغة السطر: التنسيق يتغيّر (وقد تغيّر
-    # فعلًا عند لفّ الكتلة في pw.Row) فسقط الحرس زورًا. المهمّ الموضع لا الشكل.
-    i_sum = pdf.find("'الملخّص'")
-    i_last_table = pdf.find("sectionTitle('سجل استهلاك الاشتراك")
+    # ⚠️ نبحث عن **قراءة الحقل من القالب** لا عن النصّ الحرفي: النصوص كلها
+    # انتقلت إلى `DocCatalog` (2026-10-23 للنصوص، 2026-10-24 للأحجام).
+    # المهمّ الموضع لا الشكل.
+    i_sum = pdf.find("doc.text(DocCatalog.kSummaryTitle)")
+    i_last_table = pdf.find("sectionTitle(doc.text(DocCatalog.kUsagesTable))")
     ok("الملخّص موجود", i_sum > 0, i_sum)
     ok("جدول الاشتراك موجود", i_last_table > 0, i_last_table)
     ok("🚨 الملخّص **بعد** آخر جدول (نُقل للأسفل)",
        i_sum > i_last_table, f"الملخّص={i_sum} · آخر جدول={i_last_table}")
     ok("صافي الموقف داخل كتلة الملخّص السفلية",
-       pdf.find("'صافي الموقف:'") > i_last_table)
+       pdf.find("doc.text(DocCatalog.kTotalsNet)") > i_last_table)
     ok("عدد القطع داخل كتلة الملخّص السفلية",
-       pdf.find("kv('عدد القطع:'") > i_last_table)
+       pdf.find("doc.text(DocCatalog.kTotalsPieces)") > i_last_table)
 
     # ─── التسمية: حذف كلمة «فواتير» ───
-    ok("🚨 التسمية «عدد القطع:» بلا كلمة فواتير", "kv('عدد القطع:'" in pdf)
+    ok("🚨 التسمية «عدد القطع:» بلا كلمة فواتير",
+       "doc.text(DocCatalog.kTotalsPieces)" in pdf)
     ok("🚨 لا وجود لـ«عدد القطع (فواتير)» في الملف كله",
        'عدد القطع (فواتير)' not in pdf)
 

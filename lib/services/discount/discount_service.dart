@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:laundry/services/discount/discount_rules.dart';
+import 'package:laundry/services/i18n/l10n.dart';
 import 'package:laundry/sqldb.dart';
 
 /// الوصول لجدول `discounts` — تحقق واستهلاك وإدارة.
@@ -22,8 +23,7 @@ class DiscountService {
     if (trimmed.isEmpty) return DiscountCheck.none;
     try {
       final rows = await _db.readData(
-        'SELECT * FROM "discounts" WHERE UPPER(TRIM(code)) = UPPER(?) '
-        'ORDER BY discount_id DESC LIMIT 1',
+        'SELECT * FROM "discounts" WHERE UPPER(TRIM(code)) = UPPER(?) ORDER BY discount_id DESC LIMIT 1',
         [trimmed],
       );
       return DiscountRules.evaluate(
@@ -45,8 +45,7 @@ class DiscountService {
   Future<void> consume(int discountId) async {
     try {
       await _db.updateData(
-        'UPDATE "discounts" SET "current_uses" = COALESCE("current_uses", 0) + 1 '
-        'WHERE "discount_id" = ?',
+        'UPDATE "discounts" SET "current_uses" = COALESCE("current_uses", 0) + 1 WHERE "discount_id" = ?',
         [discountId],
       );
     } catch (e) {
@@ -58,9 +57,7 @@ class DiscountService {
   Future<List<Map<String, dynamic>>> all({bool activeOnly = false}) async {
     try {
       return await _db.readData(
-        'SELECT * FROM "discounts" '
-        '${activeOnly ? 'WHERE COALESCE(is_active,0) = 1' : ''} '
-        'ORDER BY discount_id DESC',
+        'SELECT * FROM "discounts" ${activeOnly ? 'WHERE COALESCE(is_active,0) = 1' : ''} ORDER BY discount_id DESC',
       );
     } catch (e) {
       debugPrint('DiscountService.all error: $e');
@@ -87,6 +84,7 @@ class DiscountService {
   Future<int> save({
     int? id,
     required String name,
+    String? nameEn,
     required String code,
     required String type,
     required double value,
@@ -98,6 +96,7 @@ class DiscountService {
     final cleanCode = code.trim();
     final payload = <String, dynamic>{
       'name': name.trim(),
+      'name_en': (nameEn ?? '').trim(),
       'code': cleanCode,
       'type': type,
       'value': value,
@@ -111,12 +110,11 @@ class DiscountService {
 
     try {
       final clash = await _db.readData(
-        'SELECT discount_id FROM "discounts" '
-        'WHERE UPPER(TRIM(code)) = UPPER(?) AND discount_id != ?',
+        'SELECT discount_id FROM "discounts" WHERE UPPER(TRIM(code)) = UPPER(?) AND discount_id != ?',
         [cleanCode, id ?? -1],
       );
       if (clash.isNotEmpty) {
-        throw StateError('كود «$cleanCode» مستخدم بالفعل');
+        throw StateError(trf('كود «{0}» مستخدم بالفعل', [cleanCode]));
       }
 
       if (id == null) {

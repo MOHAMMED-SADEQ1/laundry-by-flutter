@@ -3,7 +3,9 @@ import 'package:get/get.dart';
 import 'package:laundry/controller/customersnumbercontroller.dart';
 import 'package:laundry/core/theme/app_colors.dart';
 import 'package:laundry/services/customer/customer_search.dart';
+import 'package:laundry/services/i18n/l10n.dart';
 import 'package:laundry/view/widget/customer/customaddcustomer.dart';
+import 'package:laundry/services/i18n/ui_direction.dart';
 
 /// الرقمان غير الفارغين في صف واحد (`phone_1` · `phone_2`) لعرضهما في الاقتراح.
 ///
@@ -35,7 +37,7 @@ class _MemberBadge extends StatelessWidget {
           Icon(Icons.workspace_premium, size: 11, color: color),
           const SizedBox(width: 3),
           Text(
-            label,
+            tr(label),
             style: TextStyle(
               fontFamily: 'cairo',
               fontSize: 9.5,
@@ -129,8 +131,8 @@ class _CustomInputNameState extends State<CustomInputName> {
           });
         }
         Get.snackbar(
-          'تمت الإضافة',
-          'أُضيف الزبون «$name» وتم تعيينه في الفاتورة',
+          tr('تمت الإضافة'),
+          trf('أُضيف الزبون «{0}» وتم تعيينه في الفاتورة', [name]),
           snackPosition: SnackPosition.BOTTOM,
           backgroundColor: AppColors.success,
           colorText: Colors.white,
@@ -153,7 +155,7 @@ class _CustomInputNameState extends State<CustomInputName> {
             style: const TextStyle(fontFamily: 'cairo', fontSize: 14),
             onChanged: _loadSuggestions,
             decoration: InputDecoration(
-              hintText: 'ابحث عن الزبون بالاسم أو رقم الجوال...',
+              hintText: tr('ابحث عن الزبون بالاسم أو رقم الجوال...'),
               hintStyle: const TextStyle(fontFamily: 'cairo', fontSize: 12.5),
               prefixIcon: const Icon(
                 Icons.person_search,
@@ -161,7 +163,7 @@ class _CustomInputNameState extends State<CustomInputName> {
               ),
               suffixIcon: IconButton(
                 icon: const Icon(Icons.clear, size: 18),
-                tooltip: 'مسح',
+                tooltip: tr('مسح'),
                 onPressed: () {
                   widget.valueinput.clear();
                   setState(() {
@@ -189,7 +191,7 @@ class _CustomInputNameState extends State<CustomInputName> {
               ),
             ),
             textAlign: TextAlign.start,
-            textDirection: TextDirection.rtl,
+            textDirection: appTextDirection,
           ),
           // ─── لوحة الاقتراحات ───
           if ((_suggestions.isNotEmpty || _loading || (widget.valueinput.text.trim().isNotEmpty && !_suppressPanel))) ...[
@@ -218,7 +220,7 @@ class _CustomInputNameState extends State<CustomInputName> {
                             ),
                             SizedBox(width: 10),
                             Text(
-                              'جارٍ البحث عن الزبائن...',
+                              tr('جارٍ البحث عن الزبائن...'),
                               style: TextStyle(
                                 fontFamily: 'cairo',
                                 fontSize: 11.5,
@@ -245,8 +247,8 @@ class _CustomInputNameState extends State<CustomInputName> {
                             ),
                             child: Text(
                               _suggestions.isEmpty
-                                  ? 'لا يوجد زبون مطابق'
-                                  : 'الزبائن المقترحون — اضغط للاختيار',
+                                  ? tr('لا يوجد زبون مطابق')
+                                  : tr('الزبائن المقترحون — اضغط للاختيار'),
                               style: TextStyle(
                                 fontFamily: 'cairo',
                                 fontSize: 10.5,
@@ -294,7 +296,10 @@ class _CustomInputNameState extends State<CustomInputName> {
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
                                           Text(
-                                            'إضافة "${widget.valueinput.text.trim()}" كزبون جديد',
+                                            trf(
+                                              'إضافة "{0}" كزبون جديد',
+                                              [widget.valueinput.text.trim()],
+                                            ),
                                             overflow: TextOverflow.ellipsis,
                                             style: const TextStyle(
                                               fontFamily: 'cairo',
@@ -303,9 +308,9 @@ class _CustomInputNameState extends State<CustomInputName> {
                                               color: AppColors.success,
                                             ),
                                           ),
-                                          const Text(
-                                            'اضغط هنا لإضافة الزبون بالاسم المكتوب',
-                                            style: TextStyle(
+                                          Text(
+                                            tr('اضغط هنا لإضافة الزبون بالاسم المكتوب'),
+                                            style: const TextStyle(
                                               fontFamily: 'cairo',
                                               fontSize: 10,
                                               color: AppColors.textMuted,
@@ -389,15 +394,15 @@ class _CustomInputNameState extends State<CustomInputName> {
                                           if ((customer['tier'] ?? '') ==
                                               'gold') ...[
                                             const SizedBox(width: 6),
-                                            const _MemberBadge(
-                                              label: 'ذهبي',
+                                            _MemberBadge(
+                                              label: tr('ذهبي'),
                                               color: Color(0xFFF59E0B),
                                             ),
                                           ] else if ((customer['tier'] ?? '') ==
                                               'silver') ...[
                                             const SizedBox(width: 6),
-                                            const _MemberBadge(
-                                              label: 'فضي',
+                                            _MemberBadge(
+                                              label: tr('فضي'),
                                               color: Color(0xFF94A3B8),
                                             ),
                                           ],

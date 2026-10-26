@@ -3,6 +3,9 @@ import 'package:get/get.dart';
 import 'package:laundry/controller/processing_controller.dart';
 import 'package:laundry/core/theme/app_colors.dart';
 import 'package:laundry/services/business_info_service.dart';
+import 'package:laundry/services/i18n/currency.dart';
+import 'package:laundry/services/i18n/l10n.dart';
+import 'package:laundry/services/invoice/processing_status.dart';
 import 'package:laundry/view/widget/common/animation_wrappers.dart';
 import 'package:laundry/view/widget/common/common_widgets.dart';
 import 'package:laundry/view/widget/customappbar.dart';
@@ -36,8 +39,8 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: CustomAppbar(
-        title: 'لوحة المصنعية',
-        subtitle: 'تتبع الغسيل من الاستلام حتى التسليم',
+        title: tr('لوحة المصنعية'),
+        subtitle: tr('تتبع الغسيل من الاستلام حتى التسليم'),
       ),
       body: Container(
         decoration: BoxDecoration(
@@ -57,7 +60,7 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
                 onChanged: (v) => controller.query.value = v.trim(),
                 decoration: InputDecoration(
                   hintText:
-                      'ابحث برمز الاستلام أو رقم الفاتورة أو اسم الزبون...',
+                      tr('ابحث برمز الاستلام أو رقم الفاتورة أو اسم الزبون...'),
                   prefixIcon: const Icon(Icons.search),
                   suffixIcon: Obx(
                     () =>
@@ -81,28 +84,32 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
                 () => Row(
                   children: [
                     _TabChip(
-                      label: 'قيد التنفيذ',
+                      label: ProcessingStatuses.label(ProcessingStatus.inProgress),
                       color: AppColors.info,
-                      selected: controller.tab.value == 'قيد التنفيذ',
-                      onTap: () => controller.tab.value = 'قيد التنفيذ',
+                      selected: controller.tab.value ==
+                          ProcessingStatuses.inProgress.key,
+                      onTap: () => controller.tab.value =
+                          ProcessingStatuses.inProgress.key,
                     ),
                     const SizedBox(width: 6),
                     _TabChip(
-                      label: 'جاهز للاستلام',
+                      label: ProcessingStatuses.label(ProcessingStatus.ready),
                       color: AppColors.success,
-                      selected: controller.tab.value == 'جاهز للاستلام',
-                      onTap: () => controller.tab.value = 'جاهز للاستلام',
+                      selected: controller.tab.value ==
+                          ProcessingStatuses.ready.key,
+                      onTap: () => controller.tab.value =
+                          ProcessingStatuses.ready.key,
                     ),
                     const SizedBox(width: 6),
                     _TabChip(
-                      label: 'غير مستلمة 1+ يوم',
+                      label: tr('غير مستلمة 1+ يوم'),
                       color: AppColors.violet,
                       selected: controller.tab.value == 'unpicked',
                       onTap: () => controller.tab.value = 'unpicked',
                     ),
                     const SizedBox(width: 6),
                     _TabChip(
-                      label: 'متأخر 3+ أيام',
+                      label: tr('متأخر 3+ أيام'),
                       color: AppColors.warning,
                       selected: controller.tab.value == 'overdue',
                       onTap: () => controller.tab.value = 'overdue',
@@ -122,8 +129,23 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
                     children: [
                       Obx(
                         () => Text(
-                          'قيد التنفيذ: ${controller.invoices.where((i) => i['status'] == 'قيد التنفيذ').length}  •  '
-                          'جاهز: ${controller.invoices.where((i) => i['status'] == 'جاهز للاستلام').length}',
+                          '${trf('قيد التنفيذ: {0}', [
+                                controller.invoices
+                                    .where(
+                                      (i) =>
+                                          i['status'] ==
+                                          ProcessingStatuses.inProgress.key,
+                                    )
+                                    .length,
+                              ])}  •  ${trf('جاهز: {0}', [
+                                controller.invoices
+                                    .where(
+                                      (i) =>
+                                          i['status'] ==
+                                          ProcessingStatuses.ready.key,
+                                    )
+                                    .length,
+                              ])}',
                           style: TextStyle(
                             fontFamily: 'cairo',
                             fontSize: 10.5,
@@ -141,7 +163,7 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
                         const SizedBox(width: 4),
                         Flexible(
                           child: Text(
-                            'متوسط الإنجاز: $avg',
+                            trf('متوسط الإنجاز: {0}', [avg]),
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
                               fontFamily: 'cairo',
@@ -165,19 +187,20 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
                   );
                 }
                 if (controller.invoices.isEmpty) {
-                  return const EmptyState(
+                  return EmptyState(
                     icon: Icons.check_circle_outline,
-                    title: 'لا توجد فواتير قيد التنفيذ',
-                    subtitle:
-                        'عند إصدار فواتير جديدة ستظهر هنا في لوحة المصنعية',
+                    title: tr('لا توجد فواتير قيد التنفيذ'),
+                    subtitle: tr(
+                      tr('عند إصدار فواتير جديدة ستظهر هنا في لوحة المصنعية'),
+                    ),
                   );
                 }
                 final list = controller.tabInvoices;
                 if (list.isEmpty) {
                   return EmptyState(
                     icon: Icons.filter_alt_off,
-                    title: 'لا توجد نتائج في هذا التبويب',
-                    subtitle: 'جرّب تغيير التبويب أو كلمة البحث',
+                    title: tr('لا توجد نتائج في هذا التبويب'),
+                    subtitle: tr('جرّب تغيير التبويب أو كلمة البحث'),
                   );
                 }
                 return RefreshIndicator(
@@ -259,7 +282,7 @@ class _ProcessingCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final items = controller.itemsOf(invoice);
-    final status = invoice['status']?.toString() ?? 'تم الاستلام';
+    final status = ProcessingStatuses.tryParse(invoice['status']);
     final code = invoice['pickup_code']?.toString() ?? '';
     final worker = controller.workerName(invoice['assigned_to']);
     final time = controller.timeInStatus(invoice);
@@ -268,9 +291,9 @@ class _ProcessingCard extends StatelessWidget {
     final total = double.tryParse('${invoice['total_price'] ?? 0}') ?? 0;
 
     final statusColor = switch (status) {
-      'قيد التنفيذ' => AppColors.info,
-      'جاهز للاستلام' => AppColors.success,
-      'تم التسليم' => AppColors.slate,
+      ProcessingStatus.inProgress => AppColors.info,
+      ProcessingStatus.ready => AppColors.success,
+      ProcessingStatus.delivered => AppColors.slate,
       _ => AppColors.warning,
     };
 
@@ -297,7 +320,7 @@ class _ProcessingCard extends StatelessWidget {
                     ),
                   ),
                   child: Text(
-                    'رمز الاستلام: $code',
+                    trf('رمز الاستلام: {0}', [code]),
                     style: const TextStyle(
                       fontFamily: 'cairo',
                       fontSize: 11.5,
@@ -308,7 +331,7 @@ class _ProcessingCard extends StatelessWidget {
                 ),
               const Spacer(),
               LabelChip(
-                text: status,
+                text: ProcessingStatuses.label(status),
                 color: statusColor,
                 icon: Icons.local_laundry_service,
               ),
@@ -321,7 +344,7 @@ class _ProcessingCard extends StatelessWidget {
               Icon(Icons.receipt_long, size: 13, color: AppColors.textMuted),
               const SizedBox(width: 4),
               Text(
-                'فاتورة #${invoice['invoices_id']}',
+                trf('فاتورة #{0}', [invoice['invoices_id']]),
                 style: TextStyle(
                   fontFamily: 'cairo',
                   fontSize: 12.5,
@@ -357,7 +380,10 @@ class _ProcessingCard extends StatelessWidget {
             Text(
               items
                       .take(3)
-                      .map((i) => '${i['vestments']} ×${i['count']}')
+                      .map(
+                        (i) =>
+                            '${localizedText('${i['vestments'] ?? ''}', '${i['vestments_en'] ?? ''}')} ×${i['count']}',
+                      )
                       .join('، ') +
                   (items.length > 3 ? ' +${items.length - 3}' : ''),
               maxLines: 1,
@@ -379,7 +405,7 @@ class _ProcessingCard extends StatelessWidget {
               ),
               const SizedBox(width: 4),
               Text(
-                time.isEmpty ? '—' : 'مدة الانتظار: $time',
+                time.isEmpty ? '—' : trf('مدة الانتظار: {0}', [time]),
                 style: TextStyle(
                   fontFamily: 'cairo',
                   fontSize: 10.5,
@@ -389,7 +415,7 @@ class _ProcessingCard extends StatelessWidget {
               ),
               const Spacer(),
               Text(
-                'الإجمالي: ${total.toStringAsFixed(2)} ر.س',
+                trf('الإجمالي: {0} ر.س', [total.toStringAsFixed(2)]),
                 style: TextStyle(
                   fontFamily: 'cairo',
                   fontSize: 12,
@@ -400,7 +426,7 @@ class _ProcessingCard extends StatelessWidget {
               if (remaining > 0) ...[
                 const SizedBox(width: 8),
                 LabelChip(
-                  text: 'متبقي ${remaining.toStringAsFixed(0)}',
+                  text: trf('متبقي {0}', [remaining.toStringAsFixed(0)]),
                   color: AppColors.danger,
                   icon: Icons.error_outline,
                 ),
@@ -420,46 +446,50 @@ class _ProcessingCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              if (status == 'تم الاستلام')
+              if (status == ProcessingStatus.received)
                 Expanded(
                   child: _ActionBtn(
-                    label: 'بدء التنفيذ',
+                    label: tr('بدء التنفيذ'),
                     icon: Icons.play_arrow,
                     color: AppColors.info,
                     onTap:
                         () => controller.updateStatus(
                           invoice['invoices_id'],
-                          'قيد التنفيذ',
+                          ProcessingStatus.inProgress.key,
                         ),
                   ),
                 )
-              else if (status == 'قيد التنفيذ')
+              else if (status == ProcessingStatus.inProgress)
                 Expanded(
                   child: _ActionBtn(
-                    label: 'جاهز للاستلام',
+                    label: ProcessingStatuses.label(ProcessingStatus.ready),
                     icon: Icons.check_circle_outline,
                     color: AppColors.success,
                     onTap:
                         () => controller.updateStatus(
                           invoice['invoices_id'],
-                          'جاهز للاستلام',
+                          ProcessingStatus.ready.key,
                         ),
                   ),
                 )
-              else if (status == 'جاهز للاستلام')
+              else if (status == ProcessingStatus.ready)
                 Expanded(
                   child: _ActionBtn(
-                    label: 'تسليم ${remaining > 0 ? 'وسداد $remaining' : ''}',
+                    label: trf('تسليم {0}', [
+                      remaining > 0 ? trf('وسداد {0}', [remaining]) : '',
+                    ]),
                     icon: Icons.inventory_2_outlined,
                     color: AppColors.success,
                     onTap: () {
                       if (remaining > 0) {
                         Get.defaultDialog(
-                          title: 'سداد المتبقي',
-                          middleText:
-                              'على الزبون سداد ${remaining.toStringAsFixed(2)} ر.س نقداً عند الاستلام.\nهل تريد تأكيد التسليم والسداد؟',
-                          textConfirm: 'تأكيد التسليم',
-                          textCancel: 'إلغاء',
+                          title: tr('سداد المتبقي'),
+                          middleText: '${trf(
+                            'على الزبون سداد {0} ر.س نقداً عند الاستلام.',
+                            [remaining.toStringAsFixed(2)],
+                          )}\n${tr('هل تريد تأكيد التسليم والسداد؟')}',
+                          textConfirm: tr('تأكيد التسليم'),
+                          textCancel: tr('إلغاء'),
                           confirmTextColor: Colors.white,
                           buttonColor: AppColors.success,
                           onConfirm: () {
@@ -470,13 +500,13 @@ class _ProcessingCard extends StatelessWidget {
                       } else {
                         controller.updateStatus(
                           invoice['invoices_id'],
-                          'تم التسليم',
+                          ProcessingStatus.delivered.key,
                         );
                       }
                     },
                   ),
                 ),
-              if (status == 'جاهز للاستلام' &&
+              if (status == ProcessingStatus.ready &&
                   (invoice['customer_phone'] ?? '').toString().isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.only(top: 8),
@@ -514,7 +544,7 @@ class _WorkerPicker extends StatelessWidget {
                 : null,
         isExpanded: true,
         hint: Text(
-          worker.isEmpty ? 'اختر العامل' : 'العامل: $worker',
+          worker.isEmpty ? tr('اختر العامل') : trf('العامل: {0}', [worker]),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: const TextStyle(fontFamily: 'cairo', fontSize: 11),
@@ -572,25 +602,33 @@ class _NotifyWaBtn extends StatelessWidget {
     final phone = (invoice['customer_phone'] ?? '').toString().trim();
     final code = invoice['pickup_code']?.toString() ?? '';
     return _ActionBtn(
-      label: 'إشعار العميل بالجاهزية (واتساب)',
+      label: tr('إشعار العميل بالجاهزية (واتساب)'),
       icon: Icons.chat,
       color: const Color(0xFF25D366),
       onTap: () async {
+        final shop = BusinessInfoService.instance.name.isNotEmpty
+            ? BusinessInfoService.instance.name
+            : tr('نظام المغاسل');
         final msg = Uri.encodeComponent(
-          '🧺 ${BusinessInfoService.instance.name.isNotEmpty ? BusinessInfoService.instance.name : 'نظام المغاسل'}\n'
-          'السلام عليكم ${invoice['customer_name'] ?? ''}،\n'
-          'غسيلكم جاهز للاستلام 💯\n'
-          '📌 فاتورة #${invoice['invoices_id']}\n'
-          '🔑 رمز الاستلام: $code\n'
-          'ننتظركم — ر.س ${invoice['total_price']}',
+          trf(
+            '🧺 {0}\nالسلام عليكم {1}،\nغسيلكم جاهز للاستلام 💯\n📌 فاتورة #{2}\n🔑 رمز الاستلام: {3}\nننتظركم — {4} {5}',
+            [
+              shop,
+              invoice['customer_name'] ?? '',
+              invoice['invoices_id'],
+              code,
+              invoice['total_price'],
+              Currency.symbol,
+            ],
+          ),
         );
         final uri = Uri.parse('https://wa.me/$phone?text=$msg');
         if (await canLaunchUrl(uri)) {
           await launchUrl(uri, mode: LaunchMode.externalApplication);
         } else {
           Get.snackbar(
-            'خطأ',
-            'تعذر فتح واتساب — تأكد من حفظ رقم العميل',
+            tr('خطأ'),
+            tr('تعذر فتح واتساب — تأكد من حفظ رقم العميل'),
             snackPosition: SnackPosition.BOTTOM,
             backgroundColor: AppColors.danger,
             colorText: Colors.white,

@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
 import 'package:laundry/services/expense/expense_service.dart';
+import 'package:laundry/services/i18n/l10n.dart';
 
 /// أنواع الفترات المتاحة في شاشة المصروفات
 enum ExpenseRange { today, week, month, year, custom }
@@ -112,19 +113,23 @@ class ExpenseController extends GetxController {
     required String category,
     required double amount,
     String description = '',
+    String categoryEn = '',
+    String descriptionEn = '',
     DateTime? date,
-    String paymentMethod = 'كاش',
+    String paymentMethod = 'cash',
   }) async {
     try {
       await _service.add(
         category: category,
         amount: amount,
         description: description,
+        categoryEn: categoryEn,
+        descriptionEn: descriptionEn,
         date: date,
         paymentMethod: paymentMethod,
       );
       await load();
-      _success('تم تسجيل المصروف');
+      _success(tr('تم تسجيل المصروف'));
       return true;
     } catch (e) {
       _error('$e'.replaceFirst('Exception: ', ''));
@@ -137,8 +142,10 @@ class ExpenseController extends GetxController {
     required String category,
     required double amount,
     String description = '',
+    String categoryEn = '',
+    String descriptionEn = '',
     DateTime? date,
-    String paymentMethod = 'كاش',
+    String paymentMethod = 'cash',
   }) async {
     try {
       final ok = await _service.update(
@@ -146,15 +153,17 @@ class ExpenseController extends GetxController {
         category: category,
         amount: amount,
         description: description,
+        categoryEn: categoryEn,
+        descriptionEn: descriptionEn,
         date: date,
         paymentMethod: paymentMethod,
       );
       if (!ok) {
-        _error('تعذّر تعديل المصروف');
+        _error(tr('تعذّر تعديل المصروف'));
         return false;
       }
       await load();
-      _success('تم تعديل المصروف');
+      _success(tr('تم تعديل المصروف'));
       return true;
     } catch (e) {
       _error('$e'.replaceFirst('Exception: ', ''));
@@ -166,11 +175,11 @@ class ExpenseController extends GetxController {
     try {
       final ok = await _service.delete(expenseId);
       if (!ok) {
-        _error('تعذّر حذف المصروف');
+        _error(tr('تعذّر حذف المصروف'));
         return false;
       }
       await load();
-      _success('تم حذف المصروف');
+      _success(tr('تم حذف المصروف'));
       return true;
     } catch (e) {
       _error('$e');
@@ -178,6 +187,6 @@ class ExpenseController extends GetxController {
     }
   }
 
-  void _success(String m) => Get.snackbar('نجاح', m);
-  void _error(String m) => Get.snackbar('خطأ', m);
+  void _success(String m) => Get.snackbar(tr('نجاح'), m);
+  void _error(String m) => Get.snackbar(tr('خطأ'), m);
 }

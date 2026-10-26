@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 import 'package:intl/intl.dart' hide TextDirection;
 import 'package:laundry/core/theme/app_colors.dart';
 import 'package:laundry/services/discount/discount_rules.dart';
+import 'package:laundry/services/i18n/l10n.dart';
 import 'package:laundry/services/discount/discount_service.dart';
 import 'package:laundry/services/permission/permission_service.dart';
 import 'package:laundry/services/security/session_manager.dart';
@@ -10,6 +11,7 @@ import 'package:laundry/sqldb.dart';
 import 'package:laundry/view/widget/common/animation_wrappers.dart';
 import 'package:laundry/view/widget/common/common_widgets.dart';
 import 'package:laundry/view/widget/customappbar.dart';
+import 'package:laundry/services/permission/permission_catalog.dart';
 
 /// إدارة أكواد الخصم.
 ///
@@ -50,11 +52,11 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: CustomAppbar(
-        title: 'أكواد الخصم',
-        subtitle: '${_codes.length} كود',
+        title: tr('أكواد الخصم'),
+        subtitle: trf('{0} كود', [_codes.length]),
         actions: IconButton(
-          tooltip: 'كود جديد',
-          onPressed: PermissionService.canManageDiscounts
+          tooltip: tr('كود جديد'),
+          onPressed: PermissionService.can(PermissionKeys.discountManage)
               ? () => _openEditor()
               : null,
           icon: const Icon(Icons.add_circle_outline, color: Colors.white),
@@ -77,14 +79,14 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
                 const SizedBox(height: 20),
               ],
             ),
-      floatingActionButton: PermissionService.canManageDiscounts
+      floatingActionButton: PermissionService.can(PermissionKeys.discountManage)
           ? FloatingActionButton.extended(
               onPressed: () => _openEditor(),
               backgroundColor: AppColors.success,
               icon: const Icon(Icons.local_offer, color: Colors.white),
-              label: const Text(
-                'كود خصم جديد',
-                style: TextStyle(
+              label: Text(
+                tr('كود خصم جديد'),
+                style: const TextStyle(
                   fontFamily: 'cairo',
                   color: Colors.white,
                   fontWeight: FontWeight.bold,
@@ -105,20 +107,21 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
             Icon(Icons.local_offer_outlined,
                 size: 64, color: AppColors.textMuted.withValues(alpha: 0.5)),
             const SizedBox(height: 14),
-            const Text(
-              'لا توجد أكواد خصم',
-              style: TextStyle(
+            Text(
+              tr('لا توجد أكواد خصم'),
+              style: const TextStyle(
                 fontFamily: 'cairo',
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
               ),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'أنشئ كودًا (نسبة أو مبلغًا) بصلاحية استخدام وتاريخ انتهاء، '
-              'ثم أدخله في حوار الدفع ليُخصم من الفاتورة.',
+            Text(
+              tr(
+                'أنشئ كودًا (نسبة أو مبلغًا) بصلاحية استخدام وتاريخ انتهاء، ثم أدخله في حوار الدفع ليُخصم من الفاتورة.',
+              ),
               textAlign: TextAlign.center,
-              style: TextStyle(
+              style: const TextStyle(
                 fontFamily: 'cairo',
                 fontSize: 12,
                 height: 1.7,
@@ -126,16 +129,16 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
               ),
             ),
             const SizedBox(height: 18),
-            if (PermissionService.canManageDiscounts)
+            if (PermissionService.can(PermissionKeys.discountManage))
               ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.success,
                 ),
                 onPressed: () => _openEditor(),
                 icon: const Icon(Icons.add, color: Colors.white),
-                label: const Text(
-                  'إنشاء كود',
-                  style: TextStyle(
+                label: Text(
+                  tr('إنشاء كود'),
+                  style: const TextStyle(
                     fontFamily: 'cairo',
                     color: Colors.white,
                     fontWeight: FontWeight.bold,
@@ -155,12 +158,12 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
         children: [
           const Icon(Icons.info_outline, color: AppColors.info, size: 20),
           const SizedBox(width: 10),
-          const Expanded(
+          Expanded(
             child: Text(
-              'الخصم يُطبَّق قبل الضريبة: تُحتسب ضريبة القيمة المضافة على '
-              'الصافي بعد الخصم، فلا يدفع الزبون ضريبة مبلغ لم يشتره. '
-              'والكود لا يُخصم أكثر من قيمة الفاتورة مهما كان مبلغه.',
-              style: TextStyle(
+              tr(
+                'الخصم يُطبَّق قبل الضريبة: تُحتسب ضريبة القيمة المضافة على الصافي بعد الخصم، فلا يدفع الزبون ضريبة مبلغ لم يشتره. والكود لا يُخصم أكثر من قيمة الفاتورة مهما كان مبلغه.',
+              ),
+              style: const TextStyle(
                 fontFamily: 'cairo',
                 fontSize: 11.5,
                 height: 1.7,
@@ -218,7 +221,10 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  '${code['name'] ?? ''}',
+                  L10n.pick(
+                    '${code['name'] ?? ''}',
+                    '${code['name_en'] ?? ''}',
+                  ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
@@ -231,7 +237,7 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
               Text(
                 isPercent
                     ? '${_plain(value)}%'
-                    : '${value.toStringAsFixed(2)} ر.س',
+                    : trf('{0} ر.س', [value.toStringAsFixed(2)]),
                 style: const TextStyle(
                   fontFamily: 'cairo',
                   fontSize: 14,
@@ -248,22 +254,28 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
             children: [
               _chip(
                 Icons.event_outlined,
-                'من ${_short(code['start_date'])}'
-                '${_shortOrNull(code['end_date']) == null ? ' — بلا انتهاء' : ' إلى ${_shortOrNull(code['end_date'])}'}',
+                _shortOrNull(code['end_date']) == null
+                    ? trf('من {0} — بلا انتهاء', [
+                        _short(code['start_date']),
+                      ])
+                    : trf('من {0} إلى {1}', [
+                        _short(code['start_date']),
+                        _short(code['end_date']),
+                      ]),
                 AppColors.textSecondary,
               ),
               _chip(
                 Icons.repeat,
                 maxUses == null || maxUses <= 0
-                    ? 'استُخدم $used — بلا حدّ'
-                    : 'استُخدم $used / $maxUses',
+                    ? trf('استُخدم {0} — بلا حدّ', [used])
+                    : trf('استُخدم {0} / {1}', [used, maxUses]),
                 (maxUses != null && maxUses > 0 && used >= maxUses)
                     ? AppColors.danger
                     : AppColors.textSecondary,
               ),
               _chip(
                 active ? Icons.check_circle_outline : Icons.block,
-                active ? 'مُفعَّل' : 'معطَّل',
+                active ? tr('مُفعَّل') : tr('معطَّل'),
                 active ? AppColors.success : AppColors.danger,
               ),
             ],
@@ -280,16 +292,16 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
                 ),
               ),
             ),
-          if (PermissionService.canManageDiscounts) ...[
+          if (PermissionService.can(PermissionKeys.discountManage)) ...[
             const Divider(height: 18),
             Row(
               children: [
                 TextButton.icon(
                   onPressed: () => _openEditor(code: code),
                   icon: const Icon(Icons.edit_outlined, size: 17),
-                  label: const Text(
-                    'تعديل',
-                    style: TextStyle(fontFamily: 'cairo', fontSize: 12.5),
+                  label: Text(
+                    tr('تعديل'),
+                    style: const TextStyle(fontFamily: 'cairo', fontSize: 12.5),
                   ),
                 ),
                 TextButton.icon(
@@ -300,7 +312,7 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
                     color: active ? AppColors.danger : AppColors.success,
                   ),
                   label: Text(
-                    active ? 'تعطيل' : 'تفعيل',
+                    active ? tr('تعطيل') : tr('تفعيل'),
                     style: TextStyle(
                       fontFamily: 'cairo',
                       fontSize: 12.5,
@@ -348,6 +360,7 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
       await _service.save(
         id: (code['discount_id'] as num).toInt(),
         name: '${code['name'] ?? ''}',
+        nameEn: '${code['name_en'] ?? ''}',
         code: '${code['code'] ?? ''}',
         type: '${code['type'] ?? 'percentage'}',
         value: ((code['value'] ?? 0) as num).toDouble(),
@@ -378,6 +391,7 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
       final id = await _service.save(
         id: (code?['discount_id'] as num?)?.toInt(),
         name: result['name'] as String,
+        nameEn: result['nameEn'] as String?,
         code: result['code'] as String,
         type: result['type'] as String,
         value: result['value'] as double,
@@ -392,13 +406,12 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
         tableName: 'discounts',
         recordId: id,
         newValues:
-            '{"code":"${result['code']}","type":"${result['type']}",'
-            '"value":${result['value']}}',
+            '{"code":"${result['code']}","type":"${result['type']}","value":${result['value']}}',
       );
       await _load();
       Get.snackbar(
-        'تم',
-        code == null ? 'أُنشئ كود الخصم' : 'حُدِّث كود الخصم',
+        tr('تم'),
+        code == null ? tr('أُنشئ كود الخصم') : tr('حُدِّث كود الخصم'),
         snackPosition: SnackPosition.BOTTOM,
         backgroundColor: AppColors.success,
         colorText: Colors.white,
@@ -406,7 +419,7 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
       );
     } catch (e) {
       Get.snackbar(
-        'تعذّر الحفظ',
+        tr('تعذّر الحفظ'),
         '$e'.replaceFirst('Bad state: ', ''),
         snackPosition: SnackPosition.BOTTOM,
         backgroundColor: AppColors.danger,
@@ -445,6 +458,7 @@ class _DiscountEditorDialog extends StatefulWidget {
 
 class _DiscountEditorDialogState extends State<_DiscountEditorDialog> {
   late final TextEditingController _nameCtrl;
+  late final TextEditingController _nameEnCtrl;
   late final TextEditingController _codeCtrl;
   late final TextEditingController _valueCtrl;
   late final TextEditingController _maxUsesCtrl;
@@ -460,6 +474,7 @@ class _DiscountEditorDialogState extends State<_DiscountEditorDialog> {
     super.initState();
     final e = widget.existing;
     _nameCtrl = TextEditingController(text: '${e?['name'] ?? ''}');
+    _nameEnCtrl = TextEditingController(text: '${e?['name_en'] ?? ''}');
     _codeCtrl = TextEditingController(text: '${e?['code'] ?? ''}');
     _type = '${e?['type'] ?? 'percentage'}';
     _valueCtrl = TextEditingController(
@@ -477,6 +492,7 @@ class _DiscountEditorDialogState extends State<_DiscountEditorDialog> {
   @override
   void dispose() {
     _nameCtrl.dispose();
+    _nameEnCtrl.dispose();
     _codeCtrl.dispose();
     _valueCtrl.dispose();
     _maxUsesCtrl.dispose();
@@ -499,8 +515,7 @@ class _DiscountEditorDialogState extends State<_DiscountEditorDialog> {
   }
 
   static String _fmt(DateTime d) =>
-      '${d.year}-${d.month.toString().padLeft(2, '0')}-'
-      '${d.day.toString().padLeft(2, '0')}';
+      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
   Future<void> _pickDate({required bool isStart}) async {
     final picked = await showDatePicker(
@@ -527,33 +542,34 @@ class _DiscountEditorDialogState extends State<_DiscountEditorDialog> {
     final maxUses = maxUsesRaw.isEmpty ? null : int.tryParse(maxUsesRaw);
 
     if (name.isEmpty) {
-      setState(() => _error = 'أدخل اسمًا للخصم');
+      setState(() => _error = tr('أدخل اسمًا للخصم'));
       return;
     }
     if (code.isEmpty) {
-      setState(() => _error = 'أدخل كودًا — هو ما يُكتب في الكاشير');
+      setState(() => _error = tr('أدخل كودًا — هو ما يُكتب في الكاشير'));
       return;
     }
     if (value <= 0) {
-      setState(() => _error = 'أدخل قيمة أكبر من صفر');
+      setState(() => _error = tr('أدخل قيمة أكبر من صفر'));
       return;
     }
     if (_type == 'percentage' && value > 100) {
-      setState(() => _error = 'النسبة لا تتجاوز 100%');
+      setState(() => _error = tr('النسبة لا تتجاوز 100%'));
       return;
     }
     if (_endDate != null && _endDate!.isBefore(_startDate)) {
-      setState(() => _error = 'تاريخ الانتهاء قبل تاريخ البداية');
+      setState(() => _error = tr('تاريخ الانتهاء قبل تاريخ البداية'));
       return;
     }
     if (maxUsesRaw.isNotEmpty && (maxUses == null || maxUses <= 0)) {
-      setState(() => _error = 'حدّ الاستخدام يجب أن يكون رقمًا أكبر من صفر');
+      setState(() => _error = tr('حدّ الاستخدام يجب أن يكون رقمًا أكبر من صفر'));
       return;
     }
 
     Get.back(
       result: {
         'name': name,
+        'nameEn': _nameEnCtrl.text.trim(),
         'code': code,
         'type': _type,
         'value': value,
@@ -585,7 +601,9 @@ class _DiscountEditorDialogState extends State<_DiscountEditorDialog> {
                       color: AppColors.success, size: 22),
                   const SizedBox(width: 8),
                   Text(
-                    widget.existing == null ? 'كود خصم جديد' : 'تعديل كود الخصم',
+                    widget.existing == null
+                        ? tr('كود خصم جديد')
+                        : tr('تعديل كود الخصم'),
                     style: const TextStyle(
                       fontFamily: 'cairo',
                       fontSize: 16,
@@ -597,20 +615,30 @@ class _DiscountEditorDialogState extends State<_DiscountEditorDialog> {
               const SizedBox(height: 16),
               TextField(
                 controller: _nameCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'الاسم (وصف داخلي)',
-                  hintText: 'مثال: خصم افتتاح الفرع',
-                  prefixIcon: Icon(Icons.label_outline),
+                decoration: InputDecoration(
+                  labelText: tr('الاسم (وصف داخلي)'),
+                  hintText: tr('مثال: خصم افتتاح الفرع'),
+                  prefixIcon: const Icon(Icons.label_outline),
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _nameEnCtrl,
+                textDirection: TextDirection.ltr,
+                decoration: InputDecoration(
+                  labelText: tr('الاسم بالإنجليزية (اختياري)'),
+                  hintText: 'Branch opening discount',
+                  prefixIcon: const Icon(Icons.translate),
                 ),
               ),
               const SizedBox(height: 10),
               TextField(
                 controller: _codeCtrl,
                 textCapitalization: TextCapitalization.characters,
-                decoration: const InputDecoration(
-                  labelText: 'الكود',
-                  hintText: 'مثال: WASH10',
-                  prefixIcon: Icon(Icons.confirmation_number_outlined),
+                decoration: InputDecoration(
+                  labelText: tr('الكود'),
+                  hintText: tr('مثال: WASH10'),
+                  prefixIcon: const Icon(Icons.confirmation_number_outlined),
                 ),
               ),
               const SizedBox(height: 12),
@@ -618,7 +646,7 @@ class _DiscountEditorDialogState extends State<_DiscountEditorDialog> {
                 children: [
                   Expanded(
                     child: _typeChip(
-                      label: 'نسبة %',
+                      label: tr('نسبة %'),
                       selected: isPercent,
                       onTap: () => setState(() => _type = 'percentage'),
                     ),
@@ -626,7 +654,7 @@ class _DiscountEditorDialogState extends State<_DiscountEditorDialog> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: _typeChip(
-                      label: 'مبلغ ثابت',
+                      label: tr('مبلغ ثابت'),
                       selected: !isPercent,
                       onTap: () => setState(() => _type = 'fixed'),
                     ),
@@ -639,8 +667,12 @@ class _DiscountEditorDialogState extends State<_DiscountEditorDialog> {
                 keyboardType:
                     const TextInputType.numberWithOptions(decimal: true),
                 decoration: InputDecoration(
-                  labelText: isPercent ? 'النسبة (%)' : 'المبلغ (ر.س)',
-                  hintText: isPercent ? '10 = خصم 10%' : '10 = خصم 10 ر.س',
+                  labelText:
+                      isPercent ? tr('النسبة (%)') : tr('المبلغ (ر.س)'),
+                  hintText:
+                      isPercent
+                          ? tr('10 = خصم 10%')
+                          : tr('10 = خصم 10 ر.س'),
                   prefixIcon: Icon(
                     isPercent ? Icons.percent : Icons.attach_money,
                   ),
@@ -650,10 +682,10 @@ class _DiscountEditorDialogState extends State<_DiscountEditorDialog> {
               TextField(
                 controller: _maxUsesCtrl,
                 keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'حدّ الاستخدام (اختياري)',
-                  hintText: 'اتركه فارغًا لاستخدام بلا حدّ',
-                  prefixIcon: Icon(Icons.repeat),
+                decoration: InputDecoration(
+                  labelText: tr('حدّ الاستخدام (اختياري)'),
+                  hintText: tr('اتركه فارغًا لاستخدام بلا حدّ'),
+                  prefixIcon: const Icon(Icons.repeat),
                 ),
               ),
               const SizedBox(height: 12),
@@ -661,7 +693,7 @@ class _DiscountEditorDialogState extends State<_DiscountEditorDialog> {
                 children: [
                   Expanded(
                     child: _dateField(
-                      label: 'يبدأ',
+                      label: tr('يبدأ'),
                       value: _fmt(_startDate),
                       onTap: () => _pickDate(isStart: true),
                     ),
@@ -669,8 +701,11 @@ class _DiscountEditorDialogState extends State<_DiscountEditorDialog> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: _dateField(
-                      label: 'ينتهي',
-                      value: _endDate == null ? 'بلا انتهاء' : _fmt(_endDate!),
+                      label: tr('ينتهي'),
+                      value:
+                          _endDate == null
+                              ? tr('بلا انتهاء')
+                              : _fmt(_endDate!),
                       onTap: () => _pickDate(isStart: false),
                       onClear: _endDate == null
                           ? null
@@ -684,17 +719,17 @@ class _DiscountEditorDialogState extends State<_DiscountEditorDialog> {
                 contentPadding: EdgeInsets.zero,
                 value: _isActive,
                 onChanged: (v) => setState(() => _isActive = v),
-                title: const Text(
-                  'مُفعَّل',
-                  style: TextStyle(
+                title: Text(
+                  tr('مُفعَّل'),
+                  style: const TextStyle(
                     fontFamily: 'cairo',
                     fontSize: 13.5,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-                subtitle: const Text(
-                  'المعطَّل يبقى محفوظًا لكنه لا يُطبَّق على أي فاتورة',
-                  style: TextStyle(fontFamily: 'cairo', fontSize: 11),
+                subtitle: Text(
+                  tr('المعطَّل يبقى محفوظًا لكنه لا يُطبَّق على أي فاتورة'),
+                  style: const TextStyle(fontFamily: 'cairo', fontSize: 11),
                 ),
                 activeThumbColor: AppColors.success,
               ),
@@ -717,9 +752,12 @@ class _DiscountEditorDialogState extends State<_DiscountEditorDialog> {
                   Expanded(
                     child: OutlinedButton(
                       onPressed: () => Get.back(),
-                      child: const Text(
-                        'إلغاء',
-                        style: TextStyle(fontFamily: 'cairo', fontSize: 13.5),
+                      child: Text(
+                        tr('إلغاء'),
+                        style: const TextStyle(
+                          fontFamily: 'cairo',
+                          fontSize: 13.5,
+                        ),
                       ),
                     ),
                   ),
@@ -730,9 +768,9 @@ class _DiscountEditorDialogState extends State<_DiscountEditorDialog> {
                         backgroundColor: AppColors.success,
                       ),
                       onPressed: _submit,
-                      child: const Text(
-                        'حفظ',
-                        style: TextStyle(
+                      child: Text(
+                        tr('حفظ'),
+                        style: const TextStyle(
                           fontFamily: 'cairo',
                           fontSize: 13.5,
                           fontWeight: FontWeight.bold,
@@ -799,8 +837,8 @@ class _DiscountEditorDialogState extends State<_DiscountEditorDialog> {
           isDense: true,
           suffixIcon: onClear == null
               ? const Icon(Icons.calendar_today_outlined, size: 16)
-              : IconButton(
-                  tooltip: 'إزالة',
+                : IconButton(
+                  tooltip: tr('إزالة'),
                   onPressed: onClear,
                   icon: const Icon(Icons.close, size: 16),
                 ),

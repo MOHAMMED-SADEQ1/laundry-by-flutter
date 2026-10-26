@@ -8,19 +8,26 @@ import 'package:laundry/controller/shift_controller.dart';
 import 'package:intl/intl.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:laundry/controller/invoicecontroller.dart';
+import 'package:laundry/core/services/paper_size.dart';
 import 'package:laundry/core/services/preparePDF.dart';
+import 'package:laundry/services/pdf/doc_template.dart';
+import 'package:laundry/services/pdf/doc_template_service.dart';
+import 'package:laundry/services/pdf/laundry_slip.dart';
+import 'package:laundry/services/pdf/laundry_slip_pdf.dart';
+import 'package:laundry/services/pdf/print_font_service.dart';
 import 'package:laundry/services/customer/customer_ledger_service.dart';
+import 'package:laundry/services/i18n/l10n.dart';
 import 'package:laundry/services/discount/discount_service.dart';
 import 'package:laundry/services/invoice/invoice_items_service.dart';
+import 'package:laundry/services/payment/payment_method.dart';
+import 'package:laundry/services/invoice/invoice_output_service.dart';
 import 'package:laundry/services/subscription/subscription_service.dart';
 import 'package:laundry/sqldb.dart';
 import 'package:laundry/services/business_info_service.dart';
 import 'package:laundry/services/security/session_manager.dart';
 import 'package:laundry/services/settings/app_settings_service.dart';
 import 'package:laundry/view/widget/invoice/customdrafts.dart';
-import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
 import 'package:flutter/foundation.dart';
 
 class PrintInvoiceController extends GetxController {
@@ -57,12 +64,37 @@ class PrintInvoiceController extends GetxController {
   }
 
   static Future<void> _loadArabicFont() async {
-    if (arabicFont == null) {
-      final fontData = await rootBundle.load(
-        "assets/fonts/Noto/AL-Mohanad.ttf",
-      );
-      arabicFont = pw.Font.ttf(fontData);
-    }
+    // الخطّ من الإعدادات لا من مسار مكتوب: `PrintFontService` تُخزّن كل خطّ
+    // مؤقتًا بمفتاحه، فتبديل الخطّ لا يكلّف قراءة قرص في كل فاتورة.
+    final font = PrintFontService.selected;
+    arabicFont = await PrintFontService.resolve(font.key);
+    _loadedFontKey = font.key;
+  }
+
+  /// مفتاح الخطّ المحمَّل فعلًا — لتمييز «الخطّ تغيّر في الإعدادات» عن
+  /// «الخطّ لم يُحمَّل بعد». بلا هذا يبقى الخطّ القديم حتى إعادة تشغيل البرنامج.
+  static String? _loadedFontKey;
+
+  /// هل يحتاج الخطّ (أو أي أصل) إعادة تحميل؟
+  static bool get _assetsStale =>
+      arabicFont == null ||
+      logoImageBytes == null ||
+      riyalImageBytes == null ||
+      _loadedFontKey != PrintFontService.selected.key;
+
+  /// يضمن جاهزية الأصول **بالخطّ المختار حاليًا**.
+  ///
+  /// 🚨 تُستدعى في كل مسار طباعة: تبديل الخطّ من الإعدادات يترك
+  /// [arabicFont] محمَّلًا بالخطّ القديم، و`null`-وحدها لا تكشف ذلك.
+  static Future<void> ensureAssets() async {
+    if (_assetsStale) await initializeAssets();
+  }
+
+  /// يُفرغ الخطّ المحمَّل — يُستدعى عند تغيير الإعداد أو استعادة نسخة احتياطية.
+  static void invalidateFont() {
+    arabicFont = null;
+    _loadedFontKey = null;
+    PrintFontService.invalidate();
   }
 
   final InvoiceController invcontroller = Get.find<InvoiceController>();
@@ -75,6 +107,7 @@ class PrintInvoiceController extends GetxController {
     String payment,
     int invoiceNumber, {
     String pickupCode = '',
+    String customerPhone = '',
     bool hidePrices = false,
     String createdByName = '',
     double discountAmount = 0,
@@ -82,21 +115,25 @@ class PrintInvoiceController extends GetxController {
     double taxAmount = 0,
     double taxRate = 0,
     double taxBase = 0,
+    double? paidAmount,
+    double? remainingAmount,
   }) async {
-    if (arabicFont == null ||
-        logoImageBytes == null ||
-        riyalImageBytes == null) {
-      await initializeAssets();
-    }
+    await ensureAssets();
+    // 🚨 اللغة تُهيَّأ **بحسب الواجهة**: كانت `'ar'` مكتوبة حرفيًّا فيخرج
+    // التاريخ «٢:٠٥:٣٣ م» في فاتورة إنجليزية. `initializeDateFormatting`
+    // لكلا اللغتين رخيص (يُحمَّل مرة واحدة) ويجعل التبديل فوريًّا.
     await initializeDateFormatting('ar', null);
+    await initializeDateFormatting('en', null);
+    final dateLocale = L10n.isRtl ? 'ar' : 'en';
     final today = DateTime.now();
-    String formattedTime = DateFormat('hh:mm:ss a', 'ar').format(today);
+    final formattedTime = DateFormat('hh:mm:ss a', dateLocale).format(today);
+    // التاريخ الرقمي نفسه لا يتبع لغة (ISO) — يُترك كما هو ليبقى مقروءًا
+    // في الأرشيف والبحث بغضّ النظر عن لغة الطباعة.
     // ─── خيارات العرض من الإعدادات (مركز واحد) ───
     final settings = AppSettingsService.instance;
     final padding = settings.invoiceNumberPadding;
     final displayNumber =
-        '${settings.invoiceNumberPrefix}'
-        '${padding > 0 ? invoiceNumber.toString().padLeft(padding, '0') : invoiceNumber}';
+        '${settings.invoiceNumberPrefix}${padding > 0 ? invoiceNumber.toString().padLeft(padding, '0') : invoiceNumber}';
     return <String, dynamic>{
       'payment': payment,
       'logoImage': logoImageBytes!,
@@ -107,6 +144,9 @@ class PrintInvoiceController extends GetxController {
       'summation': invcontroller.totalValue(),
       'invoiceNumber': invoiceNumber,
       'customername': invcontroller.customername.text,
+      // 🚨 كان الهاتف يُقرأ من القاعدة ثم يُهمَل هنا، فلا يظهر على الفاتورة
+      // حتى لو فعّل المستخدم «هاتف العميل» في القالب. صار يُمرَّر صريحًا.
+      'customerPhone': customerPhone.trim(),
       'pickupCode': pickupCode,
       'hidePrices': hidePrices,
       'date': "${today.year}-${today.month}-${today.day}  $formattedTime",
@@ -123,6 +163,7 @@ class PrintInvoiceController extends GetxController {
       'footerNote': settings.invoiceFooterNote,
       'paperSize': settings.invoicePaperSize,
       'showLogo': settings.invoiceShowLogo,
+      'logoSizeMm': settings.invoiceLogoSizeMm,
       'showTaxNumber': settings.invoiceShowTaxNumber,
       'showCrNumber': settings.invoiceShowCrNumber,
       'showShortAddress': settings.invoiceShowShortAddress,
@@ -139,6 +180,11 @@ class PrintInvoiceController extends GetxController {
       'payable': double.parse(
         (invcontroller.totalValue() - discountAmount).toStringAsFixed(2),
       ),
+      // المدفوع والمتبقي — يظهران فقط إن فعّل المستخدم حقلهما في القالب.
+      if (paidAmount != null) 'paidAmount': paidAmount,
+      if (remainingAmount != null) 'remainingAmount': remainingAmount,
+      // ─── قالب المستند: تفعيل ونصوص كل عنصر (من شاشة «قوالب الطباعة») ───
+      ...DocTemplateService.instance.transport(DocKind.invoice),
     };
   }
 
@@ -187,7 +233,8 @@ class PrintInvoiceController extends GetxController {
 
     // فاتورة مشترك: تُحفظ بأسعارها الكاملة داخلياً، لكن تُطبع بدون أسعار
     // — القيمة تُحاسب من تغطيته الشهرية لا من الجيب.
-    final isSubscriptionInvoice = payment == 'اشتراك شهري';
+    final isSubscriptionInvoice =
+        PaymentMethods.keyOf(payment) == PaymentMethod.subscription.key;
     final effectiveHidePrices = hidePrices || isSubscriptionInvoice;
 
     // الكمية المستهلكة من الفاتورة الحالية — تُحسب مرة واحدة وتُستخدم في
@@ -231,13 +278,12 @@ class PrintInvoiceController extends GetxController {
           tableName: 'subscriptions',
           recordId: subscriptionId,
           newValues:
-              '{"pieces":$usedPieces,"value":$usedValue,'
-              '"reason":"${gate.result.requiresManagerOverride ? 'needs_manager' : 'no_coverage'}"}',
+              '{"pieces":$usedPieces,"value":$usedValue,"reason":"${gate.result.requiresManagerOverride ? 'needs_manager' : 'no_coverage'}"}',
         );
         Get.snackbar(
           gate.result.requiresManagerOverride
-              ? 'تجاوز سقف الاشتراك'
-              : 'لا تغطية سارية',
+              ? tr('تجاوز سقف الاشتراك')
+              : tr('لا تغطية سارية'),
           gate.result.message,
           snackPosition: SnackPosition.BOTTOM,
           backgroundColor: const Color(0xFFDC2626),
@@ -250,10 +296,12 @@ class PrintInvoiceController extends GetxController {
       // تحذير عند 80%: نُعلم الكاشير قبل أن يُفاجأ بالمنع في الفاتورة القادمة.
       if (gate.result.isNearLimit) {
         Get.snackbar(
-          'قارب سقف الاشتراك',
-          'استهلكت ${(gate.result.usageRatio * 100).round()}% من سقف هذا '
-              'الاشتراك. باقٍ ${gate.remainingPieces} قطعة و'
-              '${gate.remainingValue.toStringAsFixed(2)} ر.س.',
+          tr('قارب سقف الاشتراك'),
+          trf('استهلكت {0}% من سقف هذا الاشتراك. باقٍ {1} قطعة و{2} ر.س.', [
+            (gate.result.usageRatio * 100).round(),
+            gate.remainingPieces,
+            gate.remainingValue.toStringAsFixed(2),
+          ]),
           snackPosition: SnackPosition.BOTTOM,
           backgroundColor: const Color(0xFFF59E0B),
           colorText: Colors.white,
@@ -269,8 +317,7 @@ class PrintInvoiceController extends GetxController {
           tableName: 'subscriptions',
           recordId: subscriptionId,
           newValues:
-              '{"pieces":$usedPieces,"value":$usedValue,"role":"'
-              '${SessionManager.currentRole}"}',
+              '{"pieces":$usedPieces,"value":$usedValue,"role":"${SessionManager.currentRole}"}',
         );
       }
     }
@@ -298,10 +345,7 @@ class PrintInvoiceController extends GetxController {
     // فاتورة الاشتراك مغطّاة بتغطية مدفوعة سابقًا؛ وإخضاعها للضريبة يتبع
     // خيار `tax_apply_to_subscriptions` بدل الإعفاء الصلب (افتراضيًا معفاة).
     final taxPolicy = AppSettingsService.instance.taxPolicy;
-    final tax = taxPolicy.apply(
-      payable,
-      isSubscription: isSubscriptionInvoice,
-    );
+    final tax = taxPolicy.apply(payable, isSubscription: isSubscriptionInvoice);
 
     final paidAmount = paid >= 0 ? paid : payable;
     // فاتورة الاشتراك مغطّاة بالتغطية الشهرية: لا متبقي عليها ولا ذمة
@@ -323,14 +367,13 @@ class PrintInvoiceController extends GetxController {
     // الداخلي ولا روابط الذمم بتغيير شكل الرقم.
     final settings = AppSettingsService.instance;
     final displayNumber =
-        '${settings.invoiceNumberPrefix}'
-        '${settings.invoiceNumberPadding > 0 ? invoiceNumber.toString().padLeft(settings.invoiceNumberPadding, '0') : invoiceNumber.toString()}';
+        '${settings.invoiceNumberPrefix}${settings.invoiceNumberPadding > 0 ? invoiceNumber.toString().padLeft(settings.invoiceNumberPadding, '0') : invoiceNumber.toString()}';
     if (settings.invoiceRequireCustomer &&
         (customerId == null) &&
         name.trim().isEmpty) {
       Get.snackbar(
-        'زبون مطلوب',
-        'إعدادات النظام تُلزم تحديد زبون قبل إصدار الفاتورة.',
+        tr('زبون مطلوب'),
+        tr('إعدادات النظام تُلزم تحديد زبون قبل إصدار الفاتورة.'),
         snackPosition: SnackPosition.BOTTOM,
         backgroundColor: const Color(0xFFDC2626),
         colorText: Colors.white,
@@ -343,8 +386,8 @@ class PrintInvoiceController extends GetxController {
     final minOrder = settings.minOrderAmount;
     if (minOrder > 0 && payable < minOrder) {
       Get.snackbar(
-        'أقل من الحد الأدنى',
-        'الحد الأدنى للفاتورة ${minOrder.toStringAsFixed(2)} ر.س.',
+        tr('أقل من الحد الأدنى'),
+        trf('الحد الأدنى للفاتورة {0} ر.س.', [minOrder.toStringAsFixed(2)]),
         snackPosition: SnackPosition.BOTTOM,
         backgroundColor: const Color(0xFFDC2626),
         colorText: Colors.white,
@@ -358,7 +401,10 @@ class PrintInvoiceController extends GetxController {
       'payment': payment,
       'summation': summation,
       'customername': name,
-      'date': DateFormat('yyyy-MM-dd hh:mm:ss a', 'ar').format(DateTime.now()),
+      'date': DateFormat(
+        'yyyy-MM-dd hh:mm:ss a',
+        L10n.isRtl ? 'ar' : 'en',
+      ).format(DateTime.now()),
     });
 
     try {
@@ -371,9 +417,11 @@ class PrintInvoiceController extends GetxController {
       );
       if (duplicate > 0) {
         Get.snackbar(
-          'رقم فاتورة مكرر',
-          'الرقم #$invoiceNumber مستخدم بالفعل — لم يتم إصدار أي فاتورة. '
-              'أعد المحاولة للحصول على رقم جديد.',
+          tr('رقم فاتورة مكرر'),
+          trf(
+            'الرقم #{0} مستخدم بالفعل — لم يتم إصدار أي فاتورة. أعد المحاولة للحصول على رقم جديد.',
+            [invoiceNumber],
+          ),
           snackPosition: SnackPosition.BOTTOM,
           backgroundColor: const Color(0xFFDC2626),
           colorText: Colors.white,
@@ -417,7 +465,7 @@ class PrintInvoiceController extends GetxController {
       });
 
       if (saved <= 0) {
-        throw Exception('فشل حفظ الفاتورة في قاعدة البيانات');
+        throw Exception(tr('فشل حفظ الفاتورة في قاعدة البيانات'));
       }
 
       await db.logAudit(
@@ -426,8 +474,7 @@ class PrintInvoiceController extends GetxController {
         tableName: 'invoices',
         recordId: invoiceNumber,
         newValues:
-            '{"total":$grossAmount,"discount":$appliedDiscount,'
-            '"payable":$payable,"tax":${tax.tax},"payment":"$payment"}',
+            '{"total":$grossAmount,"discount":$appliedDiscount,"payable":$payable,"tax":${tax.tax},"payment":"$payment"}',
       );
 
       // ─── 🧾 لقطة بنود الفاتورة (التكلفة التاريخية) ───
@@ -448,8 +495,7 @@ class PrintInvoiceController extends GetxController {
           tableName: 'discounts',
           recordId: discountId,
           newValues:
-              '{"invoice_id":$invoiceNumber,"code":"$discountCode",'
-              '"amount":$appliedDiscount}',
+              '{"invoice_id":$invoiceNumber,"code":"$discountCode","amount":$appliedDiscount}',
         );
       }
 
@@ -495,10 +541,12 @@ class PrintInvoiceController extends GetxController {
           await db.safeInsert('customer_payments', {
             'customer_id': customerId,
             'amount': creditUsed,
-            'payment_method': 'رصيد',
+            'payment_method': PaymentMethod.balance.key,
             'source': 'credit_use',
             'payment_date': invoiceDate,
-            'notes': 'استهلاك رصيد سلفة على الفاتورة #$invoiceNumber',
+            'notes': trf('استهلاك رصيد سلفة على الفاتورة #{0}', [
+              invoiceNumber,
+            ]),
             'recorded_by': userId,
             'invoice_id': invoiceNumber,
           });
@@ -547,10 +595,7 @@ class PrintInvoiceController extends GetxController {
 
           // 1. إجمالي المشتريات = مجموع كل الفواتير المرتبطة بالزبون
           await db.updateData(
-            'UPDATE "customers" SET "total_spent" = ('
-            '  SELECT COALESCE(SUM(i.final_amount), 0) FROM "invoices" i '
-            '  WHERE i.customer_id = ? '
-            ') WHERE "customer_id" = ?',
+            'UPDATE "customers" SET "total_spent" = (  SELECT COALESCE(SUM(i.final_amount), 0) FROM "invoices" i   WHERE i.customer_id = ? ) WHERE "customer_id" = ?',
             [customerId, customerId],
           );
 
@@ -563,18 +608,12 @@ class PrintInvoiceController extends GetxController {
             final earned = (summation / perRiyal).floor();
             if (earned > 0) {
               await db.updateData(
-                'UPDATE "customers" '
-                'SET "loyalty_points" = COALESCE("loyalty_points", 0) + ? '
-                'WHERE "customer_id" = ?',
+                'UPDATE "customers" SET "loyalty_points" = COALESCE("loyalty_points", 0) + ? WHERE "customer_id" = ?',
                 [earned, customerId],
               );
               // ترقية الشريحة حسب النقاط الجديدة
               await db.updateData(
-                'UPDATE "customers" SET "tier" = CASE '
-                '  WHEN COALESCE("loyalty_points",0) >= 1000 THEN \'gold\' '
-                '  WHEN COALESCE("loyalty_points",0) >= 500 THEN \'silver\' '
-                '  ELSE \'bronze\' END '
-                'WHERE "customer_id" = ?',
+                'UPDATE "customers" SET "tier" = CASE   WHEN COALESCE("loyalty_points",0) >= 1000 THEN \'gold\'   WHEN COALESCE("loyalty_points",0) >= 500 THEN \'silver\'   ELSE \'bronze\' END WHERE "customer_id" = ?',
                 [customerId],
               );
             }
@@ -609,8 +648,8 @@ class PrintInvoiceController extends GetxController {
       await CustomDrafts.consumePendingDraft();
 
       Get.snackbar(
-        'نجاح',
-        'تم حفظ الفاتورة رقم #$invoiceNumber وإصدارها',
+        tr('نجاح'),
+        trf('تم حفظ الفاتورة رقم #{0} وإصدارها', [invoiceNumber]),
         snackPosition: SnackPosition.BOTTOM,
         backgroundColor: const Color(0xFF16A34A),
         colorText: Colors.white,
@@ -620,8 +659,8 @@ class PrintInvoiceController extends GetxController {
     } catch (e) {
       debugPrint('Error saving invoice: $e');
       Get.snackbar(
-        'خطأ',
-        'تعذر حفظ الفاتورة: $e',
+        tr('خطأ'),
+        trf('تعذر حفظ الفاتورة: {0}', [e]),
         snackPosition: SnackPosition.BOTTOM,
         backgroundColor: const Color(0xFFDC2626),
         colorText: Colors.white,
@@ -660,6 +699,7 @@ class PrintInvoiceController extends GetxController {
         payment,
         invoiceNumber,
         pickupCode: pickupCode,
+        customerPhone: phone,
         hidePrices: effectiveHidePrices,
         createdByName: createdByName,
         discountAmount: appliedDiscount,
@@ -667,16 +707,114 @@ class PrintInvoiceController extends GetxController {
         taxAmount: tax.tax,
         taxRate: tax.rate,
         taxBase: tax.base,
+        paidAmount: paidAmount,
+        remainingAmount: remainingAmount,
       );
 
-      // بناء مستند PDF عادي (A4) ثم إرساله لنافذة الطباعة.
+      // ─── ورقة المغسلة (نسخة المحل) ───
+      //
+      // تُبنى من **نفس لقطة البنود** قبل تفريغ السلة، وبلا أي سعر. المقاس
+      // يأخذ `invoice_paper_size` نفسه؛ والحراري فقط يُقدَّر ارتفاعه من طول
+      // المحتوى لتقليل الهدر.
+      //
+      // 🚨 فشل الورقة **لا يوقف فاتورة العميل**: التوليد معزول في `try`
+      // خاصّ، فإن سقط الخطّ أو الشعار أو التخطيط خرجت الفاتورة وحدها
+      // وبيع السلة كما هو — بدل أن يبقى الكارت ممتلئًا بلا طباعة.
+      Uint8List? laundrySlipBytes;
+      PaperSize? laundrySlipPaper;
+      String? slipBuildError;
+      if (settings.invoicePrintLaundrySlip) {
+        try {
+          final laundrySlipData = LaundrySlipData.fromItems(
+            items: invcontroller.invoice,
+            invoiceNumber: displayNumber,
+            date: '${snapshot['date'] ?? ''}',
+            customerName: name,
+            customerPhone: phone,
+            pickupCode: pickupCode,
+            bizName: BusinessInfoService.instance.name,
+            bizPhone: BusinessInfoService.instance.phone,
+            paperSize: settings.invoicePaperSize,
+            isRtl: L10n.isRtl,
+          );
+          final slipPayload = <String, dynamic>{
+            ...laundrySlipData.toMap(),
+            // قالب ورقة المغسلة المستقلّ — نصوصه وتفعيلاته وأنماطه.
+            ...DocTemplateService.instance.transport(DocKind.laundrySlip),
+            // الخط مُحمَّل مسبقًا عبر `ensureAssets` (داخل buildInvoicePdfData).
+            'arabicFont': arabicFont!,
+            'logoImage': logoImageBytes,
+            'showLogo': settings.invoiceShowLogo,
+          };
+          laundrySlipPaper = LaundrySlipPdf.paperForData(slipPayload);
+          laundrySlipBytes = await compute(
+            LaundrySlipPdf.generateLaundrySlipPdf,
+            slipPayload,
+          );
+        } catch (e) {
+          debugPrint('Laundry slip build error: $e');
+          laundrySlipBytes = null;
+          laundrySlipPaper = null;
+          slipBuildError = trf('تعذّر تجهيز ورقة المغسلة: {0}', ['$e']);
+        }
+      }
+
+      // بناء مستند PDF عادي (A4) ثم إخراجه.
+      //
+      // الإخراج يمرّ من `InvoiceOutputService`: **مفتاحان مستقلّان** في
+      // الإعدادات — طباعة على الطابعة (المختارة مباشرةً أو بحوار النظام)
+      // وحفظ نسخة PDF في المجلد المختار. فتُغطّى الحالات الثلاث: طباعة فقط ·
+      // PDF فقط (بلا ورق) · طباعة + أرشيف.
       final pdfBytes = await compute(PreparePDF.generatePdfData, snapshot);
-      await Printing.layoutPdf(onLayout: (PdfPageFormat format) => pdfBytes);
+      final output = await InvoiceOutputService.instance.deliverBundle(
+        pdfBytes,
+        invoiceNumber: invoiceNumber,
+        laundrySlipPdf: laundrySlipBytes,
+        printSlip: laundrySlipBytes != null,
+        slipPaper: laundrySlipPaper,
+      );
+      _reportOutput(output, slipBuildError: slipBuildError);
 
       invcontroller.deleteInvoice();
     } catch (e) {
       debugPrint('Error sharing PDF: $e');
       Get.snackbar('خطأ', '$e', snackPosition: SnackPosition.BOTTOM);
+    }
+  }
+
+  /// يُبلّغ المستخدم بنتيجة الإخراج: مسار ملف الـPDF المحفوظ، أو سبب فشل
+  /// الحفظ. **لا رسالة عند النجاح الصامت** (طباعة فقط) — فلا نُزعج الكاشير
+  /// برسالة في كل فاتورة.
+  ///
+  /// [slipBuildError] فشل بناء الورقة قبل الطباعة (خطّ · أصول · تخطيط)،
+  /// ويُجمَع مع أخطاء الإخراج في تنبيه واحد بدل تنبيهين متتاليين.
+  void _reportOutput(InvoiceOutputResult output, {String? slipBuildError}) {
+    final errors = <String>[
+      if (output.error != null) output.error!,
+      if (output.slipError != null) output.slipError!,
+      if (slipBuildError != null) slipBuildError,
+    ];
+    if (errors.isNotEmpty) {
+      Get.snackbar(
+        tr('تنبيه'),
+        errors.join('\n'),
+        snackPosition: SnackPosition.BOTTOM,
+        duration: const Duration(seconds: 6),
+      );
+      return;
+    }
+
+    final paths = <String>[
+      if (output.savedPath != null) output.savedPath!,
+      if (output.slipSavedPath != null) output.slipSavedPath!,
+    ];
+    if (paths.isNotEmpty) {
+      Get.snackbar(
+        tr('حُفظت نسخة PDF'),
+        paths.join('\n'),
+        snackPosition: SnackPosition.BOTTOM,
+        duration: const Duration(seconds: 4),
+      );
     }
   }
 }

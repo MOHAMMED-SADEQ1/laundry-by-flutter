@@ -66,7 +66,9 @@ class DebtReportController extends GetxController {
   }
 
   /// إصلاح الأرصدة المختلّة — يعيد الاشتقاق من الفواتير ثم يُحدّث الشاشة.
-  /// يرجع عدد الصفوف التي صُحّحت.
+  ///
+  /// يرجع عدد الصفوف التي صُحّحت، أو **`-1`** عند رفض الصلاحية (فيُفرّق
+  /// المستدعي بين «لا شيء لتصحيحه» و«لم أُنفّذ»)، أو `-2` عند خطأ فعلي.
   Future<int> repairBalances() async {
     repairing.value = true;
     try {
@@ -75,7 +77,7 @@ class DebtReportController extends GetxController {
       return fixed;
     } catch (e) {
       debugPrint('repairBalances error: $e');
-      return 0;
+      return -2;
     } finally {
       repairing.value = false;
     }
@@ -137,8 +139,7 @@ class DebtReportController extends GetxController {
         tableName: 'customers',
         recordId: customerId,
         newValues:
-            '{"amount":${CustomerLedgerService.fromCents(cents)},'
-            '"via":"debt_report_quick_pay"}',
+            '{"amount":${CustomerLedgerService.fromCents(cents)},"via":"debt_report_quick_pay"}',
       );
 
       await loadAll();

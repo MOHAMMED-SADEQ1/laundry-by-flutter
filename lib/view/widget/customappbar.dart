@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:laundry/core/theme/app_colors.dart';
+import 'package:laundry/services/i18n/l10n.dart';
 
 /// شريط علوي موحد بشعار متدرج وقاعدة دائرية
 class CustomAppbar extends StatelessWidget implements PreferredSizeWidget {
@@ -31,7 +32,7 @@ class CustomAppbar extends StatelessWidget implements PreferredSizeWidget {
                     color: Colors.white.withValues(alpha: 0.15),
                     shape: const CircleBorder(),
                     child: IconButton(
-                      tooltip: "رجوع",
+                      tooltip: tr("رجوع"),
                       onPressed: () => Get.back(),
                       icon: const Icon(
                         Icons.arrow_forward_rounded,

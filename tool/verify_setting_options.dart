@@ -166,6 +166,22 @@ void main() {
     SettingOptions.licenseCheckHours.defaultValue,
     AppConstants.licenseCheckInterval.inHours,
   );
+  check(
+    'B12. invoice_logo_size = AppConstants.invoiceLogoSizeDefaultMm',
+    SettingOptions.invoiceLogoSize.defaultValue,
+    AppConstants.invoiceLogoSizeDefaultMm,
+  );
+  check(
+    'B13. حدود مقاس الشعار تطابق الثوابت',
+    <num?>[
+      SettingOptions.invoiceLogoSize.min,
+      SettingOptions.invoiceLogoSize.max,
+    ],
+    <num>[
+      AppConstants.invoiceLogoSizeMinMm,
+      AppConstants.invoiceLogoSizeMaxMm,
+    ],
+  );
   print('=' * 70);
   print('C. تطبيع القيم (النوع · الحدود)');
   print('=' * 70);

@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:laundry/services/i18n/l10n.dart';
 import 'package:laundry/sqldb.dart';
 
 /// صف واحد في سجل التدقيق (مع اسم المستخدم والوقت المرجعي)
@@ -37,8 +38,15 @@ class AuditEntry {
     timestamp: DateTime.tryParse('${m['timestamp'] ?? ''}'),
   );
 
-  /// عنوان عربي مقروء للحدث
-  String get actionLabel {
+  /// عنوان عربي مقروء للحدث.
+  ///
+  /// 🚨 `action` **مفتاح تخزين** (`invoice_create` …) لا نصّ عرض، والعنوان
+  /// العربي يُترجَم عند العرض عبر [actionLabel]. فاصلنا الاثنين هنا كي لا
+  /// يبقى السجل عربيًّا في واجهة إنجليزية.
+  String get actionLabel => tr(rawActionLabel);
+
+  /// العنوان العربي الخام — **مفتاح القاموس**.
+  String get rawActionLabel {
     switch (action) {
       case 'credit_limit_override':
         return 'تجاوز حدّ الائتمان';
@@ -75,8 +83,11 @@ class AuditEntry {
     }
   }
 
-  /// جدول عربي مقروء
-  String get tableLabel {
+  /// جدول عربي مقروء — يُترجَم عند العرض مثل [actionLabel].
+  String get tableLabel => tr(rawTableLabel);
+
+  /// الجدول العربي الخام — **مفتاح القاموس**.
+  String get rawTableLabel {
     switch (tableName) {
       case 'invoices':
         return 'الفواتير';
@@ -161,9 +172,7 @@ class AuditService {
       }
 
       final sql = StringBuffer(
-        'SELECT a.*, u.username AS user_name '
-        'FROM audit_log a '
-        'LEFT JOIN users u ON u.user_id = a.user_id ',
+        'SELECT a.*, u.username AS user_name FROM audit_log a LEFT JOIN users u ON u.user_id = a.user_id ',
       );
       if (where.isNotEmpty) {
         sql.write('WHERE ${where.join(' AND ')} ');
@@ -276,7 +285,5 @@ class AuditService {
   }
 
   static String _key(DateTime d) =>
-      '${d.year.toString().padLeft(4, '0')}-'
-      '${d.month.toString().padLeft(2, '0')}-'
-      '${d.day.toString().padLeft(2, '0')}';
+      '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 }

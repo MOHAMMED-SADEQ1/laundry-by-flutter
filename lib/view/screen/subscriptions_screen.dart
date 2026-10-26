@@ -6,6 +6,8 @@ import 'package:intl/intl.dart';
 import 'package:laundry/controller/subscriptions_controller.dart';
 import 'package:laundry/core/constant/routes.dart';
 import 'package:laundry/core/theme/app_colors.dart';
+import 'package:laundry/services/i18n/l10n.dart';
+import 'package:laundry/services/payment/payment_method.dart';
 import 'package:laundry/services/security/session_manager.dart';
 import 'package:laundry/services/subscription/subscription_service.dart';
 import 'package:laundry/view/widget/common/animation_wrappers.dart';
@@ -22,10 +24,10 @@ class SubscriptionsScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: CustomAppbar(
-        title: 'الاشتراكات الشهرية',
-        subtitle: 'متابعة فواتير الاشتراكات واستحقاقاتها',
+        title: tr('الاشتراكات الشهرية'),
+        subtitle: tr('متابعة فواتير الاشتراكات واستحقاقاتها'),
         actions: IconButton(
-          tooltip: 'لوحة الاشتراكات',
+          tooltip: tr('لوحة الاشتراكات'),
           icon: const Icon(Icons.insights_outlined, color: Colors.white),
           onPressed: () => Get.toNamed(AppRoute.subscriptionDashboard),
         ),
@@ -47,8 +49,8 @@ class SubscriptionsScreen extends StatelessWidget {
           if (controller.subscriptions.isEmpty) {
             return EmptyState(
               icon: Icons.card_membership,
-              title: 'لا توجد اشتراكات',
-              subtitle: 'اضغط زر + لإضافة اشتراك لزبون محدد',
+              title: tr('لا توجد اشتراكات'),
+              subtitle: tr('اضغط زر + لإضافة اشتراك لزبون محدد'),
             );
           }
           // ─── ملخص ───
@@ -69,19 +71,19 @@ class SubscriptionsScreen extends StatelessWidget {
                 child: Row(
                   children: [
                     _MiniStat(
-                      label: 'اشتراكات نشطة',
+                      label: tr('اشتراكات نشطة'),
                       value: '$active',
                       color: AppColors.info,
                     ),
                     const SizedBox(width: 8),
                     _MiniStat(
-                      label: 'مستحقات متأخرة',
+                      label: tr('مستحقات متأخرة'),
                       value: '${overdue.length}',
                       color: AppColors.danger,
                     ),
                     const SizedBox(width: 8),
                     _MiniStat(
-                      label: 'إيراد الشهر المقطوع',
+                      label: tr('إيراد الشهر المقطوع'),
                       value: monthlyTotal.toStringAsFixed(0),
                       color: AppColors.success,
                     ),
@@ -111,19 +113,19 @@ class SubscriptionsScreen extends StatelessWidget {
                     child: Row(
                       children: [
                         _finCell(
-                          'خدمة مُقدَّمة',
+                          tr('خدمة مُقدَّمة'),
                           fin.recognized,
                           AppColors.info,
                         ),
                         _divider(),
                         _finCell(
-                          'محصَّل',
+                          tr('محصَّل'),
                           fin.collected,
                           AppColors.success,
                         ),
                         _divider(),
                         _finCell(
-                          'التزام متبقٍّ',
+                          tr('التزام متبقٍّ'),
                           fin.deferred,
                           AppColors.violet,
                         ),
@@ -148,8 +150,8 @@ class SubscriptionsScreen extends StatelessWidget {
                         ),
                         onPressed: () => _showStudyDialog(controller),
                         icon: const Icon(Icons.assessment, size: 17),
-                        label: const Text(
-                          'دراسة نهاية الشهر',
+                        label: Text(
+                          tr('دراسة نهاية الشهر'),
                           style: TextStyle(fontFamily: 'cairo', fontSize: 12.5),
                         ),
                       ),
@@ -168,8 +170,8 @@ class SubscriptionsScreen extends StatelessWidget {
                           Icons.notifications_active_outlined,
                           size: 17,
                         ),
-                        label: const Text(
-                          'مستحقّ التجديد',
+                        label: Text(
+                          tr('مستحقّ التجديد'),
                           style: TextStyle(fontFamily: 'cairo', fontSize: 12.5),
                         ),
                       ),
@@ -204,8 +206,8 @@ class SubscriptionsScreen extends StatelessWidget {
         onPressed: () => _showAddDialog(controller),
         backgroundColor: AppColors.primary,
         icon: const Icon(Icons.add, color: Colors.white),
-        label: const Text(
-          'اشتراك جديد',
+        label: Text(
+          tr('اشتراك جديد'),
           style: TextStyle(
             fontFamily: 'cairo',
             fontWeight: FontWeight.bold,
@@ -284,9 +286,9 @@ class SubscriptionsScreen extends StatelessWidget {
                       size: 20,
                     ),
                     const SizedBox(width: 8),
-                    const Expanded(
+                    Expanded(
                       child: Text(
-                        'اشتراكات تستحقّ التجديد خلال 7 أيام',
+                        tr('اشتراكات تستحقّ التجديد خلال 7 أيام'),
                         style: TextStyle(
                           fontFamily: 'cairo',
                           fontSize: 13.5,
@@ -307,8 +309,9 @@ class SubscriptionsScreen extends StatelessWidget {
                     ? Padding(
                         padding: const EdgeInsets.all(28),
                         child: Text(
-                          'لا يوجد اشتراك يستحقّ التجديد خلال الأيام السبعة '
-                          'القادمة.',
+                          tr(
+                            'لا يوجد اشتراك يستحقّ التجديد خلال الأيام السبعة القادمة.',
+                          ),
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             fontFamily: 'cairo',
@@ -371,8 +374,15 @@ class SubscriptionsScreen extends StatelessWidget {
                                         ),
                                       ),
                                       Text(
-                                        '${(s['amount'] ?? 0)} ر.س — يغطي حتى '
-                                        '${DateFormat('yyyy-MM-dd').format(SubscriptionService.paidUntil(s))}',
+                                        trf(
+                                          '{0} ر.س — يغطي حتى {1}',
+                                          [
+                                            '${s['amount'] ?? 0}',
+                                            DateFormat('yyyy-MM-dd').format(
+                                              SubscriptionService.paidUntil(s),
+                                            ),
+                                          ],
+                                        ),
                                         style: TextStyle(
                                           fontFamily: 'cairo',
                                           fontSize: 10,
@@ -383,7 +393,9 @@ class SubscriptionsScreen extends StatelessWidget {
                                   ),
                                 ),
                                 LabelChip(
-                                  text: d == 0 ? 'اليوم' : 'بعد $d يوم',
+                                  text: d == 0
+                                      ? tr('اليوم')
+                                      : trf('بعد {0} يوم', ['$d']),
                                   color: d <= 2
                                       ? AppColors.warning
                                       : AppColors.info,
@@ -438,7 +450,9 @@ class SubscriptionsScreen extends StatelessWidget {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'دراسة نهاية الشهر — ${DateFormat('yyyy-MM').format(DateTime.now())}',
+                        trf('دراسة نهاية الشهر — {0}', [
+                          DateFormat('yyyy-MM').format(DateTime.now()),
+                        ]),
                         style: const TextStyle(
                           fontFamily: 'cairo',
                           fontSize: 14,
@@ -460,19 +474,19 @@ class SubscriptionsScreen extends StatelessWidget {
                 child: Row(
                   children: [
                     _MiniStat(
-                      label: 'اشتراكات نشطة',
+                      label: tr('اشتراكات نشطة'),
                       value: '${rows.length}',
                       color: AppColors.info,
                     ),
                     const SizedBox(width: 8),
                     _MiniStat(
-                      label: 'قطع الغسيل',
+                      label: tr('قطع الغسيل'),
                       value: '$totalPieces',
                       color: AppColors.primary,
                     ),
                     const SizedBox(width: 8),
                     _MiniStat(
-                      label: 'مدفوع هذا الشهر',
+                      label: tr('مدفوع هذا الشهر'),
                       value: totalPaid.toStringAsFixed(0),
                       color: AppColors.success,
                     ),
@@ -486,7 +500,7 @@ class SubscriptionsScreen extends StatelessWidget {
                     ? Padding(
                         padding: const EdgeInsets.all(28),
                         child: Text(
-                          'لا توجد اشتراكات نشطة',
+                          tr('لا توجد اشتراكات نشطة'),
                           style: TextStyle(
                             fontFamily: 'cairo',
                             fontSize: 13,
@@ -500,7 +514,10 @@ class SubscriptionsScreen extends StatelessWidget {
                         separatorBuilder: (_, __) => const SizedBox(height: 8),
                         itemBuilder: (context, i) {
                           final r = rows[i];
-                          final overdue = (r['status'] as String) == 'متأخر';
+                          final statusRaw = r['status'] as String;
+                          final overdue =
+                              statusRaw == SubStatus.overdue.code ||
+                              statusRaw == SubStatus.overdue.label;
                           return Container(
                             padding: const EdgeInsets.all(10),
                             decoration: BoxDecoration(
@@ -529,7 +546,7 @@ class SubscriptionsScreen extends StatelessWidget {
                                       ),
                                     ),
                                     LabelChip(
-                                      text: r['status'] as String,
+                                      text: tr(r['status'] as String),
                                       color: overdue
                                           ? AppColors.danger
                                           : AppColors.success,
@@ -538,9 +555,16 @@ class SubscriptionsScreen extends StatelessWidget {
                                 ),
                                 const SizedBox(height: 5),
                                 Text(
-                                  'الاشتراك: ${r['price'].toStringAsFixed(0)} ر.س / '
-                                  '${r['period_days']} يوم — يغطي حتى '
-                                  '${DateFormat('yyyy-MM-dd').format(r['paid_until'] as DateTime)}',
+                                  trf(
+                                    'الاشتراك: {0} ر.س / {1} يوم — يغطي حتى {2}',
+                                    [
+                                      r['price'].toStringAsFixed(0),
+                                      '${r['period_days']}',
+                                      DateFormat('yyyy-MM-dd').format(
+                                        r['paid_until'] as DateTime,
+                                      ),
+                                    ],
+                                  ),
                                   style: TextStyle(
                                     fontFamily: 'cairo',
                                     fontSize: 10.5,
@@ -549,8 +573,13 @@ class SubscriptionsScreen extends StatelessWidget {
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
-                                  'قطع الغسيل: ${r['pieces']} قطعة — مدفوع هذا الشهر: '
-                                  '${r['paid_this_month'].toStringAsFixed(2)} ر.س',
+                                  trf(
+                                    'قطع الغسيل: {0} قطعة — مدفوع هذا الشهر: {1} ر.س',
+                                    [
+                                      '${r['pieces']}',
+                                      r['paid_this_month'].toStringAsFixed(2),
+                                    ],
+                                  ),
                                   style: TextStyle(
                                     fontFamily: 'cairo',
                                     fontSize: 10.5,
@@ -560,7 +589,7 @@ class SubscriptionsScreen extends StatelessWidget {
                                 if ('${r['top_pieces']}'.trim().isNotEmpty) ...[
                                   const SizedBox(height: 3),
                                   Text(
-                                    'الأصناف: ${r['top_pieces']}',
+                                    trf('الأصناف: {0}', ['${r['top_pieces']}']),
                                     maxLines: 2,
                                     overflow: TextOverflow.ellipsis,
                                     style: TextStyle(
@@ -620,8 +649,13 @@ class SubscriptionsScreen extends StatelessWidget {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'دراسة: ${study['customer_name']} — '
-                            '${DateFormat('yyyy-MM').format(DateTime.now())}',
+                        trf(
+                          'دراسة: {0} — {1}',
+                          [
+                            '${study['customer_name']}',
+                            DateFormat('yyyy-MM').format(DateTime.now()),
+                          ],
+                        ),
                         style: const TextStyle(
                           fontFamily: 'cairo',
                           fontSize: 14,
@@ -642,19 +676,19 @@ class SubscriptionsScreen extends StatelessWidget {
                 child: Row(
                   children: [
                     _MiniStat(
-                      label: 'قيمة غسيله',
+                      label: tr('قيمة غسيله'),
                       value: itemsValue.toStringAsFixed(0),
                       color: AppColors.info,
                     ),
                     const SizedBox(width: 8),
                     _MiniStat(
-                      label: 'مدفوع',
+                      label: tr('مدفوع'),
                       value: paid.toStringAsFixed(0),
                       color: AppColors.success,
                     ),
                     const SizedBox(width: 8),
                     _MiniStat(
-                      label: diff >= 0 ? 'نسبة لنا' : 'علينا',
+                      label: diff >= 0 ? tr('نسبة لنا') : tr('علينا'),
                       value: diff.abs().toStringAsFixed(0),
                       color: diff >= 0 ? AppColors.success : AppColors.danger,
                     ),
@@ -664,10 +698,14 @@ class SubscriptionsScreen extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 14),
                 child: Text(
-                  'الاشتراك: ${price.toStringAsFixed(0)} ر.س — '
-                  '${invoices.length} فاتورة هذا الشهر، '
-                  'قيمة غسيله الفعلية ${itemsValue.toStringAsFixed(2)} ر.س '
-                  '(التغطية: ${price.toStringAsFixed(0)} ر.س)',
+                  trf(
+                    'الاشتراك: {0} ر.س — {1} فاتورة هذا الشهر، قيمة غسيله الفعلية {2} ر.س (التغطية: {0} ر.س)',
+                    [
+                      price.toStringAsFixed(0),
+                      '${invoices.length}',
+                      itemsValue.toStringAsFixed(2),
+                    ],
+                  ),
                   style: TextStyle(
                     fontFamily: 'cairo',
                     fontSize: 10.5,
@@ -681,7 +719,7 @@ class SubscriptionsScreen extends StatelessWidget {
                     ? Padding(
                         padding: const EdgeInsets.all(28),
                         child: Text(
-                          'لا توجد فواتير مرتبطة بهذا الاشتراك هذا الشهر',
+                          tr('لا توجد فواتير مرتبطة بهذا الاشتراك هذا الشهر'),
                           style: TextStyle(
                             fontFamily: 'cairo',
                             fontSize: 13,
@@ -716,7 +754,10 @@ class SubscriptionsScreen extends StatelessWidget {
                                 Row(
                                   children: [
                                     Text(
-                                      'فاتورة #${inv['invoices_id']}',
+                                      trf(
+                                        'فاتورة #{0}',
+                                        ['${inv['invoices_id']}'],
+                                      ),
                                       style: TextStyle(
                                         fontFamily: 'cairo',
                                         fontSize: 12,
@@ -726,7 +767,13 @@ class SubscriptionsScreen extends StatelessWidget {
                                     ),
                                     const Spacer(),
                                     Text(
-                                      '$pieces قطعة — ${value.toStringAsFixed(2)} ر.س',
+                                      trf(
+                                        '{0} قطعة — {1} ر.س',
+                                        [
+                                          '$pieces',
+                                          value.toStringAsFixed(2),
+                                        ],
+                                      ),
                                       style: const TextStyle(
                                         fontFamily: 'cairo',
                                         fontSize: 11,
@@ -744,10 +791,15 @@ class SubscriptionsScreen extends StatelessWidget {
                                         bottom: 2,
                                       ),
                                       child: Text(
-                                        '• ${it['vestments']} (${it['content']}) '
-                                            '× ${it['count']} = '
-                                            '${it['total_price']} ر.س'
-                                            '${'${it['note'] ?? ''}'.trim().isNotEmpty ? '  📝 ${it['note']}' : ''}',
+                                        '${trf(
+                                          '• {0} ({1}) × {2} = {3} ر.س',
+                                          [
+                                            localized(it, 'vestments'),
+                                            localized(it, 'content'),
+                                            '${it['count']}',
+                                            '${it['total_price']}',
+                                          ],
+                                        )}${'${it['note'] ?? ''}'.trim().isNotEmpty ? '  📝 ${it['note']}' : ''}',
                                         style: TextStyle(
                                           fontFamily: 'cairo',
                                           fontSize: 10.5,
@@ -791,7 +843,7 @@ class SubscriptionsScreen extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                'إضافة اشتراك شهري',
+                tr('إضافة اشتراك شهري'),
                 style: TextStyle(
                   fontFamily: 'cairo',
                   fontSize: 16,
@@ -804,9 +856,9 @@ class SubscriptionsScreen extends StatelessWidget {
               DropdownButtonFormField<int>(
                 initialValue: selectedId,
                 isExpanded: true,
-                hint: const Text(
-                  'اختر الزبون...',
-                  style: TextStyle(fontFamily: 'cairo', fontSize: 12.5),
+                hint: Text(
+                  tr('اختر الزبون...'),
+                  style: const TextStyle(fontFamily: 'cairo', fontSize: 12.5),
                 ),
                 items:
                     controller.customers
@@ -859,9 +911,9 @@ class SubscriptionsScreen extends StatelessWidget {
                     child: TextField(
                       controller: nameCtrl,
                       enabled: false,
-                      decoration: const InputDecoration(
-                        labelText: 'اسم الزبون (من السجل)',
-                        labelStyle: TextStyle(
+                      decoration: InputDecoration(
+                        labelText: tr('اسم الزبون (من السجل)'),
+                        labelStyle: const TextStyle(
                           fontFamily: 'cairo',
                           fontSize: 12,
                         ),
@@ -880,14 +932,14 @@ class SubscriptionsScreen extends StatelessWidget {
                       keyboardType: const TextInputType.numberWithOptions(
                         decimal: true,
                       ),
-                      decoration: const InputDecoration(
-                        labelText: 'المبلغ الشهري (ر.س)',
-                        labelStyle: TextStyle(
+                      decoration: InputDecoration(
+                        labelText: tr('المبلغ الشهري (ر.س)'),
+                        labelStyle: const TextStyle(
                           fontFamily: 'cairo',
                           fontSize: 12,
                         ),
                         isDense: true,
-                        prefixIcon: Icon(Icons.payments, size: 18),
+                        prefixIcon: const Icon(Icons.payments, size: 18),
                       ),
                     ),
                   ),
@@ -896,14 +948,14 @@ class SubscriptionsScreen extends StatelessWidget {
                     child: TextField(
                       controller: periodCtrl,
                       keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        labelText: 'المدة بالأيام',
-                        labelStyle: TextStyle(
+                      decoration: InputDecoration(
+                        labelText: tr('المدة بالأيام'),
+                        labelStyle: const TextStyle(
                           fontFamily: 'cairo',
                           fontSize: 12,
                         ),
                         isDense: true,
-                        prefixIcon: Icon(Icons.calendar_month, size: 18),
+                        prefixIcon: const Icon(Icons.calendar_month, size: 18),
                       ),
                     ),
                   ),
@@ -916,19 +968,19 @@ class SubscriptionsScreen extends StatelessWidget {
                     child: TextField(
                       controller: limitPiecesCtrl,
                       keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        labelText: 'سقف القطع (اختياري)',
-                        helperText: '0 = بلا حدود',
-                        helperStyle: TextStyle(
+                      decoration: InputDecoration(
+                        labelText: tr('سقف القطع (اختياري)'),
+                        helperText: tr('0 = بلا حدود'),
+                        helperStyle: const TextStyle(
                           fontFamily: 'cairo',
                           fontSize: 10,
                         ),
-                        labelStyle: TextStyle(
+                        labelStyle: const TextStyle(
                           fontFamily: 'cairo',
                           fontSize: 12,
                         ),
                         isDense: true,
-                        prefixIcon: Icon(Icons.checkroom, size: 18),
+                        prefixIcon: const Icon(Icons.checkroom, size: 18),
                       ),
                     ),
                   ),
@@ -939,19 +991,19 @@ class SubscriptionsScreen extends StatelessWidget {
                       keyboardType: const TextInputType.numberWithOptions(
                         decimal: true,
                       ),
-                      decoration: const InputDecoration(
-                        labelText: 'سقف القيمة (اختياري)',
-                        helperText: '0 = بلا حدود',
-                        helperStyle: TextStyle(
+                      decoration: InputDecoration(
+                        labelText: tr('سقف القيمة (اختياري)'),
+                        helperText: tr('0 = بلا حدود'),
+                        helperStyle: const TextStyle(
                           fontFamily: 'cairo',
                           fontSize: 10,
                         ),
-                        labelStyle: TextStyle(
+                        labelStyle: const TextStyle(
                           fontFamily: 'cairo',
                           fontSize: 12,
                         ),
                         isDense: true,
-                        prefixIcon: Icon(Icons.speed, size: 18),
+                        prefixIcon: const Icon(Icons.speed, size: 18),
                       ),
                     ),
                   ),
@@ -963,9 +1015,9 @@ class SubscriptionsScreen extends StatelessWidget {
                   Expanded(
                     child: OutlinedButton(
                       onPressed: () => Get.back(),
-                      child: const Text(
-                        'إلغاء',
-                        style: TextStyle(fontFamily: 'cairo'),
+                      child: Text(
+                        tr('إلغاء'),
+                        style: const TextStyle(fontFamily: 'cairo'),
                       ),
                     ),
                   ),
@@ -978,8 +1030,8 @@ class SubscriptionsScreen extends StatelessWidget {
                       onPressed: () async {
                         if (selectedId == null) {
                           Get.snackbar(
-                            'تنبيه',
-                            'يجب اختيار زبون من سجل الزبائن',
+                            tr('تنبيه'),
+                            tr('يجب اختيار زبون من سجل الزبائن'),
                             snackPosition: SnackPosition.BOTTOM,
                             backgroundColor: AppColors.warning,
                             colorText: Colors.white,
@@ -994,8 +1046,8 @@ class SubscriptionsScreen extends StatelessWidget {
                         final period = int.tryParse(periodCtrl.text) ?? 30;
                         if (amount <= 0) {
                           Get.snackbar(
-                            'تنبيه',
-                            'أدخل مبلغاً صحيحاً',
+                            tr('تنبيه'),
+                            tr('أدخل مبلغاً صحيحاً'),
                             snackPosition: SnackPosition.BOTTOM,
                             backgroundColor: AppColors.warning,
                             colorText: Colors.white,
@@ -1020,9 +1072,9 @@ class SubscriptionsScreen extends StatelessWidget {
                         );
                         Get.back();
                       },
-                      child: const Text(
-                        'إضافة الاشتراك',
-                        style: TextStyle(
+                      child: Text(
+                        tr('إضافة الاشتراك'),
+                        style: const TextStyle(
                           fontFamily: 'cairo',
                           fontWeight: FontWeight.bold,
                           color: Colors.white,
@@ -1114,11 +1166,14 @@ class _SubscriptionCard extends StatelessWidget {
       SubStatus.cancelled => AppColors.textMuted,
     };
     final statusText = switch (status) {
-      SubStatus.pending => 'لم يُسدد بعد',
-      SubStatus.overdue => 'متأخر عن السداد',
-      SubStatus.capped => 'استُهلك السقف',
-      SubStatus.active => days <= 7 ? 'سداد قريب ($days يوم)' : 'نشط ($days يوم)',
-      SubStatus.cancelled => 'ملغى',
+      SubStatus.pending => tr('لم يُسدد بعد'),
+      SubStatus.overdue => tr('متأخر عن السداد'),
+      SubStatus.capped => tr('استُهلك السقف'),
+      SubStatus.active =>
+        days <= 7
+            ? trf('سداد قريب ({0} يوم)', ['$days'])
+            : trf('نشط ({0} يوم)', ['$days']),
+      SubStatus.cancelled => tr('ملغى'),
     };
 
     final ratio = (sub['usage_ratio'] as num?)?.toDouble() ?? 0;
@@ -1163,7 +1218,14 @@ class _SubscriptionCard extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      'اشتراك #${sub['subscription_id']} — $amount ر.س / ${sub['period_days']} يوم',
+                      trf(
+                        'اشتراك #{0} — {1} ر.س / {2} يوم',
+                        [
+                          '${sub['subscription_id']}',
+                          '$amount',
+                          '${sub['period_days']}',
+                        ],
+                      ),
                       style: TextStyle(
                         fontFamily: 'cairo',
                         fontSize: 11,
@@ -1183,7 +1245,7 @@ class _SubscriptionCard extends StatelessWidget {
           if (sub['notes'] != null && '${sub['notes']}'.isNotEmpty) ...[
             const SizedBox(height: 6),
             Text(
-              '${sub['notes']}',
+              localized(sub, 'notes'),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
@@ -1216,8 +1278,12 @@ class _SubscriptionCard extends StatelessWidget {
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
-                        'استهلاك الدورة: $usedP قطعة'
-                        '${hasLimit && limitP > 0 ? ' / $limitP' : ''}',
+                        hasLimit && limitP > 0
+                            ? trf('استهلاك الدورة: {0} قطعة / {1}', [
+                                '$usedP',
+                                '$limitP',
+                              ])
+                            : trf('استهلاك الدورة: {0} قطعة', ['$usedP']),
                         style: const TextStyle(
                           fontFamily: 'cairo',
                           fontSize: 11.5,
@@ -1228,8 +1294,10 @@ class _SubscriptionCard extends StatelessWidget {
                     ),
                     if (limitV > 0)
                       Text(
-                        '${usedV.toStringAsFixed(0)} / '
-                        '${limitV.toStringAsFixed(0)} ر.س',
+                        trf('{0} / {1} ر.س', [
+                          usedV.toStringAsFixed(0),
+                          limitV.toStringAsFixed(0),
+                        ]),
                         style: const TextStyle(
                           fontFamily: 'cairo',
                           fontSize: 10.5,
@@ -1260,9 +1328,12 @@ class _SubscriptionCard extends StatelessWidget {
                   const SizedBox(height: 4),
                   Text(
                     ratio >= 1
-                        ? 'السقف مستهلك بالكامل — لن تُقبل فاتورة جديدة إلا '
-                              'بموافقة مدير أو تجديد'
-                        : 'استُهلك ${(ratio * 100).round()}% من السقف',
+                        ? tr(
+                            'السقف مستهلك بالكامل — لن تُقبل فاتورة جديدة إلا بموافقة مدير أو تجديد',
+                          )
+                        : trf('استُهلك {0}% من السقف', [
+                            '${(ratio * 100).round()}',
+                          ]),
                     style: TextStyle(
                       fontFamily: 'cairo',
                       fontSize: 9.5,
@@ -1285,7 +1356,7 @@ class _SubscriptionCard extends StatelessWidget {
                       ),
                       const SizedBox(width: 4),
                       Text(
-                        'بلا سقف استخدام — يُنصح بتحديد حدّ',
+                        tr('بلا سقف استخدام — يُنصح بتحديد حدّ'),
                         style: TextStyle(
                           fontFamily: 'cairo',
                           fontSize: 9.5,
@@ -1306,7 +1377,9 @@ class _SubscriptionCard extends StatelessWidget {
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
-                        'مدفوع هذا الشهر: ${(sub['paid_this_month'] ?? 0).toStringAsFixed(2)} ر.س',
+                        trf('مدفوع هذا الشهر: {0} ر.س', [
+                          (sub['paid_this_month'] ?? 0).toStringAsFixed(2),
+                        ]),
                         style: const TextStyle(
                           fontFamily: 'cairo',
                           fontSize: 11,
@@ -1317,7 +1390,11 @@ class _SubscriptionCard extends StatelessWidget {
                     if (status == SubStatus.active ||
                         status == SubStatus.capped)
                       Text(
-                        'حتى ${DateFormat('yyyy-MM-dd').format(SubscriptionService.paidUntil(sub))}',
+                        trf('حتى {0}', [
+                          DateFormat(
+                            'yyyy-MM-dd',
+                          ).format(SubscriptionService.paidUntil(sub)),
+                        ]),
                         style: TextStyle(
                           fontFamily: 'cairo',
                           fontSize: 10,
@@ -1357,9 +1434,13 @@ class _SubscriptionCard extends StatelessWidget {
                       const SizedBox(width: 6),
                       Expanded(
                         child: Text(
-                          'فواتير هذا الشهر: ${sub['invoices_count'] ?? 0} '
-                          'بقيمة ${(sub['invoices_value'] ?? 0).toStringAsFixed(0)} ر.س '
-                          '(محفوظة داخلياً — تُطبع بدون أسعار)',
+                          trf(
+                            'فواتير هذا الشهر: {0} بقيمة {1} ر.س (محفوظة داخلياً — تُطبع بدون أسعار)',
+                            [
+                              '${sub['invoices_count'] ?? 0}',
+                              (sub['invoices_value'] ?? 0).toStringAsFixed(0),
+                            ],
+                          ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
@@ -1381,7 +1462,7 @@ class _SubscriptionCard extends StatelessWidget {
             children: [
               Expanded(
                 child: _ActionBtn(
-                  label: 'فواتير ودراسة',
+                  label: tr('فواتير ودراسة'),
                   icon: Icons.assessment_outlined,
                   color: AppColors.info,
                   onTap: () => SubscriptionsScreen.showSubscriberStudyDialog(
@@ -1393,7 +1474,7 @@ class _SubscriptionCard extends StatelessWidget {
               const SizedBox(width: 8),
               Expanded(
                 child: _ActionBtn(
-                  label: 'تسجيل دفعة',
+                  label: tr('تسجيل دفعة'),
                   icon: Icons.payment_rounded,
                   color: AppColors.success,
                   onTap: () => _showPaymentDialog(controller, sub),
@@ -1402,7 +1483,7 @@ class _SubscriptionCard extends StatelessWidget {
               const SizedBox(width: 8),
               Expanded(
                 child: _ActionBtn(
-                  label: 'السقف',
+                  label: tr('السقف'),
                   icon: Icons.speed,
                   color: AppColors.violet,
                   onTap: () => _showLimitsDialog(controller, sub),
@@ -1415,7 +1496,7 @@ class _SubscriptionCard extends StatelessWidget {
             children: [
               Expanded(
                 child: _ActionBtn(
-                  label: 'إلغاء بتسوية',
+                  label: tr('إلغاء بتسوية'),
                   icon: Icons.cancel_outlined,
                   color: AppColors.danger,
                   onTap: () => _confirmCancel(controller, sub),
@@ -1432,8 +1513,8 @@ class _SubscriptionCard extends StatelessWidget {
   void _showLimitsDialog(SubscriptionsController controller, sub) {
     if (!SessionManager.isManager) {
       Get.snackbar(
-        'صلاحية غير كافية',
-        'تعديل سقف الاستخدام قرار إداري — لا يملكه إلا مدير.',
+        tr('صلاحية غير كافية'),
+        tr('تعديل سقف الاستخدام قرار إداري — لا يملكه إلا مدير.'),
         snackPosition: SnackPosition.BOTTOM,
         backgroundColor: AppColors.danger,
         colorText: Colors.white,
@@ -1464,7 +1545,7 @@ class _SubscriptionCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'سقف الاستخدام — ${sub['customer_name']}',
+                trf('سقف الاستخدام — {0}', ['${sub['customer_name']}']),
                 style: TextStyle(
                   fontFamily: 'cairo',
                   fontSize: 15,
@@ -1474,8 +1555,9 @@ class _SubscriptionCard extends StatelessWidget {
               ),
               const SizedBox(height: 6),
               Text(
-                'السقف يحمي من اشتراك صغير يستهلك غسيلًا بلا حدّ. '
-                'اتركه فارغًا أو صفرًا لإلغاء السقف. يُطبَّق أيّهما استُنفد أولًا.',
+                tr(
+                  'السقف يحمي من اشتراك صغير يستهلك غسيلًا بلا حدّ. اتركه فارغًا أو صفرًا لإلغاء السقف. يُطبَّق أيّهما استُنفد أولًا.',
+                ),
                 style: TextStyle(
                   fontFamily: 'cairo',
                   fontSize: 10.5,
@@ -1490,15 +1572,15 @@ class _SubscriptionCard extends StatelessWidget {
                     child: TextField(
                       controller: piecesCtrl,
                       keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        labelText: 'سقف القطع',
-                        hintText: 'مثال: 50',
-                        labelStyle: TextStyle(
+                      decoration: InputDecoration(
+                        labelText: tr('سقف القطع'),
+                        hintText: tr('مثال: 50'),
+                        labelStyle: const TextStyle(
                           fontFamily: 'cairo',
                           fontSize: 12,
                         ),
                         isDense: true,
-                        prefixIcon: Icon(Icons.checkroom, size: 18),
+                        prefixIcon: const Icon(Icons.checkroom, size: 18),
                       ),
                     ),
                   ),
@@ -1509,15 +1591,15 @@ class _SubscriptionCard extends StatelessWidget {
                       keyboardType: const TextInputType.numberWithOptions(
                         decimal: true,
                       ),
-                      decoration: const InputDecoration(
-                        labelText: 'سقف القيمة (ر.س)',
-                        hintText: 'مثال: 150',
-                        labelStyle: TextStyle(
+                      decoration: InputDecoration(
+                        labelText: tr('سقف القيمة (ر.س)'),
+                        hintText: tr('مثال: 150'),
+                        labelStyle: const TextStyle(
                           fontFamily: 'cairo',
                           fontSize: 12,
                         ),
                         isDense: true,
-                        prefixIcon: Icon(Icons.attach_money, size: 18),
+                        prefixIcon: const Icon(Icons.attach_money, size: 18),
                       ),
                     ),
                   ),
@@ -1531,10 +1613,20 @@ class _SubscriptionCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Text(
-                  'الحالي: '
-                  '${SubscriptionService.limitPieces(sub) > 0 ? '${SubscriptionService.limitPieces(sub)} قطعة' : 'بلا سقف قطع'}'
-                  ' — '
-                  '${SubscriptionService.limitValue(sub) > 0 ? '${SubscriptionService.limitValue(sub).toStringAsFixed(0)} ر.س' : 'بلا سقف قيمة'}',
+                  trf('الحالي: {0} — {1}', [
+                    SubscriptionService.limitPieces(sub) > 0
+                        ? trf('{0} قطعة', [
+                            '${SubscriptionService.limitPieces(sub)}',
+                          ])
+                        : tr('بلا سقف قطع'),
+                    SubscriptionService.limitValue(sub) > 0
+                        ? trf('{0} ر.س', [
+                            SubscriptionService.limitValue(
+                              sub,
+                            ).toStringAsFixed(0),
+                          ])
+                        : tr('بلا سقف قيمة'),
+                  ]),
                   style: TextStyle(
                     fontFamily: 'cairo',
                     fontSize: 10.5,
@@ -1548,9 +1640,9 @@ class _SubscriptionCard extends StatelessWidget {
                   Expanded(
                     child: OutlinedButton(
                       onPressed: () => Get.back(),
-                      child: const Text(
-                        'إلغاء',
-                        style: TextStyle(fontFamily: 'cairo'),
+                      child: Text(
+                        tr('إلغاء'),
+                        style: const TextStyle(fontFamily: 'cairo'),
                       ),
                     ),
                   ),
@@ -1574,18 +1666,21 @@ class _SubscriptionCard extends StatelessWidget {
                         );
                         if (Get.isDialogOpen == true) Get.back();
                         Get.snackbar(
-                          'تم التحديث',
-                          'سقف الاستخدام: '
-                          '${p > 0 ? '$p قطعة' : 'بلا سقف قطع'} — '
-                          '${v > 0 ? '${v.toStringAsFixed(0)} ر.س' : 'بلا سقف قيمة'}',
+                          tr('تم التحديث'),
+                          trf('سقف الاستخدام: {0} — {1}', [
+                            p > 0 ? trf('{0} قطعة', ['$p']) : tr('بلا سقف قطع'),
+                            v > 0
+                                ? trf('{0} ر.س', [v.toStringAsFixed(0)])
+                                : tr('بلا سقف قيمة'),
+                          ]),
                           snackPosition: SnackPosition.BOTTOM,
                           backgroundColor: AppColors.success,
                           colorText: Colors.white,
                         );
                       },
-                      child: const Text(
-                        'حفظ السقف',
-                        style: TextStyle(
+                      child: Text(
+                        tr('حفظ السقف'),
+                        style: const TextStyle(
                           fontFamily: 'cairo',
                           fontWeight: FontWeight.bold,
                           color: Colors.white,
@@ -1648,7 +1743,9 @@ class _SubscriptionCard extends StatelessWidget {
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
-                          'إلغاء بتسوية — ${sub['customer_name']}',
+                          trf('إلغاء بتسوية — {0}', [
+                            '${sub['customer_name']}',
+                          ]),
                           style: TextStyle(
                             fontFamily: 'cairo',
                             fontSize: 14.5,
@@ -1676,10 +1773,10 @@ class _SubscriptionCard extends StatelessWidget {
                         children: [
                           Row(
                             children: [
-                              const Expanded(
+                              Expanded(
                                 child: Text(
-                                  'قيمة الأيام غير المُقدَّمة',
-                                  style: TextStyle(
+                                  tr('قيمة الأيام غير المُقدَّمة'),
+                                  style: const TextStyle(
                                     fontFamily: 'cairo',
                                     fontSize: 12,
                                     fontWeight: FontWeight.bold,
@@ -1687,7 +1784,7 @@ class _SubscriptionCard extends StatelessWidget {
                                 ),
                               ),
                               Text(
-                                '${refund.toStringAsFixed(2)} ر.س',
+                                trf('{0} ر.س', [refund.toStringAsFixed(2)]),
                                 style: const TextStyle(
                                   fontFamily: 'cairo',
                                   fontSize: 15,
@@ -1699,10 +1796,14 @@ class _SubscriptionCard extends StatelessWidget {
                           ),
                           const SizedBox(height: 5),
                           Text(
-                            'متبقٍّ $remaining يوم من أصل $days — '
-                            '${(price / days).toStringAsFixed(2)} ر.س/يوم. '
-                            'هذا المبلغ مقابل خدمة لن تُقدَّم، فلا يصحّ أن يبقى '
-                            'إيرادًا للمحل.',
+                            trf(
+                              'متبقٍّ {0} يوم من أصل {1} — {2} ر.س/يوم. هذا المبلغ مقابل خدمة لن تُقدَّم، فلا يصحّ أن يبقى إيرادًا للمحل.',
+                              [
+                                '$remaining',
+                                '$days',
+                                (price / days).toStringAsFixed(2),
+                              ],
+                            ),
                             style: TextStyle(
                               fontFamily: 'cairo',
                               fontSize: 10.5,
@@ -1715,7 +1816,7 @@ class _SubscriptionCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      'طريقة التسوية',
+                      tr('طريقة التسوية'),
                       style: TextStyle(
                         fontFamily: 'cairo',
                         fontSize: 12,
@@ -1725,10 +1826,10 @@ class _SubscriptionCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 7),
                     _settlementOption(
-                      title: 'رصيد لدى المحل (مُوصى به)',
-                      subtitle:
-                          'يبقى في الدرج كسلفة للزبون، ويُخصم تلقائيًا من '
-                          'فواتيره القادمة. لا يُخرج نقدية.',
+                      title: tr('رصيد لدى المحل (مُوصى به)'),
+                      subtitle: tr(
+                        'يبقى في الدرج كسلفة للزبون، ويُخصم تلقائيًا من فواتيره القادمة. لا يُخرج نقدية.',
+                      ),
                       icon: Icons.account_balance_wallet_outlined,
                       selected: refundAsCredit,
                       color: AppColors.success,
@@ -1736,10 +1837,10 @@ class _SubscriptionCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 6),
                     _settlementOption(
-                      title: 'استرداد نقدي',
-                      subtitle:
-                          'يُخرج المبلغ من الدرج ويُسجَّل في المصروفات، '
-                          'فيظهر في إقفال الوردية.',
+                      title: tr('استرداد نقدي'),
+                      subtitle: tr(
+                        'يُخرج المبلغ من الدرج ويُسجَّل في المصروفات، فيظهر في إقفال الوردية.',
+                      ),
                       icon: Icons.payments_outlined,
                       selected: !refundAsCredit,
                       color: AppColors.danger,
@@ -1756,10 +1857,12 @@ class _SubscriptionCard extends StatelessWidget {
                       ),
                       child: Text(
                         remaining <= 0
-                            ? 'لا توجد أيام مدفوعة متبقّية — الإلغاء تعطيل '
-                                  'بسيط بلا استرداد.'
-                            : 'سعر الاشتراك صفر — لا يمكن احتساب قيمة أيام '
-                                  'للتسوية.',
+                            ? tr(
+                                'لا توجد أيام مدفوعة متبقّية — الإلغاء تعطيل بسيط بلا استرداد.',
+                              )
+                            : tr(
+                                'سعر الاشتراك صفر — لا يمكن احتساب قيمة أيام للتسوية.',
+                              ),
                         style: TextStyle(
                           fontFamily: 'cairo',
                           fontSize: 11.5,
@@ -1774,9 +1877,9 @@ class _SubscriptionCard extends StatelessWidget {
                       Expanded(
                         child: OutlinedButton(
                           onPressed: () => Get.back(),
-                          child: const Text(
-                            'تراجع',
-                            style: TextStyle(fontFamily: 'cairo'),
+                          child: Text(
+                            tr('تراجع'),
+                            style: const TextStyle(fontFamily: 'cairo'),
                           ),
                         ),
                       ),
@@ -1790,25 +1893,34 @@ class _SubscriptionCard extends StatelessWidget {
                             final result = await controller.cancel(
                               sub['subscription_id'] as int,
                               refundAsCredit: refundAsCredit,
-                              reason: 'إلغاء من شاشة الاشتراكات',
+                              reason: tr('إلغاء من شاشة الاشتراكات'),
                             );
                             if (Get.isDialogOpen == true) Get.back();
                             Get.snackbar(
-                              'تم الإلغاء',
+                              tr('تم الإلغاء'),
                               result.hasRefund
-                                  ? 'أُعيد ${result.refundedAmount.toStringAsFixed(2)} ر.س '
-                                        '${result.refundAsCredit ? 'رصيدًا لدى المحل' : 'نقدًا'} '
-                                        'عن ${result.remainingDays} يوم غير مُقدَّم.'
-                                  : 'عُطِّل الاشتراك بلا استرداد.',
+                                  ? trf(
+                                      'أُعيد {0} ر.س {1} عن {2} يوم غير مُقدَّم.',
+                                      [
+                                        result.refundedAmount.toStringAsFixed(
+                                          2,
+                                        ),
+                                        result.refundAsCredit
+                                            ? tr('رصيدًا لدى المحل')
+                                            : tr('نقدًا'),
+                                        '${result.remainingDays}',
+                                      ],
+                                    )
+                                  : tr('عُطِّل الاشتراك بلا استرداد.'),
                               snackPosition: SnackPosition.BOTTOM,
                               backgroundColor: AppColors.success,
                               colorText: Colors.white,
                               duration: const Duration(seconds: 5),
                             );
                           },
-                          child: const Text(
-                            'تأكيد الإلغاء',
-                            style: TextStyle(
+                          child: Text(
+                            tr('تأكيد الإلغاء'),
+                            style: const TextStyle(
                               fontFamily: 'cairo',
                               fontWeight: FontWeight.bold,
                               color: Colors.white,
@@ -1900,7 +2012,7 @@ class _SubscriptionCard extends StatelessWidget {
   void _showPaymentDialog(SubscriptionsController controller, sub) {
     final price = (sub['amount'] ?? 0).toDouble();
     final amountCtrl = TextEditingController(text: price.toStringAsFixed(2));
-    String method = 'كاش';
+    String method = PaymentMethod.cash.key;
     String notes = '';
 
     Get.dialog(
@@ -1923,7 +2035,7 @@ class _SubscriptionCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'تسجيل دفعة — ${sub['customer_name']}',
+                      trf('تسجيل دفعة — {0}', ['${sub['customer_name']}']),
                       style: TextStyle(
                         fontFamily: 'cairo',
                         fontSize: 15,
@@ -1933,8 +2045,16 @@ class _SubscriptionCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'الاشتراك: $price ر.س / ${sub['period_days']} يوم — '
-                      'التغطية الحالية حتى ${DateFormat('yyyy-MM-dd').format(controller.paidUntil(sub))}',
+                      trf(
+                        'الاشتراك: {0} ر.س / {1} يوم — التغطية الحالية حتى {2}',
+                        [
+                          '$price',
+                          '${sub['period_days']}',
+                          DateFormat(
+                            'yyyy-MM-dd',
+                          ).format(controller.paidUntil(sub)),
+                        ],
+                      ),
                       style: TextStyle(
                         fontFamily: 'cairo',
                         fontSize: 11,
@@ -1942,9 +2062,9 @@ class _SubscriptionCard extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 14),
-                    const Text(
-                      'مبلغ الدفعة (ر.س)',
-                      style: TextStyle(
+                    Text(
+                      tr('مبلغ الدفعة (ر.س)'),
+                      style: const TextStyle(
                         fontFamily: 'cairo',
                         fontSize: 12,
                         fontWeight: FontWeight.bold,
@@ -1956,20 +2076,25 @@ class _SubscriptionCard extends StatelessWidget {
                       runSpacing: 8,
                       children: [
                         _QuickAmtChip(
-                          label: 'ربع (${(price * 0.25).toStringAsFixed(0)})',
+                          label: trf('ربع ({0})', [
+                            (price * 0.25).toStringAsFixed(0),
+                          ]),
                           onTap: () => setAmount(price * 0.25),
                         ),
                         _QuickAmtChip(
-                          label: 'نصف (${(price * 0.5).toStringAsFixed(0)})',
+                          label: trf('نصف ({0})', [
+                            (price * 0.5).toStringAsFixed(0),
+                          ]),
                           onTap: () => setAmount(price * 0.5),
                         ),
                         _QuickAmtChip(
-                          label: 'ثلاثة أرباع '
-                              '(${(price * 0.75).toStringAsFixed(0)})',
+                          label: trf('ثلاثة أرباع ({0})', [
+                            (price * 0.75).toStringAsFixed(0),
+                          ]),
                           onTap: () => setAmount(price * 0.75),
                         ),
                         _QuickAmtChip(
-                          label: 'كامل (${price.toStringAsFixed(0)})',
+                          label: trf('كامل ({0})', [price.toStringAsFixed(0)]),
                           selected: true,
                           onTap: () => setAmount(price),
                         ),
@@ -1989,7 +2114,7 @@ class _SubscriptionCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      'طريقة الدفع',
+                      tr('طريقة الدفع'),
                       style: TextStyle(
                         fontFamily: 'cairo',
                         fontSize: 12,
@@ -2001,29 +2126,31 @@ class _SubscriptionCard extends StatelessWidget {
                     Row(
                       children: [
                         _MethodChip(
-                          label: 'كاش',
-                          selected: method == 'كاش',
-                          onTap: () => setState(() => method = 'كاش'),
+                          label: PaymentMethod.cash.label,
+                          selected: method == PaymentMethod.cash.key,
+                          onTap: () =>
+                              setState(() => method = PaymentMethod.cash.key),
                         ),
                         const SizedBox(width: 8),
                         _MethodChip(
-                          label: 'شبكة',
-                          selected: method == 'شبكة',
-                          onTap: () => setState(() => method = 'شبكة'),
+                          label: PaymentMethod.card.label,
+                          selected: method == PaymentMethod.card.key,
+                          onTap: () =>
+                              setState(() => method = PaymentMethod.card.key),
                         ),
                       ],
                     ),
                     const SizedBox(height: 12),
                     TextField(
                       onChanged: (v) => notes = v,
-                      decoration: const InputDecoration(
+                      decoration: InputDecoration(
                         isDense: true,
-                        labelText: 'ملاحظة (اختياري)',
-                        labelStyle: TextStyle(
+                        labelText: tr('ملاحظة (اختياري)'),
+                        labelStyle: const TextStyle(
                           fontFamily: 'cairo',
                           fontSize: 12,
                         ),
-                        prefixIcon: Icon(Icons.sticky_note_2, size: 18),
+                        prefixIcon: const Icon(Icons.sticky_note_2, size: 18),
                       ),
                     ),
                     const SizedBox(height: 16),
@@ -2032,10 +2159,10 @@ class _SubscriptionCard extends StatelessWidget {
                         Expanded(
                           child: OutlinedButton(
                             onPressed: () => Get.back(),
-                            child: const Text(
-                              'إلغاء',
-                              style: TextStyle(fontFamily: 'cairo'),
-                            ),
+                      child: Text(
+                        tr('إلغاء'),
+                        style: const TextStyle(fontFamily: 'cairo'),
+                      ),
                           ),
                         ),
                         const SizedBox(width: 10),
@@ -2052,8 +2179,8 @@ class _SubscriptionCard extends StatelessWidget {
                                   0;
                               if (amt <= 0) {
                                 Get.snackbar(
-                                  'تنبيه',
-                                  'أدخل مبلغاً صحيحاً أكبر من صفر',
+                                  tr('تنبيه'),
+                                  tr('أدخل مبلغاً صحيحاً أكبر من صفر'),
                                   snackPosition: SnackPosition.BOTTOM,
                                   backgroundColor: AppColors.warning,
                                   colorText: Colors.white,
@@ -2068,17 +2195,22 @@ class _SubscriptionCard extends StatelessWidget {
                               );
                               if (context.mounted) Get.back();
                               Get.snackbar(
-                                'تم تسجيل الدفعة',
-                                '$amt ر.س — التغطية حتى '
-                                    '${DateFormat('yyyy-MM-dd').format(until)}',
+                                tr('تم تسجيل الدفعة'),
+                                trf(
+                                  '{0} ر.س — التغطية حتى {1}',
+                                  [
+                                    '$amt',
+                                    DateFormat('yyyy-MM-dd').format(until),
+                                  ],
+                                ),
                                 snackPosition: SnackPosition.BOTTOM,
                                 backgroundColor: AppColors.success,
                                 colorText: Colors.white,
                               );
                             },
-                            child: const Text(
-                              'تسجيل الدفعة',
-                              style: TextStyle(
+                            child: Text(
+                              tr('تسجيل الدفعة'),
+                              style: const TextStyle(
                                 fontFamily: 'cairo',
                                 fontWeight: FontWeight.bold,
                                 color: Colors.white,

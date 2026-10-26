@@ -1,3 +1,6 @@
+import 'package:laundry/services/i18n/currency.dart';
+import 'package:laundry/services/i18n/l10n.dart';
+
 /// نتيجة تقييم كود خصم على فاتورة.
 ///
 /// [amount] = قيمة الخصم المحسوبة (0 إن كان الكود غير صالح).
@@ -65,7 +68,7 @@ class DiscountRules {
     if (((record['is_active'] as num?)?.toInt() ?? 0) != 1) {
       return DiscountCheck(
         valid: false,
-        message: 'كود «$code» معطَّل',
+        message: trf('كود «{0}» معطَّل', [code]),
         record: record,
       );
     }
@@ -74,7 +77,7 @@ class DiscountRules {
     if (start != null && _dayOnly(today).isBefore(start)) {
       return DiscountCheck(
         valid: false,
-        message: 'كود «$code» لم يبدأ بعد — يبدأ ${_fmt(start)}',
+        message: trf('كود «{0}» لم يبدأ بعد — يبدأ {1}', [code, _fmt(start)]),
         record: record,
       );
     }
@@ -85,7 +88,7 @@ class DiscountRules {
     if (end != null && _dayOnly(today).isAfter(end)) {
       return DiscountCheck(
         valid: false,
-        message: 'انتهى كود «$code» في ${_fmt(end)}',
+        message: trf('انتهى كود «{0}» في {1}', [code, _fmt(end)]),
         record: record,
       );
     }
@@ -95,7 +98,7 @@ class DiscountRules {
     if (maxUses != null && maxUses > 0 && used >= maxUses) {
       return DiscountCheck(
         valid: false,
-        message: 'استُنفد كود «$code» ($used/$maxUses)',
+        message: trf('استُنفد كود «{0}» ({1}/{2})', [code, used, maxUses]),
         record: record,
       );
     }
@@ -104,7 +107,7 @@ class DiscountRules {
     if (value <= 0) {
       return DiscountCheck(
         valid: false,
-        message: 'قيمة كود «$code» غير صالحة',
+        message: trf('قيمة كود «{0}» غير صالحة', [code]),
         record: record,
       );
     }
@@ -136,8 +139,14 @@ class DiscountRules {
     return DiscountCheck(
       valid: true,
       message: isPercentage
-          ? 'خصم ${_plain(value)}% — «${record['name']}»'
-          : 'خصم ${amount.toStringAsFixed(2)} ر.س — «${record['name']}»',
+          ? trf('خصم {0}% — «{1}»', [
+              _plain(value),
+              L10n.localized(record, 'name'),
+            ])
+          : trf('خصم {0} — «{1}»', [
+              '${amount.toStringAsFixed(2)} ${Currency.symbol}',
+              L10n.localized(record, 'name'),
+            ]),
       record: record,
       amount: amount,
     );
@@ -157,8 +166,7 @@ class DiscountRules {
   }
 
   static String _fmt(DateTime d) =>
-      '${d.year}-${d.month.toString().padLeft(2, '0')}-'
-      '${d.day.toString().padLeft(2, '0')}';
+      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
   static String _plain(double v) {
     final s = v.toStringAsFixed(2);

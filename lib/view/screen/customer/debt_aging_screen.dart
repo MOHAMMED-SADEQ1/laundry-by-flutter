@@ -1,16 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
-// `intl` يصدّر TextDirection خاصته فيتعارض مع TextDirection.rtl في Flutter،
+// `intl` يصدّر TextDirection خاصته فيتعارض مع appTextDirection في Flutter،
 // لذلك نُخفي نسخته ونستورد الرموز المطلوبة صراحةً.
 import 'package:intl/intl.dart' hide TextDirection;
 import 'package:laundry/controller/customer/debt_report_controller.dart';
 import 'package:laundry/core/theme/app_colors.dart';
 import 'package:laundry/services/customer/debt_reminder_service.dart';
+import 'package:laundry/services/i18n/l10n.dart';
 import 'package:laundry/services/customer/debt_report_service.dart';
 import 'package:laundry/services/security/session_manager.dart';
 import 'package:laundry/sqldb.dart';
 import 'package:laundry/view/widget/customer/customer_statement_sheet.dart';
+import 'package:laundry/services/i18n/ui_direction.dart';
 
 /// تقرير أعمار الديون (Aging Report).
 ///
@@ -33,13 +35,13 @@ class _DebtAgingScreenState extends State<DebtAgingScreen> {
   @override
   Widget build(BuildContext context) {
     return Directionality(
-      textDirection: TextDirection.rtl,
+      textDirection: L10n.isRtl ? appTextDirection : TextDirection.ltr,
       child: Scaffold(
         backgroundColor: AppColors.background,
         appBar: AppBar(
-          title: const Text(
-            'أعمار الديون',
-            style: TextStyle(
+          title: Text(
+            tr('أعمار الديون'),
+            style: const TextStyle(
               fontFamily: 'cairo',
               fontWeight: FontWeight.bold,
             ),
@@ -47,7 +49,7 @@ class _DebtAgingScreenState extends State<DebtAgingScreen> {
           centerTitle: true,
           actions: [
             IconButton(
-              tooltip: 'تحديث',
+              tooltip: tr('تحديث'),
               onPressed: () => controller.loadAging(),
               icon: const Icon(Icons.refresh),
             ),
@@ -74,12 +76,12 @@ class _DebtAgingScreenState extends State<DebtAgingScreen> {
                 _searchField(),
                 const SizedBox(height: 12),
                 if (rows.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 40),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 40),
                     child: Center(
                       child: Text(
-                        'لا زبون يطابق البحث',
-                        style: TextStyle(
+                        tr('لا زبون يطابق البحث'),
+                        style: const TextStyle(
                           fontFamily: 'cairo',
                           fontSize: 13,
                           color: AppColors.textMuted,
@@ -119,9 +121,9 @@ class _DebtAgingScreenState extends State<DebtAgingScreen> {
             ),
           ),
           const SizedBox(height: 14),
-          const Text(
-            'لا توجد ذمم قائمة',
-            style: TextStyle(
+          Text(
+            tr('لا توجد ذمم قائمة'),
+            style: const TextStyle(
               fontFamily: 'cairo',
               fontSize: 16,
               fontWeight: FontWeight.bold,
@@ -129,9 +131,9 @@ class _DebtAgingScreenState extends State<DebtAgingScreen> {
             ),
           ),
           const SizedBox(height: 6),
-          const Text(
-            'كل فواتير الزبائن مسدّدة بالكامل',
-            style: TextStyle(
+          Text(
+            tr('كل فواتير الزبائن مسدّدة بالكامل'),
+            style: const TextStyle(
               fontFamily: 'cairo',
               fontSize: 12.5,
               color: AppColors.textSecondary,
@@ -162,9 +164,9 @@ class _DebtAgingScreenState extends State<DebtAgingScreen> {
               const Icon(Icons.account_balance_wallet,
                   color: Colors.white70, size: 17),
               const SizedBox(width: 6),
-              const Text(
-                'إجمالي الذمم القائمة',
-                style: TextStyle(
+              Text(
+                tr('إجمالي الذمم القائمة'),
+                style: const TextStyle(
                   fontFamily: 'cairo',
                   fontSize: 12.5,
                   color: Colors.white70,
@@ -179,7 +181,10 @@ class _DebtAgingScreenState extends State<DebtAgingScreen> {
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
-                  '${s.debtorCount} زبون · ${s.openInvoiceCount} فاتورة',
+                  trf('{0} زبون · {1} فاتورة', [
+                    '${s.debtorCount}',
+                    '${s.openInvoiceCount}',
+                  ]),
                   style: const TextStyle(
                     fontFamily: 'cairo',
                     fontSize: 10.5,
@@ -204,9 +209,9 @@ class _DebtAgingScreenState extends State<DebtAgingScreen> {
                 ),
               ),
               const SizedBox(width: 6),
-              const Text(
-                'ر.س',
-                style: TextStyle(
+              Text(
+                tr('ر.س'),
+                style: const TextStyle(
                   fontFamily: 'cairo',
                   fontSize: 13,
                   color: Colors.white70,
@@ -223,9 +228,14 @@ class _DebtAgingScreenState extends State<DebtAgingScreen> {
                 const SizedBox(width: 5),
                 Expanded(
                   child: Text(
-                    'أكبر تركيز: ${kAgingBuckets[worstIndex].label} '
-                    '(${money.format(s.bucketTotals[worstIndex])} ر.س — '
-                    '${(s.shareOf(worstIndex) * 100).toStringAsFixed(0)}%)',
+                    trf(
+                      'أكبر تركيز: {0} ({1} ر.س — {2}%)',
+                      [
+                        tr(kAgingBuckets[worstIndex].label),
+                        money.format(s.bucketTotals[worstIndex]),
+                        (s.shareOf(worstIndex) * 100).toStringAsFixed(0),
+                      ],
+                    ),
                     style: const TextStyle(
                       fontFamily: 'cairo',
                       fontSize: 11.5,
@@ -256,14 +266,15 @@ class _DebtAgingScreenState extends State<DebtAgingScreen> {
           borderRadius: BorderRadius.circular(14),
           border: Border.all(color: AppColors.success.withValues(alpha: 0.25)),
         ),
-        child: const Row(
+        child: Row(
           children: [
-            Icon(Icons.shield_outlined, size: 18, color: AppColors.success),
-            SizedBox(width: 8),
+            const Icon(Icons.shield_outlined,
+                size: 18, color: AppColors.success),
+            const SizedBox(width: 8),
             Expanded(
               child: Text(
-                'لا ديون متأخرة أكثر من 90 يومًا — لا حاجة لمخصص',
-                style: TextStyle(
+                tr('لا ديون متأخرة أكثر من 90 يومًا — لا حاجة لمخصص'),
+                style: const TextStyle(
                   fontFamily: 'cairo',
                   fontSize: 12,
                   color: AppColors.textPrimary,
@@ -290,10 +301,10 @@ class _DebtAgingScreenState extends State<DebtAgingScreen> {
               const Icon(Icons.shield_outlined,
                   size: 18, color: AppColors.warning),
               const SizedBox(width: 8),
-              const Expanded(
+              Expanded(
                 child: Text(
-                  'المخصص المقترح للديون المشكوك في تحصيلها',
-                  style: TextStyle(
+                  tr('المخصص المقترح للديون المشكوك في تحصيلها'),
+                  style: const TextStyle(
                     fontFamily: 'cairo',
                     fontSize: 12.5,
                     fontWeight: FontWeight.bold,
@@ -302,7 +313,7 @@ class _DebtAgingScreenState extends State<DebtAgingScreen> {
                 ),
               ),
               Text(
-                '${money.format(provision)} ر.س',
+                trf('{0} ر.س', [money.format(provision)]),
                 style: const TextStyle(
                   fontFamily: 'cairo',
                   fontSize: 14,
@@ -314,10 +325,13 @@ class _DebtAgingScreenState extends State<DebtAgingScreen> {
           ),
           const SizedBox(height: 6),
           Text(
-            'على المتأخر أكثر من 90 يومًا '
-            '(${money.format(over90)} ر.س) بنسبة '
-            '${(rate * 100).toStringAsFixed(0)}% — سياسة تحفّظية قابلة للتعديل '
-            'من إعداد «نسبة مخصص الديون».',
+            trf(
+              tr('على المتأخر أكثر من 90 يومًا ({0} ر.س) بنسبة {1}% — سياسة تحفّظية قابلة للتعديل من إعداد «نسبة مخصص الديون».'),
+              [
+                money.format(over90),
+                (rate * 100).toStringAsFixed(0),
+              ],
+            ),
             style: const TextStyle(
               fontFamily: 'cairo',
               fontSize: 11,
@@ -335,7 +349,7 @@ class _DebtAgingScreenState extends State<DebtAgingScreen> {
       onChanged: (v) => controller.searchQuery.value = v,
       style: const TextStyle(fontFamily: 'cairo', fontSize: 13),
       decoration: InputDecoration(
-        hintText: 'ابحث باسم الزبون أو رقم الجوال…',
+        hintText: tr('ابحث باسم الزبون أو رقم الجوال…'),
         hintStyle: const TextStyle(
           fontFamily: 'cairo',
           fontSize: 12.5,
@@ -379,12 +393,12 @@ class _DebtAgingScreenState extends State<DebtAgingScreen> {
             ),
             child: Row(
               children: [
-                const Expanded(
+                Expanded(
                   flex: 22,
                   child: Text(
-                    'الزبون',
+                    tr('الزبون'),
                     textAlign: TextAlign.start,
-                    style: TextStyle(
+                    style: const TextStyle(
                       fontFamily: 'cairo',
                       fontSize: 11.5,
                       fontWeight: FontWeight.bold,
@@ -408,10 +422,10 @@ class _DebtAgingScreenState extends State<DebtAgingScreen> {
                       ),
                     ),
                   ),
-                const Expanded(
+                Expanded(
                   flex: 16,
                   child: Text(
-                    'الإجمالي',
+                    tr('الإجمالي'),
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontFamily: 'cairo',
@@ -433,10 +447,10 @@ class _DebtAgingScreenState extends State<DebtAgingScreen> {
             ),
             child: Row(
               children: [
-                const Expanded(
+                Expanded(
                   flex: 22,
                   child: Text(
-                    'الإجمالي',
+                    tr('الإجمالي'),
                     textAlign: TextAlign.start,
                     style: TextStyle(
                       fontFamily: 'cairo',
@@ -522,7 +536,7 @@ class _DebtAgingScreenState extends State<DebtAgingScreen> {
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Text(
-                          r.riskLevel,
+                          tr(r.riskLevel),
                           style: TextStyle(
                             fontFamily: 'cairo',
                             fontSize: 8.5,
@@ -533,7 +547,7 @@ class _DebtAgingScreenState extends State<DebtAgingScreen> {
                       ),
                       const SizedBox(width: 5),
                       Text(
-                        'أقدم ${r.oldestDays ?? 0} يوم',
+                        trf('أقدم {0} يوم', ['${r.oldestDays ?? 0}']),
                         style: const TextStyle(
                           fontFamily: 'cairo',
                           fontSize: 9.5,
@@ -584,7 +598,7 @@ class _DebtAgingScreenState extends State<DebtAgingScreen> {
                 padding: EdgeInsets.zero,
                 constraints:
                     const BoxConstraints(minWidth: 30, minHeight: 30),
-                tooltip: 'دفعة سريعة',
+                tooltip: tr('دفعة سريعة'),
                 onPressed: () => _quickPayDialog(r),
                 icon: const Icon(Icons.payments_outlined,
                     size: 17, color: AppColors.success),
@@ -596,7 +610,7 @@ class _DebtAgingScreenState extends State<DebtAgingScreen> {
                 padding: EdgeInsets.zero,
                 constraints:
                     const BoxConstraints(minWidth: 30, minHeight: 30),
-                tooltip: 'كشف حساب (طباعة/إرسال)',
+                tooltip: tr('كشف حساب (طباعة/إرسال)'),
                 onPressed: () => showCustomerStatementSheet(
                   context,
                   r.customerId,
@@ -612,7 +626,7 @@ class _DebtAgingScreenState extends State<DebtAgingScreen> {
                 padding: EdgeInsets.zero,
                 constraints:
                     const BoxConstraints(minWidth: 30, minHeight: 30),
-                tooltip: 'مطالبة واتساب',
+                tooltip: tr('مطالبة واتساب'),
                 onPressed: () => DebtReminderService.sendReminder(r),
                 icon: const Icon(Icons.chat,
                     size: 16, color: Color(0xFF25D366)),
@@ -636,9 +650,9 @@ class _DebtAgingScreenState extends State<DebtAgingScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'دلالة الفئات العمرية',
-            style: TextStyle(
+          Text(
+            tr('دلالة الفئات العمرية'),
+            style: const TextStyle(
               fontFamily: 'cairo',
               fontSize: 12,
               fontWeight: FontWeight.bold,
@@ -652,22 +666,22 @@ class _DebtAgingScreenState extends State<DebtAgingScreen> {
             children: [
               _legendItem(
                 kAgingBuckets[0].label,
-                'ذمة حديثة — متابعة عادية',
+                tr('ذمة حديثة — متابعة عادية'),
                 AppColors.success,
               ),
               _legendItem(
                 kAgingBuckets[1].label,
-                'تأخر مبدئي — تذكير أول',
+                tr('تأخر مبدئي — تذكير أول'),
                 AppColors.info,
               ),
               _legendItem(
                 kAgingBuckets[2].label,
-                'تأخر مقلق — مطالبة جدّية',
+                tr('تأخر مقلق — مطالبة جدّية'),
                 AppColors.warning,
               ),
               _legendItem(
                 kAgingBuckets[3].label,
-                'مشكوك في تحصيله — يُكوَّن مخصص',
+                tr('مشكوك في تحصيله — يُكوَّن مخصص'),
                 AppColors.danger,
               ),
             ],
@@ -748,7 +762,7 @@ class _DebtAgingScreenState extends State<DebtAgingScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => Directionality(
-        textDirection: TextDirection.rtl,
+        textDirection: L10n.isRtl ? appTextDirection : TextDirection.ltr,
         child: AlertDialog(
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
@@ -758,7 +772,7 @@ class _DebtAgingScreenState extends State<DebtAgingScreen> {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'دفعة من ${row.customerName}',
+                  trf('دفعة من {0}', [row.customerName]),
                   style: const TextStyle(
                     fontFamily: 'cairo',
                     fontSize: 14,
@@ -780,9 +794,9 @@ class _DebtAgingScreenState extends State<DebtAgingScreen> {
                 ),
                 child: Row(
                   children: [
-                    const Text(
-                      'الذمة القائمة:',
-                      style: TextStyle(
+                    Text(
+                      tr('الذمة القائمة:'),
+                      style: const TextStyle(
                         fontFamily: 'cairo',
                         fontSize: 12,
                         color: AppColors.textSecondary,
@@ -790,7 +804,7 @@ class _DebtAgingScreenState extends State<DebtAgingScreen> {
                     ),
                     const Spacer(),
                     Text(
-                      '${money.format(row.totalDebt)} ر.س',
+                      trf('{0} ر.س', [money.format(row.totalDebt)]),
                       style: const TextStyle(
                         fontFamily: 'cairo',
                         fontSize: 13,
@@ -816,12 +830,12 @@ class _DebtAgingScreenState extends State<DebtAgingScreen> {
                   fontWeight: FontWeight.bold,
                 ),
                 decoration: InputDecoration(
-                  labelText: 'المبلغ المستلَم',
+                  labelText: tr('المبلغ المستلَم'),
                   labelStyle: const TextStyle(
                     fontFamily: 'cairo',
                     fontSize: 12,
                   ),
-                  suffixText: 'ر.س',
+                  suffixText: tr('ر.س'),
                   filled: true,
                   fillColor: AppColors.surfaceSoft,
                   border: OutlineInputBorder(
@@ -830,10 +844,11 @@ class _DebtAgingScreenState extends State<DebtAgingScreen> {
                 ),
               ),
               const SizedBox(height: 8),
-              const Text(
-                'يُوزَّع المبلغ على الفواتير الأقدم أولًا، وأي فائض يصبح '
-                'رصيدًا دائنًا للزبون (سلفة).',
-                style: TextStyle(
+              Text(
+                tr(
+                  'يُوزَّع المبلغ على الفواتير الأقدم أولًا، وأي فائض يصبح رصيدًا دائنًا للزبون (سلفة).',
+                ),
+                style: const TextStyle(
                   fontFamily: 'cairo',
                   fontSize: 10.5,
                   color: AppColors.textSecondary,
@@ -849,7 +864,7 @@ class _DebtAgingScreenState extends State<DebtAgingScreen> {
                       child: ActionChip(
                         label: Text(
                           p == 1.0
-                              ? 'سداد كامل'
+                              ? tr('سداد كامل')
                               : '${(p * 100).toInt()}%',
                           style: const TextStyle(
                             fontFamily: 'cairo',
@@ -869,9 +884,9 @@ class _DebtAgingScreenState extends State<DebtAgingScreen> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: const Text(
-                'إلغاء',
-                style: TextStyle(fontFamily: 'cairo', fontSize: 13),
+              child: Text(
+                tr('إلغاء'),
+                style: const TextStyle(fontFamily: 'cairo', fontSize: 13),
               ),
             ),
             ElevatedButton(
@@ -879,9 +894,9 @@ class _DebtAgingScreenState extends State<DebtAgingScreen> {
                 backgroundColor: AppColors.success,
               ),
               onPressed: () => Navigator.pop(ctx, true),
-              child: const Text(
-                'تسجيل الدفعة',
-                style: TextStyle(
+              child: Text(
+                tr('تسجيل الدفعة'),
+                style: const TextStyle(
                   fontFamily: 'cairo',
                   fontSize: 13,
                   fontWeight: FontWeight.bold,
@@ -904,8 +919,8 @@ class _DebtAgingScreenState extends State<DebtAgingScreen> {
 
     if (amount <= 0) {
       Get.snackbar(
-        'تنبيه',
-        'أدخل مبلغًا صحيحًا أكبر من صفر',
+        tr('تنبيه'),
+        tr('أدخل مبلغًا صحيحًا أكبر من صفر'),
         snackPosition: SnackPosition.BOTTOM,
         backgroundColor: AppColors.warning,
         colorText: Colors.white,
@@ -920,10 +935,13 @@ class _DebtAgingScreenState extends State<DebtAgingScreen> {
     );
 
     Get.snackbar(
-      ok ? 'تمت العملية' : 'فشل',
+      ok ? tr('تمت العملية') : tr('فشل'),
       ok
-          ? 'سُجّلت دفعة ${money.format(amount)} ر.س من ${row.customerName}'
-          : 'تعذر تسجيل الدفعة — أعد المحاولة',
+          ? trf('سُجّلت دفعة {0} ر.س من {1}', [
+              money.format(amount),
+              row.customerName,
+            ])
+          : tr('تعذر تسجيل الدفعة — أعد المحاولة'),
       snackPosition: SnackPosition.BOTTOM,
       backgroundColor: ok ? AppColors.success : AppColors.danger,
       colorText: Colors.white,
@@ -1018,7 +1036,7 @@ class _CustomerDebtSheetState extends State<_CustomerDebtSheet> {
   @override
   Widget build(BuildContext context) {
     return Directionality(
-      textDirection: TextDirection.rtl,
+      textDirection: L10n.isRtl ? appTextDirection : TextDirection.ltr,
       child: Container(
         height: MediaQuery.of(context).size.height * 0.72,
         decoration: const BoxDecoration(
@@ -1064,8 +1082,13 @@ class _CustomerDebtSheetState extends State<_CustomerDebtSheet> {
                           ),
                         ),
                         Text(
-                          '${widget.row.openInvoices} فاتورة مفتوحة · '
-                          'أقدمها ${widget.row.oldestDays ?? 0} يوم',
+                          trf(
+                            '{0} فاتورة مفتوحة · أقدمها {1} يوم',
+                            [
+                              '${widget.row.openInvoices}',
+                              '${widget.row.oldestDays ?? 0}',
+                            ],
+                          ),
                           style: const TextStyle(
                             fontFamily: 'cairo',
                             fontSize: 11,
@@ -1076,7 +1099,9 @@ class _CustomerDebtSheetState extends State<_CustomerDebtSheet> {
                     ),
                   ),
                   Text(
-                    '${money.format(widget.row.totalDebt)} ر.س',
+                    trf('{0} ر.س', [
+                      money.format(widget.row.totalDebt),
+                    ]),
                     style: const TextStyle(
                       fontFamily: 'cairo',
                       fontSize: 16,
@@ -1118,9 +1143,9 @@ class _CustomerDebtSheetState extends State<_CustomerDebtSheet> {
                         DebtReminderService.sendReminder(widget.row);
                       },
                       icon: const Icon(Icons.chat, size: 17),
-                      label: const Text(
-                        'مطالبة واتساب',
-                        style: TextStyle(
+                      label: Text(
+                        tr('مطالبة واتساب'),
+                        style: const TextStyle(
                           fontFamily: 'cairo',
                           fontSize: 12.5,
                           fontWeight: FontWeight.bold,
@@ -1141,9 +1166,9 @@ class _CustomerDebtSheetState extends State<_CustomerDebtSheet> {
                       onPressed: widget.onQuickPay,
                       icon: const Icon(Icons.payments,
                           color: Colors.white, size: 18),
-                      label: const Text(
-                        'تسجيل دفعة',
-                        style: TextStyle(
+                      label: Text(
+                        tr('تسجيل دفعة'),
+                        style: const TextStyle(
                           fontFamily: 'cairo',
                           fontSize: 12.5,
                           fontWeight: FontWeight.bold,
@@ -1197,7 +1222,7 @@ class _CustomerDebtSheetState extends State<_CustomerDebtSheet> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'فاتورة #$id',
+                  trf('فاتورة #{0}', ['$id']),
                   style: const TextStyle(
                     fontFamily: 'cairo',
                     fontSize: 12.5,
@@ -1208,9 +1233,11 @@ class _CustomerDebtSheetState extends State<_CustomerDebtSheet> {
                 const SizedBox(height: 2),
                 Text(
                   date == null
-                      ? 'تاريخ غير معروف'
-                      : '${DateFormat('yyyy/MM/dd').format(date)} · '
-                          'منذ $days يوم',
+                      ? tr('تاريخ غير معروف')
+                      : trf('{0} · منذ {1} يوم', [
+                          DateFormat('yyyy/MM/dd').format(date),
+                          '$days',
+                        ]),
                   style: const TextStyle(
                     fontFamily: 'cairo',
                     fontSize: 10.5,
@@ -1221,7 +1248,7 @@ class _CustomerDebtSheetState extends State<_CustomerDebtSheet> {
             ),
           ),
           Text(
-            '${money.format(due)} ر.س',
+            trf('{0} ر.س', [money.format(due)]),
             style: TextStyle(
               fontFamily: 'cairo',
               fontSize: 13,
@@ -1258,12 +1285,7 @@ class _DbProxy {
   Future<List<Map<String, dynamic>>> openInvoicesOf(int customerId) async {
     try {
       return await _db.readData(
-        'SELECT invoices_id, remaining_amount, invoice_date, final_amount, '
-        '       paid_amount '
-        'FROM invoices '
-        'WHERE customer_id = ? AND subscription_id IS NULL '
-        '  AND COALESCE(remaining_amount, 0) > 0.004 '
-        'ORDER BY invoice_date ASC',
+        'SELECT invoices_id, remaining_amount, invoice_date, final_amount,        paid_amount FROM invoices WHERE customer_id = ? AND subscription_id IS NULL   AND COALESCE(remaining_amount, 0) > 0.004 ORDER BY invoice_date ASC',
         [customerId],
       );
     } catch (_) {

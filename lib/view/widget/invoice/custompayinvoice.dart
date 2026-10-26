@@ -9,12 +9,17 @@ import 'package:laundry/core/services/invoicecounterservice.dart';
 import 'package:laundry/core/theme/app_colors.dart';
 import 'package:laundry/services/customer/credit_guard.dart';
 import 'package:laundry/services/discount/discount_service.dart';
+import 'package:laundry/services/i18n/l10n.dart';
 import 'package:laundry/services/permission/permission_service.dart';
 import 'package:laundry/services/security/session_manager.dart';
+import 'package:laundry/services/settings/app_settings_service.dart';
 import 'package:laundry/services/subscription/subscriber_match.dart';
 import 'package:laundry/services/subscription/subscription_service.dart';
+import 'package:laundry/services/payment/payment_method.dart';
 import 'package:laundry/sqldb.dart';
 import 'package:laundry/view/widget/common/animation_wrappers.dart';
+import 'package:laundry/services/permission/permission_catalog.dart';
+import 'package:laundry/services/i18n/ui_direction.dart';
 
 /// زر السداد مع اختيار نوع الدفع — تصميم عصري وآمن من الأعطال
 class CustomPayInvoice extends StatelessWidget {
@@ -53,8 +58,8 @@ class CustomPayInvoice extends StatelessWidget {
 
               if (invcontroller.invoice.isEmpty) {
                 Get.snackbar(
-                  'تنبيه',
-                  'الفاتورة فارغة — أضف أصنافاً أولاً',
+                  tr('تنبيه'),
+                  tr('الفاتورة فارغة — أضف أصنافاً أولاً'),
                   snackPosition: SnackPosition.BOTTOM,
                   backgroundColor: AppColors.warning,
                   colorText: Colors.white,
@@ -97,7 +102,7 @@ class CustomPayInvoice extends StatelessWidget {
                   int? subscriptionId;
                   int? effectiveCustomerId = customerId;
                   String? effectiveCustomerName = result['customerName'] as String?;
-                  if (method == 'اشتراك شهري') {
+                  if (method == PaymentMethod.subscription.key) {
                     final subs = Get.isRegistered<SubscriptionsController>()
                         ? Get.find<SubscriptionsController>()
                         : Get.put(SubscriptionsController());
@@ -105,9 +110,10 @@ class CustomPayInvoice extends StatelessWidget {
                     final sub = subs.activeSubscriptionFor(customerId);
                     if (sub == null) {
                       Get.snackbar(
-                        'لا يوجد اشتراك نشط',
-                        'هذا الزبون ليس لديه اشتراك شهري بتغطية مدفوعة — '
-                            'اختر طريقة دفع أخرى أو سجّل دفعة له من شاشة الاشتراكات',
+                        tr('لا يوجد اشتراك نشط'),
+                        tr(
+                          'هذا الزبون ليس لديه اشتراك شهري بتغطية مدفوعة — اختر طريقة دفع أخرى أو سجّل دفعة له من شاشة الاشتراكات',
+                        ),
                         snackPosition: SnackPosition.BOTTOM,
                         backgroundColor: AppColors.danger,
                         colorText: Colors.white,
@@ -128,7 +134,7 @@ class CustomPayInvoice extends StatelessWidget {
                     customerId: effectiveCustomerId,
                     customerName: effectiveCustomerName,
                     subscriptionId: subscriptionId,
-                    hidePrices: method == 'اشتراك شهري',
+                    hidePrices: method == PaymentMethod.subscription.key,
                     customerBalance: customerBalance,
                     discountAmount: discount,
                     discountCode: discountCode,
@@ -137,13 +143,13 @@ class CustomPayInvoice extends StatelessWidget {
                 }
               });
             },
-            child: const Row(
+            child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.payments, color: Colors.white, size: 20),
-                SizedBox(width: 6),
+                const Icon(Icons.payments, color: Colors.white, size: 20),
+                const SizedBox(width: 6),
                 Text(
-                  "سداد",
+                  tr('سداد'),
                   style: TextStyle(
                     fontFamily: 'cairo',
                     fontSize: 15,
@@ -185,7 +191,7 @@ class CustomPayInvoice extends StatelessWidget {
               ),
               const SizedBox(height: 14),
               Text(
-                "لا يوجد وردية مفتوحة",
+                tr('لا يوجد وردية مفتوحة'),
                 style: TextStyle(
                   fontFamily: 'cairo',
                   fontSize: 17,
@@ -195,7 +201,7 @@ class CustomPayInvoice extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               Text(
-                'لا يمكن إصدار أي فاتورة أو تسجيل بيع قبل فتح وردية جديدة.',
+                tr('لا يمكن إصدار أي فاتورة أو تسجيل بيع قبل فتح وردية جديدة.'),
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontFamily: 'cairo',
@@ -210,8 +216,8 @@ class CustomPayInvoice extends StatelessWidget {
                   Expanded(
                     child: OutlinedButton(
                       onPressed: () => Get.back(),
-                      child: const Text(
-                        'إلغاء',
+                      child: Text(
+                        tr('إلغاء'),
                         style: TextStyle(fontFamily: 'cairo', fontSize: 14),
                       ),
                     ),
@@ -226,8 +232,8 @@ class CustomPayInvoice extends StatelessWidget {
                         Get.back();
                         shiftController.startShift();
                       },
-                      child: const Text(
-                        'فتح وردية الآن',
+                      child: Text(
+                        tr('فتح وردية الآن'),
                         style: TextStyle(
                           fontFamily: 'cairo',
                           fontSize: 14,
@@ -270,7 +276,15 @@ class _PaymentMethodDialog extends StatefulWidget {
 }
 
 class _PaymentMethodDialogState extends State<_PaymentMethodDialog> {
-  String _method = 'كاش';
+  /// الطريقة المحدَّدة عند **كل** فتح للحوار.
+  ///
+  /// تُقرأ من إعداد «طريقة الدفع الافتراضية» الذي افتراضه الآن «شبكة»، ولا
+  /// تُورَّث من جلسة سابقة: الحالة تُبنى من جديد مع كل `Get.dialog`، فيعود
+  /// التحديد إلى الافتراضي مهما اختار الموظف في المرة السابقة.
+  String _method = PaymentMethods.keyOf(
+    AppSettingsService.instance.posDefaultPaymentMethod,
+    fallback: PaymentMethod.card.key,
+  );
   double _paid = 0;
   late final TextEditingController _paidCtrl;
   final SqlDB _db = SqlDB();
@@ -313,7 +327,7 @@ class _PaymentMethodDialogState extends State<_PaymentMethodDialog> {
   double get _remaining => (_payable - _paid) > 0 ? _payable - _paid : 0;
 
   /// هل طريقة الدفع الحالية اشتراك شهري؟
-  bool get _isSubscription => _method == 'اشتراك';
+  bool get _isSubscription => _method == PaymentMethod.subscription.key;
 
   /// الزبائن المتاحون للاختيار حسب طريقة الدفع:
   /// في الاشتراك نُظهر **كل** من له اشتراك شهري مسجَّل — لا أصحاب التغطية
@@ -335,11 +349,11 @@ class _PaymentMethodDialogState extends State<_PaymentMethodDialog> {
   String _subSuffix(int? customerId) {
     if (!_isSubscription || customerId == null) return '';
     return switch (_subStatusByCustomer[customerId]) {
-      SubStatus.active => ' — مغطّى',
-      SubStatus.capped => ' — بلغ سقفه',
-      SubStatus.pending => ' — بلا دفعة',
-      SubStatus.overdue => ' — منتهي',
-      SubStatus.cancelled => ' — ملغى',
+      SubStatus.active => tr(' — مغطّى'),
+      SubStatus.capped => tr(' — بلغ سقفه'),
+      SubStatus.pending => tr(' — بلا دفعة'),
+      SubStatus.overdue => tr(' — منتهي'),
+      SubStatus.cancelled => tr(' — ملغى'),
       null => '',
     };
   }
@@ -370,7 +384,7 @@ class _PaymentMethodDialogState extends State<_PaymentMethodDialog> {
       _selectableCustomers.any((c) => c['customer_id'] == _debtCustomerId);
 
   /// هل الطريقة الحالية تتطلب عميلاً محدداً؟ (الآجل والاشتراك)
-  bool get _needsCustomer => _method == 'آجل' || _isSubscription;
+  bool get _needsCustomer => _method == PaymentMethod.credit.key || _isSubscription;
 
   /// لون حالة اختيار العميل
   Color get _customerColor {
@@ -408,26 +422,38 @@ class _PaymentMethodDialogState extends State<_PaymentMethodDialog> {
     if (_isSubscription) {
       final name = _debtCustomerName ?? '';
       return switch (_selectedSubStatus) {
-        SubStatus.active => 'تُحسم من تغطية اشتراك: $name',
-        SubStatus.capped =>
-          '«$name» بلغ سقف استهلاكه — التجاوز يحتاج موافقة الإدارة أو تجديدًا',
-        SubStatus.pending =>
-          '«$name» اشتراكه مسجَّل ولم تُسجَّل له دفعة — التغطية تبدأ من أول دفعة',
+        SubStatus.active => trf('تُحسم من تغطية اشتراك: {0}', [name]),
+        SubStatus.capped => trf(
+          '«{0}» بلغ سقف استهلاكه — التجاوز يحتاج موافقة الإدارة أو تجديدًا',
+          [name],
+        ),
+        SubStatus.pending => trf(
+          '«{0}» اشتراكه مسجَّل ولم تُسجَّل له دفعة — التغطية تبدأ من أول دفعة',
+          [name],
+        ),
         SubStatus.overdue =>
-          'انتهت تغطية «$name» — جدّد الاشتراك ليمتدّ فورًا',
-        SubStatus.cancelled => 'اشتراك «$name» ملغى بتسوية — لا تغطية سارية',
-        null => 'الاشتراك الشهري يتطلب اختيار صاحب الاشتراك من القائمة',
+          trf('انتهت تغطية «{0}» — جدّد الاشتراك ليمتدّ فورًا', [name]),
+        SubStatus.cancelled =>
+          trf('اشتراك «{0}» ملغى بتسوية — لا تغطية سارية', [name]),
+        null => tr('الاشتراك الشهري يتطلب اختيار صاحب الاشتراك من القائمة'),
       };
     }
     if (_selectionValid) {
-      if (_method == 'آجل') return 'سيُسجل الدين على: $_debtCustomerName';
-      if (_customerBalance > 0) {
-        return 'الزبون: $_debtCustomerName — رصيد موجب: ${_customerBalance.toStringAsFixed(2)} ر.س';
+      if (_method == PaymentMethod.credit.key) {
+        return trf('سيُسجل الدين على: {0}', ['$_debtCustomerName']);
       }
-      return 'الفاتورة مرتبطة بالزبون: $_debtCustomerName';
+      if (_customerBalance > 0) {
+        return trf('الزبون: {0} — رصيد موجب: {1} ر.س', [
+          '$_debtCustomerName',
+          _customerBalance.toStringAsFixed(2),
+        ]);
+      }
+      return trf('الفاتورة مرتبطة بالزبون: {0}', ['$_debtCustomerName']);
     }
-    if (_method == 'آجل') return 'الآجل يتطلب عميلاً محدداً من سجل الزبائن';
-    return 'اختياري: اربط الفاتورة بزبون مسجّل ليظهر في كشف حسابه وواتساب';
+    if (_method == PaymentMethod.credit.key) {
+      return tr('الآجل يتطلب عميلاً محدداً من سجل الزبائن');
+    }
+    return tr('اختياري: اربط الفاتورة بزبون مسجّل ليظهر في كشف حسابه وواتساب');
   }
 
   @override
@@ -460,15 +486,17 @@ class _PaymentMethodDialogState extends State<_PaymentMethodDialog> {
     if (code.isEmpty) {
       setState(() {
         _discountInvalid = true;
-        _discountNote = 'أدخل كود الخصم أولًا';
+        _discountNote = tr('أدخل كود الخصم أولًا');
       });
       return;
     }
-    if (!PermissionService.canApplyDiscount) {
+    if (!PermissionService.can(PermissionKeys.invoiceDiscountApply)) {
       setState(() {
         _discountInvalid = true;
-        _discountNote = 'دورك (${PermissionService.roleLabel}) لا يمنح '
-            'صلاحية تطبيق الخصومات';
+        _discountNote = trf(
+          'دورك ({0}) لا يمنح صلاحية تطبيق الخصومات',
+          [tr(PermissionService.roleLabel)],
+        );
       });
       return;
     }
@@ -487,14 +515,14 @@ class _PaymentMethodDialogState extends State<_PaymentMethodDialog> {
         _discountNote = check.message;
         // إعادة ضبط المدفوع على المستحق الجديد: بلا هذا يبقى المدفوع على
         // الإجمالي القديم فيظهر «مدفوع زائد» وهمي في الفاتورة.
-        _paid = _method == 'آجل' || _isSubscription ? 0 : _payable;
+        _paid = _method == PaymentMethod.credit.key || _isSubscription ? 0 : _payable;
         _paidCtrl.text = _paid.toStringAsFixed(2);
       } else {
         _discount = 0;
         _discountCode = '';
         _discountId = null;
         _discountNote = check.message.isEmpty
-            ? 'كود غير صالح'
+            ? tr('كود غير صالح')
             : check.message;
       }
     });
@@ -509,7 +537,7 @@ class _PaymentMethodDialogState extends State<_PaymentMethodDialog> {
       _discountNote = '';
       _discountInvalid = false;
       _discountCtrl.clear();
-      _paid = _method == 'آجل' || _isSubscription ? 0 : _payable;
+      _paid = _method == PaymentMethod.credit.key || _isSubscription ? 0 : _payable;
       _paidCtrl.text = _paid.toStringAsFixed(2);
     });
   }
@@ -586,9 +614,10 @@ class _PaymentMethodDialogState extends State<_PaymentMethodDialog> {
   void _selectMethod(String method) {
     setState(() {
       _method = method;
-      if (method == 'شبكة') {
+      if (method == PaymentMethod.card.key) {
         _paid = _payable;
-      } else if (method == 'آجل' || method == 'اشتراك') {
+      } else if (method == PaymentMethod.credit.key ||
+          method == PaymentMethod.subscription.key) {
         _paid = 0;
       } else {
         _paid = _payable;
@@ -606,22 +635,23 @@ class _PaymentMethodDialogState extends State<_PaymentMethodDialog> {
   Future<void> _confirm() async {
     // ─── البيع الآجل صلاحية مستقلّة (منح ائتمان = مخاطرة مالية) ───
     // نُمنع قبل أي فحص آخر حتى لا يُبني على أساس غير مصرّح به.
-    if (_method == 'آجل' && !_isSubscription) {
-      if (!PermissionService.canSellOnCredit) {
+    if (_method == PaymentMethod.credit.key && !_isSubscription) {
+      if (!PermissionService.can(PermissionKeys.invoiceSellOnCredit)) {
         Get.dialog(
           Directionality(
-            textDirection: TextDirection.rtl,
+            textDirection: L10n.isRtl ? appTextDirection : TextDirection.ltr,
             child: AlertDialog(
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(18),
               ),
-              title: const Row(
+              title: Row(
                 children: [
-                  Icon(Icons.lock_outline, color: AppColors.danger, size: 21),
-                  SizedBox(width: 8),
+                  const Icon(Icons.lock_outline,
+                      color: AppColors.danger, size: 21),
+                  const SizedBox(width: 8),
                   Text(
-                    'البيع الآجل غير مصرّح',
-                    style: TextStyle(
+                    tr('البيع الآجل غير مصرّح'),
+                    style: const TextStyle(
                       fontFamily: 'cairo',
                       fontSize: 15,
                       fontWeight: FontWeight.bold,
@@ -634,8 +664,10 @@ class _PaymentMethodDialogState extends State<_PaymentMethodDialog> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'دورك الحالي (${PermissionService.roleLabel}) لا يمنح صلاحية '
-                    'تسجيل ذمة على زبون.',
+                    trf(
+                      'دورك الحالي ({0}) لا يمنح صلاحية تسجيل ذمة على زبون.',
+                      [tr(PermissionService.roleLabel)],
+                    ),
                     style: const TextStyle(
                       fontFamily: 'cairo',
                       fontSize: 12.5,
@@ -650,16 +682,17 @@ class _PaymentMethodDialogState extends State<_PaymentMethodDialog> {
                       color: AppColors.info.withValues(alpha: 0.07),
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: const Row(
+                    child: Row(
                       children: [
-                        Icon(Icons.lightbulb_outline,
+                        const Icon(Icons.lightbulb_outline,
                             size: 16, color: AppColors.info),
-                        SizedBox(width: 7),
+                        const SizedBox(width: 7),
                         Expanded(
                           child: Text(
-                            'البدائل: اختر الدفع كاش أو شبكة، أو راجع مديرًا '
-                            'ليُسجّل الفاتورة الآجلة.',
-                            style: TextStyle(
+                            tr(
+                              'البدائل: اختر الدفع كاش أو شبكة، أو راجع مديرًا ليُسجّل الفاتورة الآجلة.',
+                            ),
+                            style: const TextStyle(
                               fontFamily: 'cairo',
                               fontSize: 11,
                               height: 1.55,
@@ -678,9 +711,9 @@ class _PaymentMethodDialogState extends State<_PaymentMethodDialog> {
                     backgroundColor: AppColors.info,
                   ),
                   onPressed: () => Get.back(),
-                  child: const Text(
-                    'حسنًا',
-                    style: TextStyle(
+                  child: Text(
+                    tr('حسنًا'),
+                    style: const TextStyle(
                       fontFamily: 'cairo',
                       fontSize: 13,
                       fontWeight: FontWeight.bold,
@@ -697,12 +730,16 @@ class _PaymentMethodDialogState extends State<_PaymentMethodDialog> {
     }
 
     // ─── الآجل والاشتراك يتطلبان عميلاً محدداً من سجل الزبائن ───
-    if ((_method == 'آجل' || _isSubscription) && !_selectionValid) {
+    if ((_method == PaymentMethod.credit.key || _isSubscription) && !_selectionValid) {
       Get.snackbar(
-        'مطلوب تحديد العميل',
+        tr('مطلوب تحديد العميل'),
         _isSubscription
-            ? 'فاتورة الاشتراك تُحسم من تغطية الزبون — اختر صاحب الاشتراك من القائمة'
-            : 'لا يمكن تسجيل فاتورة آجلة دون اختيار عميل محدد من سجل الزبائن',
+            ? tr(
+                'فاتورة الاشتراك تُحسم من تغطية الزبون — اختر صاحب الاشتراك من القائمة',
+              )
+            : tr(
+                'لا يمكن تسجيل فاتورة آجلة دون اختيار عميل محدد من سجل الزبائن',
+              ),
         snackPosition: SnackPosition.BOTTOM,
         backgroundColor: AppColors.danger,
         colorText: Colors.white,
@@ -723,24 +760,29 @@ class _PaymentMethodDialogState extends State<_PaymentMethodDialog> {
         // بدل رسالة عامة تُبقيه في حيرة أمام الزبون.
         final who = _debtCustomerName ?? '';
         final reason = switch (_selectedSubStatus) {
-          SubStatus.pending =>
-            'اشتراك «$who» مسجَّل ولم تُسجَّل له أي دفعة بعد — التغطية تبدأ من '
-                'أول دفعة تُسجَّل من شاشة الاشتراكات الشهرية.',
-          SubStatus.overdue =>
-            'انتهت تغطية اشتراك «$who» — جدّده من شاشة الاشتراكات ليمتدّ فورًا '
-                'وتستطيع إصدار فاتورته.',
-          SubStatus.capped =>
-            'استهلك «$who» سقف اشتراكه — جدّد الاشتراك أو ارفع السقف بموافقة '
-                'الإدارة ثم أعد المحاولة.',
-          SubStatus.cancelled =>
-            'اشتراك «$who» أُلغي بتسوية — لا تغطية سارية له. أنشئ اشتراكًا جديدًا '
-                'أو اختر طريقة دفع أخرى.',
-          _ =>
-            'الزبون «$who» ليس لديه اشتراك شهري بتغطية مدفوعة — سجّل دفعة له من '
-                'شاشة الاشتراكات أو اختر طريقة دفع أخرى.',
+          SubStatus.pending => trf(
+            'اشتراك «{0}» مسجَّل ولم تُسجَّل له أي دفعة بعد — التغطية تبدأ من أول دفعة تُسجَّل من شاشة الاشتراكات الشهرية.',
+            [who],
+          ),
+          SubStatus.overdue => trf(
+            'انتهت تغطية اشتراك «{0}» — جدّده من شاشة الاشتراكات ليمتدّ فورًا وتستطيع إصدار فاتورته.',
+            [who],
+          ),
+          SubStatus.capped => trf(
+            'استهلك «{0}» سقف اشتراكه — جدّد الاشتراك أو ارفع السقف بموافقة الإدارة ثم أعد المحاولة.',
+            [who],
+          ),
+          SubStatus.cancelled => trf(
+            'اشتراك «{0}» أُلغي بتسوية — لا تغطية سارية له. أنشئ اشتراكًا جديدًا أو اختر طريقة دفع أخرى.',
+            [who],
+          ),
+          _ => trf(
+            'الزبون «{0}» ليس لديه اشتراك شهري بتغطية مدفوعة — سجّل دفعة له من شاشة الاشتراكات أو اختر طريقة دفع أخرى.',
+            [who],
+          ),
         };
         Get.snackbar(
-          'لا يمكن إصدار فاتورة اشتراك',
+          tr('لا يمكن إصدار فاتورة اشتراك'),
           reason,
           snackPosition: SnackPosition.BOTTOM,
           backgroundColor: AppColors.danger,
@@ -767,7 +809,7 @@ class _PaymentMethodDialogState extends State<_PaymentMethodDialog> {
     // ─── فحص حدّ الائتمان قبل إتمام البيع الآجل ───
     // القاعدة: الضبط الوقائي يمنع تكوّن الدين المعدوم، لا يسجّله بعده.
     // الفحص يقع هنا — النقطة الوحيدة التي يمرّ بها كل بيع آجل.
-    if (_method == 'آجل' && !_isSubscription && _debtCustomerId != null) {
+    if (_method == PaymentMethod.credit.key && !_isSubscription && _debtCustomerId != null) {
       final remainingAfter = (_payable - _paid).clamp(0.0, _payable);
       if (remainingAfter > 0) {
         final ok = await _passesCreditCheck(remainingAfter);
@@ -777,7 +819,7 @@ class _PaymentMethodDialogState extends State<_PaymentMethodDialog> {
 
     Get.back(
       result: {
-        'method': _method == 'اشتراك' ? 'اشتراك شهري' : _method,
+        'method': _method,
         'paid': _paid,
         'customerId': _debtCustomerId,
         'customerName': _debtCustomerName,
@@ -806,7 +848,7 @@ class _PaymentMethodDialogState extends State<_PaymentMethodDialog> {
     if (result.exceededBy <= 0) {
       if (result.message.isNotEmpty) {
         Get.snackbar(
-          'تنبيه ائتماني',
+          tr('تنبيه ائتماني'),
           result.message,
           snackPosition: SnackPosition.BOTTOM,
           backgroundColor: AppColors.warning,
@@ -821,17 +863,17 @@ class _PaymentMethodDialogState extends State<_PaymentMethodDialog> {
     if (!result.allowed) {
       Get.dialog(
         Directionality(
-          textDirection: TextDirection.rtl,
+          textDirection: L10n.isRtl ? appTextDirection : TextDirection.ltr,
           child: AlertDialog(
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(18),
             ),
-            title: const Row(
+            title: Row(
               children: [
                 Icon(Icons.block, color: AppColors.danger, size: 21),
                 SizedBox(width: 8),
                 Text(
-                  'تجاوز حدّ الائتمان',
+                  tr('تجاوز حدّ الائتمان'),
                   style: TextStyle(
                     fontFamily: 'cairo',
                     fontSize: 15,
@@ -865,11 +907,11 @@ class _PaymentMethodDialogState extends State<_PaymentMethodDialog> {
                       const Icon(Icons.lightbulb_outline,
                           size: 16, color: AppColors.danger),
                       const SizedBox(width: 7),
-                      const Expanded(
+                      Expanded(
                         child: Text(
-                          'الحلول: خفّض المبلغ الآجل، أو حصّل دفعة نقدية، '
-                          'أو ارفع حدّ الائتمان من شاشة حساب الزبون، '
-                          'أو راجع مديرًا للتصديق.',
+                          tr(
+                            'الحلول: خفّض المبلغ الآجل، أو حصّل دفعة نقدية، أو ارفع حدّ الائتمان من شاشة حساب الزبون، أو راجع مديرًا للتصديق.',
+                          ),
                           style: TextStyle(
                             fontFamily: 'cairo',
                             fontSize: 11,
@@ -891,8 +933,8 @@ class _PaymentMethodDialogState extends State<_PaymentMethodDialog> {
                     'customerId': _debtCustomerId,
                   });
                 },
-                child: const Text(
-                  'فتح حساب الزبون',
+                child: Text(
+                  tr('فتح حساب الزبون'),
                   style: TextStyle(
                     fontFamily: 'cairo',
                     fontSize: 12.5,
@@ -904,8 +946,8 @@ class _PaymentMethodDialogState extends State<_PaymentMethodDialog> {
                 style:
                     ElevatedButton.styleFrom(backgroundColor: AppColors.danger),
                 onPressed: () => Get.back(),
-                child: const Text(
-                  'حسنًا',
+                child: Text(
+                  tr('حسنًا'),
                   style: TextStyle(
                     fontFamily: 'cairo',
                     fontSize: 13,
@@ -924,17 +966,17 @@ class _PaymentMethodDialogState extends State<_PaymentMethodDialog> {
     // تجاوز مسموح بصلاحية مدير → تأكيد صريح
     final confirmed = await Get.dialog<bool>(
       Directionality(
-        textDirection: TextDirection.rtl,
+        textDirection: L10n.isRtl ? appTextDirection : TextDirection.ltr,
         child: AlertDialog(
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-          title: const Row(
+          title: Row(
             children: [
               Icon(Icons.warning_amber_rounded,
                   color: AppColors.warning, size: 21),
               SizedBox(width: 8),
               Text(
-                'تأكيد تجاوز حدّ الائتمان',
+                tr('تأكيد تجاوز حدّ الائتمان'),
                 style: TextStyle(
                   fontFamily: 'cairo',
                   fontSize: 15,
@@ -990,9 +1032,10 @@ class _PaymentMethodDialogState extends State<_PaymentMethodDialog> {
                   color: AppColors.warning.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(9),
                 ),
-                child: const Text(
-                  'التجاوز يُسجَّل في سجل التدقيق باسمك — تأكد أن هناك موافقة '
-                  'من الإدارة قبل المتابعة.',
+                child: Text(
+                  tr(
+                    'التجاوز يُسجَّل في سجل التدقيق باسمك — تأكد أن هناك موافقة من الإدارة قبل المتابعة.',
+                  ),
                   style: TextStyle(
                     fontFamily: 'cairo',
                     fontSize: 10.5,
@@ -1006,8 +1049,8 @@ class _PaymentMethodDialogState extends State<_PaymentMethodDialog> {
           actions: [
             TextButton(
               onPressed: () => Get.back(result: false),
-              child: const Text(
-                'إلغاء',
+              child: Text(
+                tr('إلغاء'),
                 style: TextStyle(fontFamily: 'cairo', fontSize: 13),
               ),
             ),
@@ -1016,8 +1059,8 @@ class _PaymentMethodDialogState extends State<_PaymentMethodDialog> {
                 backgroundColor: AppColors.warning,
               ),
               onPressed: () => Get.back(result: true),
-              child: const Text(
-                'أوافق وأُكمل البيع',
+              child: Text(
+                tr('أوافق وأُكمل البيع'),
                 style: TextStyle(
                   fontFamily: 'cairo',
                   fontSize: 13,
@@ -1039,9 +1082,7 @@ class _PaymentMethodDialogState extends State<_PaymentMethodDialog> {
         tableName: 'customers',
         recordId: _debtCustomerId,
         newValues:
-            '{"exceeded_by":${result.exceededBy},'
-            '"debt_after":${result.debtAfter},'
-            '"limit":${result.limit}}',
+            '{"exceeded_by":${result.exceededBy},"debt_after":${result.debtAfter},"limit":${result.limit}}',
       );
       return true;
     }
@@ -1072,11 +1113,20 @@ class _PaymentMethodDialogState extends State<_PaymentMethodDialog> {
     if (!result.willExceed) {
       if (result.isNearLimit) {
         Get.snackbar(
-          'قارب سقف الاشتراك',
-          'استهلك «${_debtCustomerName ?? ''}» '
-              '${(result.usageRatio * 100).round()}% من سقف اشتراكه. '
-              'المتبقّي: ${result.limitPieces - result.usedPieces} قطعة'
-              '${result.limitValue > 0 ? ' و${(result.limitValue - result.usedValue).toStringAsFixed(2)} ر.س' : ''}.',
+          tr('قارب سقف الاشتراك'),
+          trf(
+            'استهلك «{0}» {1}% من سقف اشتراكه. المتبقّي: {2} قطعة{3}.',
+            [
+              _debtCustomerName ?? '',
+              '${(result.usageRatio * 100).round()}',
+              '${result.limitPieces - result.usedPieces}',
+              result.limitValue > 0
+                  ? trf('{0} ر.س', [
+                      (result.limitValue - result.usedValue).toStringAsFixed(2),
+                    ])
+                  : '',
+            ],
+          ),
           snackPosition: SnackPosition.BOTTOM,
           backgroundColor: AppColors.warning,
           colorText: Colors.white,
@@ -1090,17 +1140,17 @@ class _PaymentMethodDialogState extends State<_PaymentMethodDialog> {
     if (!result.allowed) {
       Get.dialog(
         Directionality(
-          textDirection: TextDirection.rtl,
+          textDirection: L10n.isRtl ? appTextDirection : TextDirection.ltr,
           child: AlertDialog(
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(18),
             ),
-            title: const Row(
+            title: Row(
               children: [
                 Icon(Icons.block, color: AppColors.danger, size: 21),
                 SizedBox(width: 8),
                 Text(
-                  'تجاوز سقف الاشتراك',
+                  tr('تجاوز سقف الاشتراك'),
                   style: TextStyle(
                     fontFamily: 'cairo',
                     fontSize: 15,
@@ -1125,16 +1175,15 @@ class _PaymentMethodDialogState extends State<_PaymentMethodDialog> {
                 const SizedBox(height: 12),
                 if (result.limitPieces > 0)
                   _usageRow(
-                    'القطع',
+                    tr('القطع'),
                     '${result.usedPieces} / ${result.limitPieces}',
                     '(+${result.addPieces})',
                     AppColors.info,
                   ),
                 if (result.limitValue > 0)
                   _usageRow(
-                    'القيمة',
-                    '${result.usedValue.toStringAsFixed(2)} / '
-                        '${result.limitValue.toStringAsFixed(2)}',
+                    tr('القيمة'),
+                    '${result.usedValue.toStringAsFixed(2)} / ${result.limitValue.toStringAsFixed(2)}',
                     '(+${result.addValue.toStringAsFixed(2)})',
                     AppColors.violet,
                   ),
@@ -1145,18 +1194,17 @@ class _PaymentMethodDialogState extends State<_PaymentMethodDialog> {
                     color: AppColors.danger.withValues(alpha: 0.06),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: const Row(
+                  child: Row(
                     children: [
-                      Icon(Icons.lightbulb_outline,
+                      const Icon(Icons.lightbulb_outline,
                           size: 16, color: AppColors.danger),
-                      SizedBox(width: 7),
+                      const SizedBox(width: 7),
                       Expanded(
                         child: Text(
-                          'الحلول: سجّل تجديدًا للاشتراك من شاشة الاشتراكات '
-                          '(سيمدّد التغطية ويفتح سقفًا جديدًا)، أو ارفع سقف '
-                          'الاستخدام بموافقة الإدارة، أو اختر طريقة دفع أخرى '
-                          'لهذه الفاتورة.',
-                          style: TextStyle(
+                          tr(
+                            'الحلول: سجّل تجديدًا للاشتراك من شاشة الاشتراكات (سيمدّد التغطية ويفتح سقفًا جديدًا)، أو ارفع سقف الاستخدام بموافقة الإدارة، أو اختر طريقة دفع أخرى لهذه الفاتورة.',
+                          ),
+                          style: const TextStyle(
                             fontFamily: 'cairo',
                             fontSize: 10.5,
                             height: 1.6,
@@ -1175,8 +1223,8 @@ class _PaymentMethodDialogState extends State<_PaymentMethodDialog> {
                   backgroundColor: AppColors.danger,
                 ),
                 onPressed: () => Get.back(),
-                child: const Text(
-                  'حسنًا',
+                child: Text(
+                  tr('حسنًا'),
                   style: TextStyle(
                     fontFamily: 'cairo',
                     fontSize: 13,
@@ -1195,17 +1243,17 @@ class _PaymentMethodDialogState extends State<_PaymentMethodDialog> {
     // تجاوز مسموح بصلاحية مدير → تأكيد صريح
     final confirmed = await Get.dialog<bool>(
       Directionality(
-        textDirection: TextDirection.rtl,
+        textDirection: L10n.isRtl ? appTextDirection : TextDirection.ltr,
         child: AlertDialog(
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-          title: const Row(
+          title: Row(
             children: [
               Icon(Icons.warning_amber_rounded,
                   color: AppColors.warning, size: 21),
               SizedBox(width: 8),
               Text(
-                'تأكيد تجاوز سقف الاشتراك',
+                tr('تأكيد تجاوز سقف الاشتراك'),
                 style: TextStyle(
                   fontFamily: 'cairo',
                   fontSize: 15,
@@ -1230,10 +1278,10 @@ class _PaymentMethodDialogState extends State<_PaymentMethodDialog> {
               const SizedBox(height: 12),
               if (result.limitPieces > 0)
                 _usageRow(
-                  'القطع',
+                  tr('القطع'),
                   '${result.usedPieces} / ${result.limitPieces}',
                   result.exceededPieces > 0
-                      ? 'تجاوز ${result.exceededPieces}'
+                      ? trf('تجاوز {0}', ['${result.exceededPieces}'])
                       : '(+${result.addPieces})',
                   result.exceededPieces > 0
                       ? AppColors.danger
@@ -1241,11 +1289,12 @@ class _PaymentMethodDialogState extends State<_PaymentMethodDialog> {
                 ),
               if (result.limitValue > 0)
                 _usageRow(
-                  'القيمة',
-                  '${result.usedValue.toStringAsFixed(2)} / '
-                      '${result.limitValue.toStringAsFixed(2)}',
+                  tr('القيمة'),
+                  '${result.usedValue.toStringAsFixed(2)} / ${result.limitValue.toStringAsFixed(2)}',
                   result.exceededValue > 0
-                      ? 'تجاوز ${result.exceededValue.toStringAsFixed(2)}'
+                      ? trf('تجاوز {0}', [
+                          result.exceededValue.toStringAsFixed(2),
+                        ])
                       : '(+${result.addValue.toStringAsFixed(2)})',
                   result.exceededValue > 0
                       ? AppColors.danger
@@ -1255,7 +1304,7 @@ class _PaymentMethodDialogState extends State<_PaymentMethodDialog> {
                 Padding(
                   padding: const EdgeInsets.only(top: 6),
                   child: Text(
-                    'الحدّ الفعلي هو عدد القطع — هو ما استُنفد أولًا.',
+                    tr('الحدّ الفعلي هو عدد القطع — هو ما استُنفد أولًا.'),
                     style: TextStyle(
                       fontFamily: 'cairo',
                       fontSize: 10.5,
@@ -1270,9 +1319,10 @@ class _PaymentMethodDialogState extends State<_PaymentMethodDialog> {
                   color: AppColors.warning.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(9),
                 ),
-                child: const Text(
-                  'التجاوز يُسجَّل في سجل التدقيق باسمك — تأكد أن هناك موافقة '
-                  'من الإدارة قبل المتابعة.',
+                child: Text(
+                  tr(
+                    'التجاوز يُسجَّل في سجل التدقيق باسمك — تأكد أن هناك موافقة من الإدارة قبل المتابعة.',
+                  ),
                   style: TextStyle(
                     fontFamily: 'cairo',
                     fontSize: 10.5,
@@ -1286,8 +1336,8 @@ class _PaymentMethodDialogState extends State<_PaymentMethodDialog> {
           actions: [
             TextButton(
               onPressed: () => Get.back(result: false),
-              child: const Text(
-                'إلغاء',
+              child: Text(
+                tr('إلغاء'),
                 style: TextStyle(fontFamily: 'cairo', fontSize: 13),
               ),
             ),
@@ -1296,8 +1346,8 @@ class _PaymentMethodDialogState extends State<_PaymentMethodDialog> {
                 backgroundColor: AppColors.warning,
               ),
               onPressed: () => Get.back(result: true),
-              child: const Text(
-                'أوافق وأُكمل الفاتورة',
+              child: Text(
+                tr('أوافق وأُكمل الفاتورة'),
                 style: TextStyle(
                   fontFamily: 'cairo',
                   fontSize: 13,
@@ -1321,7 +1371,7 @@ class _PaymentMethodDialogState extends State<_PaymentMethodDialog> {
         children: [
           Expanded(
             child: Text(
-              label,
+              tr(label),
               style: const TextStyle(
                 fontFamily: 'cairo',
                 fontSize: 12,
@@ -1360,7 +1410,7 @@ class _PaymentMethodDialogState extends State<_PaymentMethodDialog> {
         children: [
           Expanded(
             child: Text(
-              label,
+              tr(label),
               style: const TextStyle(
                 fontFamily: 'cairo',
                 fontSize: 12,
@@ -1369,7 +1419,7 @@ class _PaymentMethodDialogState extends State<_PaymentMethodDialog> {
             ),
           ),
           Text(
-            '${value.toStringAsFixed(2)} ر.س',
+            trf('{0} ر.س', [value.toStringAsFixed(2)]),
             style: TextStyle(
               fontFamily: 'cairo',
               fontSize: 12.5,
@@ -1388,8 +1438,8 @@ class _PaymentMethodDialogState extends State<_PaymentMethodDialog> {
     // اقترحت «بالضبط» مبلغًا أكبر من المطلوب فعلًا.
     final amt = _payable;
     final quick = [
-      ('بالضبط', amt),
-      ('الأقرب 5', ((amt + 4) / 5).floor() * 5.0),
+      (tr('بالضبط'), amt),
+      (tr('الأقرب 5'), ((amt + 4) / 5).floor() * 5.0),
       ('+10', (_paid + 10).clamp(0.0, amt)),
       ('+20', (_paid + 20).clamp(0.0, amt)),
       ('+50', (_paid + 50).clamp(0.0, amt)),
@@ -1418,7 +1468,7 @@ class _PaymentMethodDialogState extends State<_PaymentMethodDialog> {
             ),
             const SizedBox(height: 10),
             Text(
-              "طريقة الدفع",
+              tr('طريقة الدفع'),
               style: TextStyle(
                 fontFamily: 'cairo',
                 fontSize: 17,
@@ -1428,7 +1478,10 @@ class _PaymentMethodDialogState extends State<_PaymentMethodDialog> {
             ),
             const SizedBox(height: 4),
             Text(
-              "فاتورة رقم #${widget.invoiceNumber} — الإجمالي ${amt.toStringAsFixed(2)} ر.س",
+              trf('فاتورة رقم #{0} — الإجمالي {1} ر.س', [
+                '${widget.invoiceNumber}',
+                amt.toStringAsFixed(2),
+              ]),
               style: TextStyle(
                 fontFamily: 'cairo',
                 fontSize: 11.5,
@@ -1457,10 +1510,16 @@ class _PaymentMethodDialogState extends State<_PaymentMethodDialog> {
                       const SizedBox(width: 5),
                       Flexible(
                         child: Text(
-                          'خصم ${_discount.toStringAsFixed(2)} ر.س'
-                          '${_discountCode.isEmpty ? '' : ' ($_discountCode)'}'
-                          ' — الإجمالي قبل الخصم '
-                          '${widget.total.toStringAsFixed(2)} ر.س',
+                          trf(
+                            'خصم {0} ر.س{1} — الإجمالي قبل الخصم {2} ر.س',
+                            [
+                              _discount.toStringAsFixed(2),
+                              _discountCode.isEmpty
+                                  ? ''
+                                  : ' ($_discountCode)',
+                              widget.total.toStringAsFixed(2),
+                            ],
+                          ),
                           style: const TextStyle(
                             fontFamily: 'cairo',
                             fontSize: 11,
@@ -1494,7 +1553,10 @@ class _PaymentMethodDialogState extends State<_PaymentMethodDialog> {
                           size: 14, color: AppColors.success),
                       const SizedBox(width: 4),
                       Text(
-                        'رصيد الزبون: ${_customerBalance.toStringAsFixed(2)} ر.س — سيُخصم من الفاتورة',
+                        trf(
+                          'رصيد الزبون: {0} ر.س — سيُخصم من الفاتورة',
+                          [_customerBalance.toStringAsFixed(2)],
+                        ),
                         style: TextStyle(
                           fontFamily: 'cairo',
                           fontSize: 11,
@@ -1512,44 +1574,44 @@ class _PaymentMethodDialogState extends State<_PaymentMethodDialog> {
               children: [
                 Expanded(
                   child: _PayOption(
-                    label: "كاش",
+                    label: PaymentMethod.cash.label,
                     icon: Icons.payments,
                     color: AppColors.success,
-                    selected: _method == 'كاش',
-                    onTap: () => _selectMethod('كاش'),
+                    selected: _method == PaymentMethod.cash.key,
+                    onTap: () => _selectMethod(PaymentMethod.cash.key),
                   ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: _PayOption(
-                    label: "شبكة",
+                    label: PaymentMethod.card.label,
                     icon: Icons.credit_card,
                     color: AppColors.info,
-                    selected: _method == 'شبكة',
-                    onTap: () => _selectMethod('شبكة'),
+                    selected: _method == PaymentMethod.card.key,
+                    onTap: () => _selectMethod(PaymentMethod.card.key),
                   ),
                 ),
                 const SizedBox(width: 8),
                 // الآجل يظهر فقط لمن يملك صلاحية منح الائتمان — إخفاء الخيار
                 // غير المصرّح به أوضح من إظهاره ثم رفضه بعد الملء.
-                if (PermissionService.canSellOnCredit)
+                if (PermissionService.can(PermissionKeys.invoiceSellOnCredit))
                   Expanded(
                     child: _PayOption(
-                      label: "آجل",
+                      label: PaymentMethod.credit.label,
                       icon: Icons.event_repeat,
                       color: AppColors.warning,
-                      selected: _method == 'آجل',
-                      onTap: () => _selectMethod('آجل'),
+                      selected: _method == PaymentMethod.credit.key,
+                      onTap: () => _selectMethod(PaymentMethod.credit.key),
                     ),
                   ),
-                if (PermissionService.canSellOnCredit) const SizedBox(width: 8),
+                if (PermissionService.can(PermissionKeys.invoiceSellOnCredit)) const SizedBox(width: 8),
                 Expanded(
                   child: _PayOption(
-                    label: "اشتراك",
+                    label: PaymentMethod.subscription.label,
                     icon: Icons.card_membership,
                     color: AppColors.violet,
-                    selected: _method == 'اشتراك',
-                    onTap: () => _selectMethod('اشتراك'),
+                    selected: _isSubscription,
+                    onTap: () => _selectMethod(PaymentMethod.subscription.key),
                   ),
                 ),
               ],
@@ -1602,7 +1664,7 @@ class _PaymentMethodDialogState extends State<_PaymentMethodDialog> {
                               ),
                               SizedBox(width: 8),
                               Text(
-                                'جاري تحميل الزبائن...',
+                                tr('جاري تحميل الزبائن...'),
                                 style: TextStyle(
                                   fontFamily: 'cairo',
                                   fontSize: 11,
@@ -1621,13 +1683,13 @@ class _PaymentMethodDialogState extends State<_PaymentMethodDialog> {
                           hint: Text(
                             _isSubscription
                                 ? (_selectableCustomers.isEmpty
-                                      ? 'لا يوجد زبون له اشتراك شهري مسجَّل'
-                                      : 'اختر صاحب الاشتراك (تُعرض حالته)')
+                                      ? tr('لا يوجد زبون له اشتراك شهري مسجَّل')
+                                      : tr('اختر صاحب الاشتراك (تُعرض حالته)'))
                                 : (_customers.isEmpty
-                                      ? 'لا يوجد زبائن — أضفهم من صفحة الزبائن'
-                                      : _method == 'آجل'
-                                      ? 'اختر العميل الذي سيسدد لاحقاً'
-                                      : 'اختر الزبون (اختياري)'),
+                                      ? tr('لا يوجد زبائن — أضفهم من صفحة الزبائن')
+                                      : _method == PaymentMethod.credit.key
+                                      ? tr('اختر العميل الذي سيسدد لاحقاً')
+                                      : tr('اختر الزبون (اختياري)')),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
@@ -1641,9 +1703,7 @@ class _PaymentMethodDialogState extends State<_PaymentMethodDialog> {
                                     (c) => DropdownMenuItem<int>(
                                       value: c['customer_id'],
                                       child: Text(
-                                        '${c['customer_name']} '
-                                        '(${c['phone_1'] ?? '-'})'
-                                        '${_subSuffix(c['customer_id'] as int?)}',
+                                        '${c['customer_name']} (${c['phone_1'] ?? '-'})${_subSuffix(c['customer_id'] as int?)}',
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                         style: const TextStyle(
@@ -1709,8 +1769,12 @@ class _PaymentMethodDialogState extends State<_PaymentMethodDialog> {
                         padding: const EdgeInsets.only(top: 6),
                         child: Text(
                           _isSubscription
-                              ? 'لا يوجد زبون له اشتراك شهري مسجّل — سجّل اشتراكًا من شاشة الاشتراكات الشهرية'
-                              : 'اذهب لصفحة الزبائن → أضف زبوناً ثم عد لهذا الحوار',
+                              ? tr(
+                                  'لا يوجد زبون له اشتراك شهري مسجّل — سجّل اشتراكًا من شاشة الاشتراكات الشهرية',
+                                )
+                              : tr(
+                                  'اذهب لصفحة الزبائن → أضف زبوناً ثم عد لهذا الحوار',
+                                ),
                           style: const TextStyle(
                             fontFamily: 'cairo',
                             fontSize: 10.5,
@@ -1726,7 +1790,7 @@ class _PaymentMethodDialogState extends State<_PaymentMethodDialog> {
             // ─── كود الخصم ───
             // يظهر فقط لمن يملك صلاحية الخصم: إخفاء الخيار غير المصرّح به
             // أوضح من إظهاره ثم رفضه بعد أن يُدخل الكاشير الكود أمام الزبون.
-            if (PermissionService.canApplyDiscount && !_isSubscription) ...[
+            if (PermissionService.can(PermissionKeys.invoiceDiscountApply) && !_isSubscription) ...[
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(10),
@@ -1751,9 +1815,9 @@ class _PaymentMethodDialogState extends State<_PaymentMethodDialog> {
                         Icon(Icons.local_offer_outlined,
                             size: 16, color: AppColors.success),
                         const SizedBox(width: 6),
-                        const Expanded(
+                        Expanded(
                           child: Text(
-                            'كود الخصم (اختياري)',
+                            tr('كود الخصم (اختياري)'),
                             style: TextStyle(
                               fontFamily: 'cairo',
                               fontSize: 11.5,
@@ -1770,8 +1834,8 @@ class _PaymentMethodDialogState extends State<_PaymentMethodDialog> {
                                   horizontal: 8),
                               minimumSize: const Size(0, 28),
                             ),
-                            child: const Text(
-                              'إلغاء الخصم',
+                            child: Text(
+                              tr('إلغاء الخصم'),
                               style: TextStyle(
                                 fontFamily: 'cairo',
                                 fontSize: 11,
@@ -1797,7 +1861,7 @@ class _PaymentMethodDialogState extends State<_PaymentMethodDialog> {
                             ),
                             decoration: InputDecoration(
                               isDense: true,
-                              hintText: 'مثال: WASH10',
+                              hintText: tr('مثال: WASH10'),
                               prefixIcon: const Icon(
                                 Icons.confirmation_number_outlined,
                                 size: 17,
@@ -1833,8 +1897,8 @@ class _PaymentMethodDialogState extends State<_PaymentMethodDialog> {
                                       color: Colors.white,
                                     ),
                                   )
-                                : const Text(
-                                    'تطبيق',
+                                : Text(
+                                    tr('تطبيق'),
                                     style: TextStyle(
                                       fontFamily: 'cairo',
                                       fontSize: 12.5,
@@ -1867,11 +1931,11 @@ class _PaymentMethodDialogState extends State<_PaymentMethodDialog> {
               const SizedBox(height: 12),
             ],
             // ─── المبالغ السريعة (كاش / آجل جزئي) ───
-            if (_method == 'كاش' || _method == 'آجل') ...[
+            if (_method == PaymentMethod.cash.key || _method == PaymentMethod.credit.key) ...[
               Align(
                 alignment: Alignment.centerRight,
                 child: Text(
-                  'المبلغ المدفوع الآن:',
+                  tr('المبلغ المدفوع الآن:'),
                   style: TextStyle(
                     fontFamily: 'cairo',
                     fontSize: 11.5,
@@ -1925,8 +1989,10 @@ class _PaymentMethodDialogState extends State<_PaymentMethodDialog> {
                 children: [
                   Text(
                     _remaining > 0
-                        ? 'المتبقي: ${_remaining.toStringAsFixed(2)} ر.س'
-                        : 'تم سداد الإجمالي ✓',
+                        ? trf('المتبقي: {0} ر.س', [
+                            _remaining.toStringAsFixed(2),
+                          ])
+                        : tr('تم سداد الإجمالي ✓'),
                     style: TextStyle(
                       fontFamily: 'cairo',
                       fontSize: 12,
@@ -1937,7 +2003,7 @@ class _PaymentMethodDialogState extends State<_PaymentMethodDialog> {
                   ),
                   if (_remaining > 0)
                     Text(
-                      'سيُسجل كذمة على الزبون',
+                      tr('سيُسجل كذمة على الزبون'),
                       style: TextStyle(
                         fontFamily: 'cairo',
                         fontSize: 10.5,
@@ -1957,8 +2023,8 @@ class _PaymentMethodDialogState extends State<_PaymentMethodDialog> {
                     style: OutlinedButton.styleFrom(
                       foregroundColor: AppColors.textSecondary,
                     ),
-                    child: const Text(
-                      'إلغاء',
+                    child: Text(
+                      tr('إلغاء'),
                       style: TextStyle(fontFamily: 'cairo', fontSize: 14),
                     ),
                   ),
@@ -1968,17 +2034,17 @@ class _PaymentMethodDialogState extends State<_PaymentMethodDialog> {
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(
                       backgroundColor:
-                          _method == 'آجل'
+                          _method == PaymentMethod.credit.key
                               ? AppColors.warning
-                              : _method == 'شبكة'
+                              : _method == PaymentMethod.card.key
                               ? AppColors.info
-                              : _method == 'اشتراك'
+                              : _isSubscription
                               ? AppColors.violet
                               : AppColors.success,
                     ),
                     onPressed: _confirm,
-                    child: const Text(
-                      'تأكيد الإصدار',
+                    child: Text(
+                      tr('تأكيد الإصدار'),
                       style: TextStyle(
                         fontFamily: 'cairo',
                         fontSize: 14,
@@ -2072,7 +2138,7 @@ class _PayOption extends StatelessWidget {
             Icon(icon, color: selected ? Colors.white : color, size: 24),
             const SizedBox(height: 6),
             Text(
-              label,
+              tr(label),
               style: TextStyle(
                 fontFamily: 'cairo',
                 fontSize: 12,

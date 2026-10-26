@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:laundry/services/customer/customer_ledger_service.dart';
 import 'package:laundry/services/customer/customer_statement_service.dart';
+import 'package:laundry/services/i18n/l10n.dart';
 import 'package:laundry/sqldb.dart';
 import 'package:laundry/services/security/session_manager.dart';
 
@@ -99,20 +100,14 @@ class CustomerAccountController extends GetxController {
 
       // فواتيره الآجلة (remaining_amount > 0) — بالمعرّف لا بالاسم
       final invRows = await _db.readData(
-        'SELECT * FROM invoices WHERE customer_id = ? '
-        'AND subscription_id IS NULL AND remaining_amount > 0.004 '
-        'ORDER BY invoice_date ASC',
+        'SELECT * FROM invoices WHERE customer_id = ? AND subscription_id IS NULL AND remaining_amount > 0.004 ORDER BY invoice_date ASC',
         [customerId],
       );
       invoices.assignAll(invRows);
 
       // سجل مدفوعاته
       final payRows = await _db.readData(
-        'SELECT cp.*, u.full_name as user_name '
-        'FROM customer_payments cp '
-        'LEFT JOIN users u ON cp.recorded_by = u.user_id '
-        'WHERE cp.customer_id = ? '
-        'ORDER BY cp.payment_date DESC',
+        'SELECT cp.*, u.full_name as user_name FROM customer_payments cp LEFT JOIN users u ON cp.recorded_by = u.user_id WHERE cp.customer_id = ? ORDER BY cp.payment_date DESC',
         [customerId],
       );
       payments.assignAll(payRows);
@@ -146,8 +141,8 @@ class CustomerAccountController extends GetxController {
     final amountCents = CustomerLedgerService.toCents(amount);
     if (amountCents <= 0) {
       Get.snackbar(
-        'خطأ',
-        'المبلغ يجب أن يكون أكبر من صفر',
+        tr('خطأ'),
+        tr('المبلغ يجب أن يكون أكبر من صفر'),
         snackPosition: SnackPosition.BOTTOM,
       );
       return false;
@@ -177,8 +172,7 @@ class CustomerAccountController extends GetxController {
         action: 'customer_payment',
         tableName: 'customer_payments',
         newValues:
-            '{"customer_id":$customerId,"amount":$amount,'
-            '"method":"$paymentMethod"}',
+            '{"customer_id":$customerId,"amount":$amount,"method":"$paymentMethod"}',
       );
 
       // 2. التوزيع FIFO — **عبر المحرّك المركزي وحده**.
@@ -223,11 +217,15 @@ class CustomerAccountController extends GetxController {
 
       final remainingAfter = CustomerLedgerService.fromCents(debtNow);
       Get.snackbar(
-        'نجاح',
+        tr('نجاح'),
         surplus > 0
-            ? 'تم تسجيل ${amount.toStringAsFixed(2)} — بقي للزبون رصيد '
-                  '${surplus.toStringAsFixed(2)} ر.س كسلفة'
-            : 'تم تسجيل الدفعة — الذمة المتبقية ${remainingAfter.toStringAsFixed(2)} ر.س',
+            ? trf(
+                'تم تسجيل {0} — بقي للزبون رصيد {1} ر.س كسلفة',
+                [amount.toStringAsFixed(2), surplus.toStringAsFixed(2)],
+              )
+            : trf('تم تسجيل الدفعة — الذمة المتبقية {0} ر.س', [
+                remainingAfter.toStringAsFixed(2),
+              ]),
         snackPosition: SnackPosition.BOTTOM,
         backgroundColor: const Color(0xFF16A34A),
         colorText: Colors.white,
@@ -236,8 +234,8 @@ class CustomerAccountController extends GetxController {
     } catch (e) {
       debugPrint('recordPayment error: $e');
       Get.snackbar(
-        'خطأ',
-        'فشل في تسجيل الدفعة: $e',
+        tr('خطأ'),
+        trf('فشل في تسجيل الدفعة: {0}', [e]),
         snackPosition: SnackPosition.BOTTOM,
       );
       return false;
@@ -255,10 +253,12 @@ class CustomerAccountController extends GetxController {
       );
       await loadCustomerAccount(customerId);
       Get.snackbar(
-        'تم',
+        tr('تم'),
         limit <= 0
-            ? 'أُلغي حدّ الدين الآجل'
-            : 'حُدّد حدّ الدين الآجل بـ ${limit.toStringAsFixed(2)} ر.س',
+            ? tr('أُلغي حدّ الدين الآجل')
+            : trf('حُدّد حدّ الدين الآجل بـ {0} ر.س', [
+                limit.toStringAsFixed(2),
+              ]),
         snackPosition: SnackPosition.BOTTOM,
         backgroundColor: const Color(0xFF16A34A),
         colorText: Colors.white,
@@ -273,8 +273,8 @@ class CustomerAccountController extends GetxController {
     final used = await _ledger.consumeCredit(customerId);
     if (used <= 0) {
       Get.snackbar(
-        'لا يوجد رصيد',
-        'الزبون لا يملك سلفة قابلة للاستخدام',
+        tr('لا يوجد رصيد'),
+        tr('الزبون لا يملك سلفة قابلة للاستخدام'),
         snackPosition: SnackPosition.BOTTOM,
         backgroundColor: const Color(0xFFF59E0B),
         colorText: Colors.white,
@@ -283,8 +283,10 @@ class CustomerAccountController extends GetxController {
     }
     await loadCustomerAccount(customerId);
     Get.snackbar(
-      'تم',
-      'استُخدم ${used.toStringAsFixed(2)} ر.س من رصيد الزبون في سداد ذممه',
+      tr('تم'),
+      trf('استُخدم {0} ر.س من رصيد الزبون في سداد ذممه', [
+        used.toStringAsFixed(2),
+      ]),
       snackPosition: SnackPosition.BOTTOM,
       backgroundColor: const Color(0xFF16A34A),
       colorText: Colors.white,

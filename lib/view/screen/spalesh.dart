@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 import 'package:laundry/controller/splashcontroller.dart';
 import 'package:laundry/core/theme/app_colors.dart';
 import 'package:laundry/services/business_info_service.dart';
+import 'package:laundry/services/i18n/l10n.dart';
 import 'package:laundry/view/widget/common/developer_credit.dart';
 
 class SplashScreen extends StatelessWidget {
@@ -94,7 +95,7 @@ class SplashScreen extends StatelessWidget {
                         Text(
                           BusinessInfoService.instance.name.isNotEmpty
                               ? BusinessInfoService.instance.name
-                              : 'نظام إدارة المغاسل',
+                              : tr('نظام إدارة المغاسل'),
                           style: TextStyle(
                             fontSize: 42,
                             color: Colors.white,
@@ -112,7 +113,7 @@ class SplashScreen extends StatelessWidget {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          "نظام إدارة المغاسل الذكي",
+                          tr('نظام إدارة المغاسل الذكي'),
                           style: TextStyle(
                             fontSize: 15,
                             color: Colors.white.withValues(alpha: 0.8),

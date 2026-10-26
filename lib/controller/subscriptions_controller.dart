@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
 import 'package:laundry/services/customer/customer_ledger_service.dart';
+import 'package:laundry/services/i18n/l10n.dart';
 import 'package:laundry/services/security/session_manager.dart';
 import 'package:laundry/services/subscription/subscription_service.dart';
 import 'package:laundry/sqldb.dart';
@@ -163,8 +164,9 @@ class SubscriptionsController extends GetxController {
             ..sort((a, b) => b.value.compareTo(a.value));
           topBySub[entry.key] = sorted
               .take(3)
-              .map((e) => '${e.key} ×${e.value}')
-              .join('، ');
+              // الاسم بلغة الواجهة (القاموس)، والفاصل يتبع اللغة كذلك.
+              .map((e) => '${localizedText(e.key, null)} ×${e.value}')
+              .join(L10n.isRtl ? '، ' : ', ');
         }
       }
 
@@ -245,11 +247,7 @@ class SubscriptionsController extends GetxController {
     try {
       final placeholders = List.filled(subIds.length, '?').join(',');
       final rows = await _db.readData(
-        'SELECT invoices_id, subscription_id, invoice_date, total_price, '
-        '  final_amount, subscription_used_value, subscription_used_pieces, '
-        '  list_data '
-        'FROM invoices WHERE subscription_id IN ($placeholders) '
-        'ORDER BY invoice_date DESC',
+        'SELECT invoices_id, subscription_id, invoice_date, total_price,   final_amount, subscription_used_value, subscription_used_pieces,   list_data FROM invoices WHERE subscription_id IN ($placeholders) ORDER BY invoice_date DESC',
         subIds,
       );
       final map = <int, List<Map<String, dynamic>>>{};
@@ -319,7 +317,7 @@ class SubscriptionsController extends GetxController {
     String? notes,
   }) async {
     if (amount <= 0) {
-      throw Exception('المبلغ الشهري يجب أن يكون أكبر من صفر');
+      throw Exception(tr('المبلغ الشهري يجب أن يكون أكبر من صفر'));
     }
     final days = periodDays <= 0 ? 30 : periodDays;
 
@@ -334,9 +332,10 @@ class SubscriptionsController extends GetxController {
     if (existing.isNotEmpty) {
       final other = existing.first;
       throw Exception(
-        '«$customerName» لديه اشتراك نشط بالفعل '
-        '(#${other['subscription_id']} بمبلغ ${other['amount']}). '
-        'أوقف الاشتراك القديم أولًا أو جدّد نفسه.',
+        trf(
+          '«{0}» لديه اشتراك نشط بالفعل (#{1} بمبلغ {2}). أوقف الاشتراك القديم أولًا أو جدّد نفسه.',
+          [customerName, other['subscription_id'], other['amount']],
+        ),
       );
     }
 
@@ -363,8 +362,7 @@ class SubscriptionsController extends GetxController {
       tableName: 'subscriptions',
       recordId: id,
       newValues:
-          '{"customer":"$customerName","amount":$amount,"days":$days,'
-          '"limit_pieces":$usageLimitPieces,"limit_value":$usageLimitValue}',
+          '{"customer":"$customerName","amount":$amount,"days":$days,"limit_pieces":$usageLimitPieces,"limit_value":$usageLimitValue}',
     );
 
     await _db.safeInsert('subscription_coverage_log', {
@@ -427,11 +425,11 @@ class SubscriptionsController extends GetxController {
   Future<DateTime> pay({
     required Map<String, dynamic> sub,
     required double amount,
-    String method = 'كاش',
+    String method = 'cash',
     String? notes,
   }) async {
     final id = sub['subscription_id'] as int?;
-    if (id == null) throw Exception('معرّف الاشتراك غير صالح');
+    if (id == null) throw Exception(tr('معرّف الاشتراك غير صالح'));
     final until = await SubscriptionService.pay(
       subscriptionId: id,
       amount: amount,
@@ -600,10 +598,7 @@ class SubscriptionsController extends GetxController {
       final start = DateTime(month.year, month.month, 1);
       final end = DateTime(month.year, month.month + 1, 1);
       final rows = await _db.readData(
-        'SELECT COALESCE(SUM(COALESCE(i.subscription_used_pieces, 0)), 0) '
-        '  AS pieces '
-        'FROM invoices i WHERE i.subscription_id IS NOT NULL '
-        '  AND DATE(i.invoice_date) >= ? AND DATE(i.invoice_date) < ?',
+        'SELECT COALESCE(SUM(COALESCE(i.subscription_used_pieces, 0)), 0)   AS pieces FROM invoices i WHERE i.subscription_id IS NOT NULL   AND DATE(i.invoice_date) >= ? AND DATE(i.invoice_date) < ?',
         [
           DateFormat('yyyy-MM-dd').format(start),
           DateFormat('yyyy-MM-dd').format(end),
@@ -614,11 +609,7 @@ class SubscriptionsController extends GetxController {
       if (stored > 0) return stored;
       // احتياطي للفواتير القديمة
       final fallback = await _db.readData(
-        'SELECT COALESCE(SUM(CAST(json_extract(j.value, \'\$.count\') '
-        '  AS INTEGER)), 0) AS pieces '
-        'FROM invoices i, json_each(i.list_data) j '
-        'WHERE i.subscription_id IS NOT NULL '
-        '  AND DATE(i.invoice_date) >= ? AND DATE(i.invoice_date) < ?',
+        'SELECT COALESCE(SUM(CAST(json_extract(j.value, \'\$.count\')   AS INTEGER)), 0) AS pieces FROM invoices i, json_each(i.list_data) j WHERE i.subscription_id IS NOT NULL   AND DATE(i.invoice_date) >= ? AND DATE(i.invoice_date) < ?',
         [
           DateFormat('yyyy-MM-dd').format(start),
           DateFormat('yyyy-MM-dd').format(end),
@@ -746,29 +737,30 @@ class SubscriptionsController extends GetxController {
         out.add({
           'kind': 'unpaid',
           'subscription': s,
-          'message': 'اشتراك بلا دفعة — لا تغطية',
+          'message': tr('اشتراك بلا دفعة — لا تغطية'),
           'severity': 0,
         });
       } else if (st == SubStatus.overdue) {
         out.add({
           'kind': 'overdue',
           'subscription': s,
-          'message':
-              'انتهت التغطية منذ ${SubscriptionService.daysRemaining(s).abs()} يوم',
+          'message': trf('انتهت التغطية منذ {0} يوم', [
+            SubscriptionService.daysRemaining(s).abs(),
+          ]),
           'severity': 1,
         });
       } else if (st == SubStatus.capped) {
         out.add({
           'kind': 'capped',
           'subscription': s,
-          'message': 'استُهلك سقف الاستخدام',
+          'message': tr('استُهلك سقف الاستخدام'),
           'severity': 2,
         });
       } else if (ratio >= 0.8) {
         out.add({
           'kind': 'near_limit',
           'subscription': s,
-          'message': 'بلغ ${(ratio * 100).round()}% من السقف',
+          'message': trf('بلغ {0}% من السقف', [(ratio * 100).round()]),
           'severity': 3,
         });
       }

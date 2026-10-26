@@ -3,6 +3,8 @@ import 'package:get/get.dart';
 import 'package:intl/intl.dart';
 import 'package:laundry/controller/home/dashboard_controller.dart';
 import 'package:laundry/core/theme/app_colors.dart';
+import 'package:laundry/services/i18n/l10n.dart';
+import 'package:laundry/services/payment/payment_method.dart';
 import 'package:laundry/view/widget/common/animation_wrappers.dart';
 import 'package:laundry/view/widget/common/common_widgets.dart';
 
@@ -15,14 +17,17 @@ class DashboardScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          'لوحة التحكم',
-          style: TextStyle(fontFamily: 'cairo', fontWeight: FontWeight.bold),
+        title: Text(
+          tr('لوحة التحكم'),
+          style: const TextStyle(
+            fontFamily: 'cairo',
+            fontWeight: FontWeight.bold,
+          ),
         ),
         centerTitle: true,
         actions: [
           IconButton(
-            tooltip: 'تحديث البيانات',
+            tooltip: tr('تحديث البيانات'),
             icon: const Icon(Icons.refresh),
             onPressed: () => controller.refreshData(),
           ),
@@ -91,9 +96,9 @@ class DashboardScreen extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'ملخص أداء المغسلة اليوم',
-                      style: TextStyle(
+                    Text(
+                      tr('ملخص أداء المغسلة اليوم'),
+                      style: const TextStyle(
                         fontFamily: 'cairo',
                         fontSize: 17,
                         fontWeight: FontWeight.bold,
@@ -120,14 +125,15 @@ class DashboardScreen extends StatelessWidget {
                   color: Colors.white.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(20),
                 ),
-                child: const Row(
+                child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.monetization_on, color: Colors.white, size: 16),
-                    SizedBox(width: 4),
+                    const Icon(Icons.monetization_on,
+                        color: Colors.white, size: 16),
+                    const SizedBox(width: 4),
                     Text(
-                      'ر.س',
-                      style: TextStyle(
+                      tr('ر.س'),
+                      style: const TextStyle(
                         fontFamily: 'cairo',
                         fontSize: 12,
                         color: Colors.white,
@@ -143,19 +149,19 @@ class DashboardScreen extends StatelessWidget {
           Row(
             children: [
               _miniStat(
-                'مبيعات الأمس',
+                tr('مبيعات الأمس'),
                 c.yesterdaySales.value,
                 const Color(0xFFFCD34D),
               ),
               const SizedBox(width: 12),
               _miniStat(
-                'الأسبوع الماضي',
+                tr('الأسبوع الماضي'),
                 c.lastWeekSales.value,
                 const Color(0xFFA3E635),
               ),
               const SizedBox(width: 12),
               _miniStat(
-                'الشهر الماضي',
+                tr('الشهر الماضي'),
                 c.lastMonthSales.value,
                 const Color(0xFF7DD3FC),
               ),
@@ -178,7 +184,7 @@ class DashboardScreen extends StatelessWidget {
           const SizedBox(width: 6),
           Expanded(
             child: Text(
-              '$label: ${value.toStringAsFixed(1)}',
+              trf('{0}: {1}', [label, value.toStringAsFixed(1)]),
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 fontFamily: 'cairo',
@@ -195,30 +201,30 @@ class DashboardScreen extends StatelessWidget {
   Widget _buildKpiGrid(DashboardController c) {
     final kpis = [
       _KpiData(
-        'مبيعات اليوم',
+        tr('مبيعات اليوم'),
         c.todaySales.value,
-        'ر.س',
+        tr('ر.س'),
         Icons.monetization_on,
         AppColors.successGradient,
       ),
       _KpiData(
-        'الفواتير اليوم',
+        tr('الفواتير اليوم'),
         c.todayInvoices.value.toDouble(),
         '',
         Icons.receipt_long,
         AppColors.primaryGradient,
       ),
       _KpiData(
-        'متوسط الفاتورة',
+        tr('متوسط الفاتورة'),
         c.todayAverage.value,
-        'ر.س',
+        tr('ر.س'),
         Icons.analytics,
         AppColors.amberGradient,
       ),
       _KpiData(
-        'صافي الربح',
+        tr('صافي الربح'),
         c.todayProfit.value,
-        'ر.س',
+        tr('ر.س'),
         Icons.trending_up,
         c.todayProfit.value >= 0
             ? AppColors.successGradient
@@ -252,8 +258,8 @@ class DashboardScreen extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SectionHeader(
-            title: 'مبيعات آخر 7 أيام',
+          SectionHeader(
+            title: tr('مبيعات آخر 7 أيام'),
             icon: Icons.bar_chart_rounded,
           ),
           const SizedBox(height: 16),
@@ -263,7 +269,7 @@ class DashboardScreen extends StatelessWidget {
                 c.weeklySales.isEmpty
                     ? Center(
                       child: Text(
-                        'لا توجد بيانات بعد',
+                        tr('لا توجد بيانات بعد'),
                         style: TextStyle(
                           fontFamily: 'cairo',
                           color: AppColors.textSecondary,
@@ -344,8 +350,8 @@ class DashboardScreen extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SectionHeader(
-            title: 'الأصناف الأكثر مبيعاً',
+          SectionHeader(
+            title: tr('الأصناف الأكثر مبيعاً'),
             icon: Icons.emoji_events_outlined,
             color: AppColors.warning,
           ),
@@ -355,7 +361,7 @@ class DashboardScreen extends StatelessWidget {
                 padding: EdgeInsets.symmetric(vertical: 28),
                 child: Center(
                   child: Text(
-                    'لا توجد بيانات بعد',
+                    tr('لا توجد بيانات بعد'),
                     style: TextStyle(
                       fontFamily: 'cairo',
                       color: AppColors.textSecondary,
@@ -366,7 +372,10 @@ class DashboardScreen extends StatelessWidget {
               : Column(
                 children: List.generate(items.length, (i) {
                   final item = items[i];
-                  final name = item['item_name']?.toString() ?? 'غير محدد';
+                  final raw = item['item_name']?.toString() ?? '';
+                  // الاسم بلغة الواجهة: `item_name_en` ثم القاموس ثم العربي.
+                  final name =
+                      raw.isEmpty ? tr('غير محدد') : localized(item, 'item_name');
                   final count = (item['total_count'] ?? 0).toString();
                   final revenue = (item['total_revenue'] ?? 0).toDouble();
                   return Padding(
@@ -407,7 +416,7 @@ class DashboardScreen extends StatelessWidget {
                               ),
                             ),
                             Text(
-                              '$count مبيعة',
+                              trf('{0} مبيعة', [count]),
                               style: TextStyle(
                                 fontFamily: 'cairo',
                                 fontSize: 11,
@@ -447,13 +456,15 @@ class DashboardScreen extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SectionHeader(
-            title: 'ساعات الذروة (آخر 7 أيام)',
+          SectionHeader(
+            title: tr('ساعات الذروة (آخر 7 أيام)'),
             icon: Icons.schedule,
           ),
           const SizedBox(height: 6),
           Text(
-            'توقع مبيعات اليوم حتى الآن: ${c.forecastToday.value.toStringAsFixed(1)} ر.س',
+            trf('توقع مبيعات اليوم حتى الآن: {0} ر.س', [
+              c.forecastToday.value.toStringAsFixed(1),
+            ]),
             style: TextStyle(
               fontFamily: 'cairo',
               fontSize: 11.5,
@@ -466,7 +477,7 @@ class DashboardScreen extends StatelessWidget {
                 padding: EdgeInsets.symmetric(vertical: 20),
                 child: Center(
                   child: Text(
-                    'لا توجد بيانات كافية بعد',
+                    tr('لا توجد بيانات بعد'),
                     style: TextStyle(
                       fontFamily: 'cairo',
                       color: AppColors.textSecondary,
@@ -545,8 +556,8 @@ class DashboardScreen extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SectionHeader(
-            title: 'طرق الدفع اليوم',
+          SectionHeader(
+            title: tr('طرق الدفع اليوم'),
             icon: Icons.payment_rounded,
           ),
           const SizedBox(height: 12),
@@ -555,7 +566,7 @@ class DashboardScreen extends StatelessWidget {
                 padding: EdgeInsets.symmetric(vertical: 28),
                 child: Center(
                   child: Text(
-                    'لا توجد بيانات بعد',
+                    tr('لا توجد بيانات بعد'),
                     style: TextStyle(
                       fontFamily: 'cairo',
                       color: AppColors.textSecondary,
@@ -586,7 +597,10 @@ class DashboardScreen extends StatelessWidget {
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
-                                '${m['payment_method'] ?? 'غير محدد'}',
+                                PaymentMethods.label(
+                                  m['payment_method']?.toString() ??
+                                      PaymentMethod.cash.key,
+                                ),
                                 style: const TextStyle(
                                   fontFamily: 'cairo',
                                   fontSize: 13,

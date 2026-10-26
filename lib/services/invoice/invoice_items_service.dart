@@ -60,18 +60,23 @@ class InvoiceItemsService {
         // التكلفة تُقرأ **الآن** وتُجمَّد: هذا هو جوهر اللقطة.
         final clothing = costs[name];
         final unitCost = clothing?.cost ?? 0.0;
+        final nameEn =
+            '${item['vestments_en'] ?? clothing?.nameEn ?? ''}'.trim();
 
         await _db.safeInsert('invoice_items', {
           'invoice_id': invoiceId,
           'clothing_id': clothing?.id,
           'item_name': name,
+          'item_name_en': nameEn.isEmpty ? null : nameEn,
           'content': '${item['content'] ?? ''}',
+          'content_en': _nullableText(item['content_en']),
           'qty': qty,
           'unit_price': price,
           'unit_cost': unitCost,
           'total_price': total,
           'total_cost': double.parse((unitCost * qty).toStringAsFixed(2)),
           'note': '${item['note'] ?? ''}',
+          'note_en': _nullableText(item['note_en']),
           'created_at': now,
         });
         written++;
@@ -100,21 +105,14 @@ class InvoiceItemsService {
   }) async {
     try {
       final snapshot = await _db.readData(
-        'SELECT COALESCE(SUM(ii.total_cost), 0) AS cost '
-        'FROM invoice_items ii '
-        'JOIN invoices i ON i.invoices_id = ii.invoice_id '
-        'WHERE $where',
+        'SELECT COALESCE(SUM(ii.total_cost), 0) AS cost FROM invoice_items ii JOIN invoices i ON i.invoices_id = ii.invoice_id WHERE $where',
         args,
       );
       final legacy = await _db.readData(
         "SELECT COALESCE(SUM(CAST(json_extract(j.value, '\$.count') AS INTEGER) "
-        '  * COALESCE(c.cost_price, 0)), 0) AS cost '
-        'FROM invoices i, json_each(i.list_data) j, clothing c '
-        'WHERE $where '
+        '  * COALESCE(c.cost_price, 0)), 0) AS cost FROM invoices i, json_each(i.list_data) j, clothing c WHERE $where '
         "  AND json_extract(j.value, '\$.vestments') = c.clothing_name "
-        '  AND NOT EXISTS ('
-        '    SELECT 1 FROM invoice_items ii WHERE ii.invoice_id = i.invoices_id'
-        '  )',
+        '  AND NOT EXISTS (    SELECT 1 FROM invoice_items ii WHERE ii.invoice_id = i.invoices_id  )',
         args,
       );
       final a = (snapshot.firstOrNull?['cost'] as num?)?.toDouble() ?? 0.0;
@@ -143,8 +141,7 @@ class InvoiceItemsService {
   Future<List<Map<String, dynamic>>> itemsOf(int invoiceId) async {
     try {
       return await _db.readData(
-        'SELECT * FROM invoice_items WHERE invoice_id = ? '
-        'ORDER BY item_id ASC',
+        'SELECT * FROM invoice_items WHERE invoice_id = ? ORDER BY item_id ASC',
         [invoiceId],
       );
     } catch (e) {
@@ -156,8 +153,7 @@ class InvoiceItemsService {
   /// خريطة الأصناف بالاسم: المعرّف والتكلفة الحالية.
   Future<Map<String, _ClothingRef>> _clothingMap() async {
     final rows = await _db.readData(
-      'SELECT clothing_id, clothing_name, COALESCE(cost_price, 0) AS cost '
-      'FROM clothing',
+      'SELECT clothing_id, clothing_name, clothing_name_en, COALESCE(cost_price, 0) AS cost FROM clothing',
     );
     final map = <String, _ClothingRef>{};
     for (final r in rows) {
@@ -166,9 +162,15 @@ class InvoiceItemsService {
       map[name] = _ClothingRef(
         id: (r['clothing_id'] as num?)?.toInt(),
         cost: _num(r['cost']),
+        nameEn: '${r['clothing_name_en'] ?? ''}'.trim(),
       );
     }
     return map;
+  }
+
+  static String? _nullableText(dynamic value) {
+    final text = '${value ?? ''}'.trim();
+    return text.isEmpty ? null : text;
   }
 
   static double _num(dynamic value) {
@@ -181,5 +183,6 @@ class InvoiceItemsService {
 class _ClothingRef {
   final int? id;
   final double cost;
-  const _ClothingRef({required this.id, required this.cost});
+  final String nameEn;
+  const _ClothingRef({required this.id, required this.cost, this.nameEn = ''});
 }

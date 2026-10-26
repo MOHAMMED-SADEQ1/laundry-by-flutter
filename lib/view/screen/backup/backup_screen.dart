@@ -6,12 +6,15 @@ import 'package:get/get.dart';
 import 'package:laundry/controller/backup/backup_controller.dart';
 import 'package:laundry/core/theme/app_colors.dart';
 import 'package:laundry/services/database/backup_naming.dart';
+import 'package:laundry/services/i18n/l10n.dart';
 import 'package:laundry/services/database/backup_service.dart';
 import 'package:laundry/services/license/system_license_service.dart';
 import 'package:laundry/services/permission/permission_service.dart';
 import 'package:laundry/view/widget/common/animation_wrappers.dart';
 import 'package:laundry/view/widget/common/common_widgets.dart';
 import 'package:laundry/view/widget/customappbar.dart';
+import 'package:laundry/services/permission/permission_catalog.dart';
+import 'package:laundry/services/i18n/ui_direction.dart';
 
 /// شاشة النسخ الاحتياطي: إنشاء باسم ومكان يختارهما المستخدم، واستعادة من
 /// قائمة داخلية أو من أي ملف على الجهاز.
@@ -37,11 +40,11 @@ class _BackupScreenState extends State<BackupScreen> {
   @override
   Widget build(BuildContext context) {
     return Directionality(
-      textDirection: TextDirection.rtl,
+      textDirection: L10n.isRtl ? appTextDirection : TextDirection.ltr,
       child: Scaffold(
         appBar: CustomAppbar(
-          title: 'النسخ الاحتياطي',
-          subtitle: 'إنشاء واستعادة بيانات النظام',
+          title: tr('النسخ الاحتياطي'),
+          subtitle: tr('إنشاء واستعادة بيانات النظام'),
         ),
         body: Container(
           decoration: const BoxDecoration(
@@ -51,7 +54,7 @@ class _BackupScreenState extends State<BackupScreen> {
               colors: [Color(0xFFF8FAFC), AppColors.background],
             ),
           ),
-          child: PermissionService.canPerformBackup
+          child: PermissionService.can(PermissionKeys.backupPerform)
               ? _body()
               : _noPermission(),
         ),
@@ -68,8 +71,8 @@ class _BackupScreenState extends State<BackupScreen> {
           children: [
             Icon(Icons.lock_outline, size: 54, color: AppColors.textMuted),
             const SizedBox(height: 12),
-            const Text(
-              'النسخ الاحتياطي والاستعادة لمدير النظام (admin) وحده',
+            Text(
+              tr('النسخ الاحتياطي والاستعادة لمدير النظام (admin) وحده'),
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontFamily: 'cairo',
@@ -135,9 +138,9 @@ class _BackupScreenState extends State<BackupScreen> {
                 size: 20,
               ),
               const SizedBox(width: 8),
-              const Text(
-                'صيغة النسخة والمكان',
-                style: TextStyle(
+              Text(
+                tr('صيغة النسخة والمكان'),
+                style: const TextStyle(
                   fontFamily: 'cairo',
                   fontSize: 13.5,
                   fontWeight: FontWeight.bold,
@@ -148,30 +151,30 @@ class _BackupScreenState extends State<BackupScreen> {
           ),
           const SizedBox(height: 10),
           _infoLine(
-            'الصيغة',
-            'ملف قاعدة بيانات SQLite خام بامتداد .db — '
-                'يُفتح بأي أداة SQLite ويُستعاد مباشرة',
+            tr('الصيغة'),
+            tr('ملف قاعدة بيانات SQLite خام بامتداد .db — يُفتح بأي أداة SQLite ويُستعاد مباشرة'),
           ),
           _infoLine(
-            'الحفظ',
-            'كل نسخة تُحفظ مرتين: داخل التطبيق دائمًا، '
-                'وفي المكان الذي تختاره من حوار الحفظ',
+            tr('الحفظ'),
+            tr('كل نسخة تُحفظ مرتين: داخل التطبيق دائمًا، وفي المكان الذي تختاره من حوار الحفظ'),
           ),
           Obx(() {
             final dir = c.archiveDir.value;
-            return dir.isEmpty ? const SizedBox.shrink() : _infoLine('مجلد النسخ', dir);
+            return dir.isEmpty
+                ? const SizedBox.shrink()
+                : _infoLine(tr('مجلد النسخ'), dir);
           }),
           Obx(() {
             final last = c.lastBackupLabel.value;
             return last.isEmpty
                 ? const SizedBox.shrink()
-                : _infoLine('آخر نسخة', last);
+                : _infoLine(tr('آخر نسخة'), last);
           }),
           Obx(() {
             final last = c.lastRestoreLabel.value;
             return last.isEmpty
                 ? const SizedBox.shrink()
-                : _infoLine('آخر استعادة', last);
+                : _infoLine(tr('آخر استعادة'), last);
           }),
         ],
       ),
@@ -222,8 +225,8 @@ class _BackupScreenState extends State<BackupScreen> {
             _actionTile(
               icon: Icons.save_alt,
               color: AppColors.success,
-              title: 'إنشاء نسخة احتياطية',
-              subtitle: 'تسميتها واختيار مكان حفظها',
+              title: tr('إنشاء نسخة احتياطية'),
+              subtitle: tr('تسميتها واختيار مكان حفظها'),
               enabled: !busy,
               onTap: _create,
             ),
@@ -231,8 +234,9 @@ class _BackupScreenState extends State<BackupScreen> {
             _actionTile(
               icon: Icons.folder_open,
               color: AppColors.warning,
-              title: 'استعادة من ملف على الجهاز',
-              subtitle: 'اختر أي ملف .db — مثل نسخة وصلت عبر واتساب',
+              title: tr('استعادة من ملف على الجهاز'),
+              subtitle:
+                  tr('اختر أي ملف .db — مثل نسخة وصلت عبر واتساب'),
               enabled: !busy,
               onTap: _pickAndRestore,
             ),
@@ -320,9 +324,9 @@ class _BackupScreenState extends State<BackupScreen> {
       children: [
         const Icon(Icons.storage_outlined, size: 18, color: AppColors.primary),
         const SizedBox(width: 7),
-        const Text(
-          'النسخ المحفوظة داخل التطبيق',
-          style: TextStyle(
+        Text(
+          tr('النسخ المحفوظة داخل التطبيق'),
+          style: const TextStyle(
             fontFamily: 'cairo',
             fontSize: 14,
             fontWeight: FontWeight.bold,
@@ -356,9 +360,9 @@ class _BackupScreenState extends State<BackupScreen> {
             color: AppColors.textMuted.withValues(alpha: 0.6),
           ),
           const SizedBox(height: 10),
-          const Text(
-            'لا توجد نسخ محفوظة بعد',
-            style: TextStyle(
+          Text(
+            tr('لا توجد نسخ محفوظة بعد'),
+            style: const TextStyle(
               fontFamily: 'cairo',
               fontSize: 13,
               color: AppColors.textSecondary,
@@ -373,11 +377,7 @@ class _BackupScreenState extends State<BackupScreen> {
     final color = e.isSafety ? AppColors.violet : AppColors.primary;
     final when = e.modifiedAt == null
         ? ''
-        : '${e.modifiedAt!.year}-'
-              '${e.modifiedAt!.month.toString().padLeft(2, '0')}-'
-              '${e.modifiedAt!.day.toString().padLeft(2, '0')}  '
-              '${e.modifiedAt!.hour.toString().padLeft(2, '0')}:'
-              '${e.modifiedAt!.minute.toString().padLeft(2, '0')}';
+        : '${e.modifiedAt!.year}-${e.modifiedAt!.month.toString().padLeft(2, '0')}-${e.modifiedAt!.day.toString().padLeft(2, '0')}  ${e.modifiedAt!.hour.toString().padLeft(2, '0')}:${e.modifiedAt!.minute.toString().padLeft(2, '0')}';
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -452,9 +452,9 @@ class _BackupScreenState extends State<BackupScreen> {
               TextButton.icon(
                 onPressed: c.isBusy.value ? null : () => _restore(e.path),
                 icon: const Icon(Icons.restore, size: 16),
-                label: const Text(
-                  'استعادة',
-                  style: TextStyle(fontFamily: 'cairo', fontSize: 12),
+                label: Text(
+                  tr('استعادة'),
+                  style: const TextStyle(fontFamily: 'cairo', fontSize: 12),
                 ),
               ),
               const Spacer(),
@@ -465,9 +465,9 @@ class _BackupScreenState extends State<BackupScreen> {
                   size: 16,
                   color: AppColors.danger,
                 ),
-                label: const Text(
-                  'حذف',
-                  style: TextStyle(
+                label: Text(
+                  tr('حذف'),
+                  style: const TextStyle(
                     fontFamily: 'cairo',
                     fontSize: 12,
                     color: AppColors.danger,
@@ -508,17 +508,15 @@ class _BackupScreenState extends State<BackupScreen> {
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: AppColors.warning.withValues(alpha: 0.35)),
       ),
-      child: const Row(
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.info_outline, size: 17, color: AppColors.warning),
-          SizedBox(width: 8),
+          const Icon(Icons.info_outline, size: 17, color: AppColors.warning),
+          const SizedBox(width: 8),
           Expanded(
             child: Text(
-              'قبل كل استعادة يأخذ النظام نسخة أمان تلقائية من بياناتك الحالية، '
-              'ويرفض أي ملف ليس قاعدة بيانات سليمة. وبعد الاستعادة يلزم '
-              'إعادة تشغيل النظام لتحميل البيانات الجديدة.',
-              style: TextStyle(
+              tr('قبل كل استعادة يأخذ النظام نسخة أمان تلقائية من بياناتك الحالية، ويرفض أي ملف ليس قاعدة بيانات سليمة. وبعد الاستعادة يلزم إعادة تشغيل النظام لتحميل البيانات الجديدة.'),
+              style: const TextStyle(
                 fontFamily: 'cairo',
                 fontSize: 11.5,
                 height: 1.7,
@@ -543,22 +541,33 @@ class _BackupScreenState extends State<BackupScreen> {
     if (!mounted || result == null) return;
 
     if (!result.success) {
-      _snack('فشل', result.error ?? 'سبب غير معروف', AppColors.danger);
+      _snack(
+        tr('فشل'),
+        result.error ?? tr('سبب غير معروف'),
+        AppColors.danger,
+      );
       return;
     }
     if (result.cancelled) {
       _snack(
-        'أُخذت النسخة',
-        'أُلغي اختيار المكان، وحُفظت النسخة داخل التطبيق: '
-            '${result.archivePath?.split(Platform.pathSeparator).last ?? ''}',
+        tr('أُخذت النسخة'),
+        trf(
+          'أُلغي اختيار المكان، وحُفظت النسخة داخل التطبيق: {0}',
+          [result.archivePath?.split(Platform.pathSeparator).last ?? ''],
+        ),
         AppColors.warning,
       );
       return;
     }
     _snack(
-      'تم إنشاء النسخة',
-      'حُفظت في: ${result.savedPath ?? result.archivePath} '
-          '(${BackupNaming.formatSize(result.sizeBytes)})',
+      tr('تم إنشاء النسخة'),
+      trf(
+        'حُفظت في: {0} ({1})',
+        [
+          result.savedPath ?? result.archivePath,
+          BackupNaming.formatSize(result.sizeBytes),
+        ],
+      ),
       AppColors.success,
     );
   }
@@ -570,7 +579,9 @@ class _BackupScreenState extends State<BackupScreen> {
       if (!mounted) return;
       await _restore(path);
     } catch (e) {
-      if (mounted) _snack('تعذّر اختيار الملف', '$e', AppColors.danger);
+      if (mounted) {
+        _snack(tr('تعذّر اختيار الملف'), '$e', AppColors.danger);
+      }
     }
   }
 
@@ -583,8 +594,8 @@ class _BackupScreenState extends State<BackupScreen> {
       if (!mounted) return;
       if (!info.valid) {
         _snack(
-          'ملف غير صالح',
-          info.reason ?? 'الملف ليس نسخة احتياطية صالحة',
+          tr('ملف غير صالح'),
+          info.reason ?? tr('الملف ليس نسخة احتياطية صالحة'),
           AppColors.danger,
         );
         return;
@@ -598,8 +609,8 @@ class _BackupScreenState extends State<BackupScreen> {
 
       if (!result.success) {
         _snack(
-          'فشلت الاستعادة',
-          result.error ?? 'سبب غير معروف',
+          tr('فشلت الاستعادة'),
+          result.error ?? tr('سبب غير معروف'),
           result.rolledBack ? AppColors.warning : AppColors.danger,
         );
         return;
@@ -609,8 +620,8 @@ class _BackupScreenState extends State<BackupScreen> {
     } catch (e) {
       if (mounted) {
         _snack(
-          'فشلت الاستعادة',
-          'تعذّر إكمال العملية: $e',
+          tr('فشلت الاستعادة'),
+          trf('تعذّر إكمال العملية: {0}', ['$e']),
           AppColors.danger,
         );
       }
@@ -621,14 +632,14 @@ class _BackupScreenState extends State<BackupScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (_) => Directionality(
-        textDirection: TextDirection.rtl,
+        textDirection: L10n.isRtl ? appTextDirection : TextDirection.ltr,
         child: AlertDialog(
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(18),
           ),
-          title: const Text(
-            'حذف النسخة؟',
-            style: TextStyle(
+          title: Text(
+            tr('حذف النسخة؟'),
+            style: const TextStyle(
               fontFamily: 'cairo',
               fontSize: 16,
               fontWeight: FontWeight.bold,
@@ -645,14 +656,20 @@ class _BackupScreenState extends State<BackupScreen> {
           actions: [
             TextButton(
               onPressed: () => Get.back(result: false),
-              child: const Text('إلغاء', style: TextStyle(fontFamily: 'cairo')),
+              child: Text(
+                tr('إلغاء'),
+                style: const TextStyle(fontFamily: 'cairo'),
+              ),
             ),
             ElevatedButton(
               onPressed: () => Get.back(result: true),
               style: ElevatedButton.styleFrom(backgroundColor: AppColors.danger),
-              child: const Text(
-                'حذف',
-                style: TextStyle(fontFamily: 'cairo', color: Colors.white),
+              child: Text(
+                tr('حذف'),
+                style: const TextStyle(
+                  fontFamily: 'cairo',
+                  color: Colors.white,
+                ),
               ),
             ),
           ],
@@ -664,9 +681,13 @@ class _BackupScreenState extends State<BackupScreen> {
     final error = await c.delete(e.path);
     if (!mounted) return;
     if (error != null) {
-      _snack('تعذّر الحذف', error, AppColors.warning);
+      _snack(tr('تعذّر الحذف'), error, AppColors.warning);
     } else {
-      _snack('تم الحذف', 'حُذفت النسخة: ${e.name}', AppColors.success);
+      _snack(
+        tr('تم الحذف'),
+        trf('حُذفت النسخة: {0}', [e.name]),
+        AppColors.success,
+      );
     }
   }
 
@@ -678,18 +699,21 @@ class _BackupScreenState extends State<BackupScreen> {
     final result = await showDialog<String>(
       context: context,
       builder: (_) => Directionality(
-        textDirection: TextDirection.rtl,
+        textDirection: L10n.isRtl ? appTextDirection : TextDirection.ltr,
         child: AlertDialog(
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(18),
           ),
-          title: const Row(
+          title: Row(
             children: [
-              Icon(Icons.drive_file_rename_outline, color: AppColors.primary),
-              SizedBox(width: 8),
+              const Icon(
+                Icons.drive_file_rename_outline,
+                color: AppColors.primary,
+              ),
+              const SizedBox(width: 8),
               Text(
-                'اسم النسخة الاحتياطية',
-                style: TextStyle(
+                tr('اسم النسخة الاحتياطية'),
+                style: const TextStyle(
                   fontFamily: 'cairo',
                   fontSize: 15.5,
                   fontWeight: FontWeight.bold,
@@ -705,11 +729,13 @@ class _BackupScreenState extends State<BackupScreen> {
                 TextField(
                   controller: ctrl,
                   autofocus: true,
-                  decoration: const InputDecoration(
-                    labelText: 'اسم الملف',
+                  decoration: InputDecoration(
+                    labelText: tr('اسم الملف'),
                     suffixText: '.db',
-                    helperText: 'يمكنك كتابة أي اسم — وستُطبَّع الأحرف الممنوعة',
-                    helperStyle: TextStyle(
+                    helperText: tr(
+                      tr('يمكنك كتابة أي اسم — وستُطبَّع الأحرف الممنوعة'),
+                    ),
+                    helperStyle: const TextStyle(
                       fontFamily: 'cairo',
                       fontSize: 10.5,
                     ),
@@ -717,7 +743,7 @@ class _BackupScreenState extends State<BackupScreen> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'الصيغة: ملف SQLite خام بامتداد .db',
+                  tr('الصيغة: ملف SQLite خام بامتداد .db'),
                   style: TextStyle(
                     fontFamily: 'cairo',
                     fontSize: 11.5,
@@ -726,8 +752,7 @@ class _BackupScreenState extends State<BackupScreen> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'بعد الموافقة سيُفتح حوار لاختيار مكان الحفظ؛ وتبقى نسخة '
-                  'داخل التطبيق في كل الأحوال.',
+                  tr('بعد الموافقة سيُفتح حوار لاختيار مكان الحفظ؛ وتبقى نسخة داخل التطبيق في كل الأحوال.'),
                   style: TextStyle(
                     fontFamily: 'cairo',
                     fontSize: 11,
@@ -741,14 +766,17 @@ class _BackupScreenState extends State<BackupScreen> {
           actions: [
             TextButton(
               onPressed: () => Get.back(),
-              child: const Text('إلغاء', style: TextStyle(fontFamily: 'cairo')),
+              child: Text(
+                tr('إلغاء'),
+                style: const TextStyle(fontFamily: 'cairo'),
+              ),
             ),
             ElevatedButton.icon(
               onPressed: () => Get.back(result: ctrl.text),
               icon: const Icon(Icons.arrow_forward, size: 17),
-              label: const Text(
-                'متابعة للحفظ',
-                style: TextStyle(fontFamily: 'cairo'),
+              label: Text(
+                tr('متابعة للحفظ'),
+                style: const TextStyle(fontFamily: 'cairo'),
               ),
             ),
           ],
@@ -763,24 +791,22 @@ class _BackupScreenState extends State<BackupScreen> {
   // ─── حوار تأكيد الاستعادة: يعرض ماذا سيُستعاد بالضبط ───
   Future<bool?> _confirmRestore(BackupFileInfo info) {
     final lastInvoice = info.lastInvoiceAt == null
-        ? 'غير معروف'
-        : '${info.lastInvoiceAt!.year}-'
-              '${info.lastInvoiceAt!.month.toString().padLeft(2, '0')}-'
-              '${info.lastInvoiceAt!.day.toString().padLeft(2, '0')}';
+        ? tr('غير معروف')
+        : '${info.lastInvoiceAt!.year}-${info.lastInvoiceAt!.month.toString().padLeft(2, '0')}-${info.lastInvoiceAt!.day.toString().padLeft(2, '0')}';
 
     return showDialog<bool>(
       context: context,
       builder: (_) => Directionality(
-        textDirection: TextDirection.rtl,
+        textDirection: L10n.isRtl ? appTextDirection : TextDirection.ltr,
         child: AlertDialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-          title: const Row(
+          title: Row(
             children: [
-              Icon(Icons.restore, color: AppColors.warning),
-              SizedBox(width: 8),
+              const Icon(Icons.restore, color: AppColors.warning),
+              const SizedBox(width: 8),
               Text(
-                'تأكيد الاستعادة',
-                style: TextStyle(
+                tr('تأكيد الاستعادة'),
+                style: const TextStyle(
                   fontFamily: 'cairo',
                   fontSize: 15.5,
                   fontWeight: FontWeight.bold,
@@ -794,7 +820,7 @@ class _BackupScreenState extends State<BackupScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'ستستبدل بيانات النظام الحالية ببيانات هذه النسخة:',
+                  tr('ستستبدل بيانات النظام الحالية ببيانات هذه النسخة:'),
                   style: const TextStyle(
                     fontFamily: 'cairo',
                     fontSize: 12.5,
@@ -802,11 +828,14 @@ class _BackupScreenState extends State<BackupScreen> {
                   ),
                 ),
                 const SizedBox(height: 10),
-                _row('الملف', info.fileName),
-                _row('الحجم', BackupNaming.formatSize(info.sizeBytes)),
-                _row('عدد الفواتير', '${info.invoiceCount}'),
-                _row('عدد المستخدمين', '${info.userCount}'),
-                _row('أحدث فاتورة', lastInvoice),
+                _row(tr('الملف'), info.fileName),
+                _row(
+                  tr('الحجم'),
+                  BackupNaming.formatSize(info.sizeBytes),
+                ),
+                _row(tr('عدد الفواتير'), '${info.invoiceCount}'),
+                _row(tr('عدد المستخدمين'), '${info.userCount}'),
+                _row(tr('أحدث فاتورة'), lastInvoice),
                 const SizedBox(height: 10),
                 Container(
                   padding: const EdgeInsets.all(10),
@@ -817,20 +846,19 @@ class _BackupScreenState extends State<BackupScreen> {
                       color: AppColors.success.withValues(alpha: 0.3),
                     ),
                   ),
-                  child: const Row(
+                  child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(
+                      const Icon(
                         Icons.health_and_safety_outlined,
                         size: 16,
                         color: AppColors.success,
                       ),
-                      SizedBox(width: 7),
+                      const SizedBox(width: 7),
                       Expanded(
                         child: Text(
-                          'سيأخذ النظام نسخة أمان من بياناتك الحالية قبل '
-                          'الاستبدال، ويعيدها تلقائيًا إن فشل الفحص.',
-                          style: TextStyle(
+                          tr('سيأخذ النظام نسخة أمان من بياناتك الحالية قبل الاستبدال، ويعيدها تلقائيًا إن فشل الفحص.'),
+                          style: const TextStyle(
                             fontFamily: 'cairo',
                             fontSize: 11,
                             height: 1.6,
@@ -847,7 +875,10 @@ class _BackupScreenState extends State<BackupScreen> {
           actions: [
             TextButton(
               onPressed: () => Get.back(result: false),
-              child: const Text('إلغاء', style: TextStyle(fontFamily: 'cairo')),
+              child: Text(
+                tr('إلغاء'),
+                style: const TextStyle(fontFamily: 'cairo'),
+              ),
             ),
             ElevatedButton.icon(
               onPressed: () => Get.back(result: true),
@@ -855,9 +886,12 @@ class _BackupScreenState extends State<BackupScreen> {
                 backgroundColor: AppColors.warning,
               ),
               icon: const Icon(Icons.check, size: 17, color: Colors.white),
-              label: const Text(
-                'استعادة الآن',
-                style: TextStyle(fontFamily: 'cairo', color: Colors.white),
+              label: Text(
+                tr('استعادة الآن'),
+                style: const TextStyle(
+                  fontFamily: 'cairo',
+                  color: Colors.white,
+                ),
               ),
             ),
           ],
@@ -913,16 +947,19 @@ class _BackupScreenState extends State<BackupScreen> {
       context: context,
       barrierDismissible: false,
       builder: (_) => Directionality(
-        textDirection: TextDirection.rtl,
+        textDirection: L10n.isRtl ? appTextDirection : TextDirection.ltr,
         child: AlertDialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-          title: const Row(
+          title: Row(
             children: [
-              Icon(Icons.check_circle_outline, color: AppColors.success),
-              SizedBox(width: 8),
+              const Icon(
+                Icons.check_circle_outline,
+                color: AppColors.success,
+              ),
+              const SizedBox(width: 8),
               Text(
-                'تمت الاستعادة',
-                style: TextStyle(
+                tr('تمت الاستعادة'),
+                style: const TextStyle(
                   fontFamily: 'cairo',
                   fontSize: 15.5,
                   fontWeight: FontWeight.bold,
@@ -936,20 +973,18 @@ class _BackupScreenState extends State<BackupScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _row(
-                  'الفواتير',
+                  tr('الفواتير'),
                   '${result.restoredFrom?.invoiceCount ?? 0}',
                 ),
                 if (result.safetyPath != null)
                   _row(
-                    'نسخة الأمان',
+                    tr('نسخة الأمان'),
                     result.safetyPath!.split(Platform.pathSeparator).last,
                   ),
                 const SizedBox(height: 10),
-                const Text(
-                  'قاعدة البيانات استُبدلت بالكامل، وكل الشاشات المفتوحة تحمل '
-                  'بيانات قديمة في الذاكرة. لذلك يُغلق التطبيق الآن — افتحه '
-                  'من جديد فتُقرأ البيانات المستعادة من أول لحظة.',
-                  style: TextStyle(
+                Text(
+                  tr('قاعدة البيانات استُبدلت بالكامل، وكل الشاشات المفتوحة تحمل بيانات قديمة في الذاكرة. لذلك يُغلق التطبيق الآن — افتحه من جديد فتُقرأ البيانات المستعادة من أول لحظة.'),
+                  style: const TextStyle(
                     fontFamily: 'cairo',
                     fontSize: 11.5,
                     height: 1.7,
@@ -967,9 +1002,12 @@ class _BackupScreenState extends State<BackupScreen> {
               },
               icon: const Icon(Icons.power_settings_new, size: 17),
               style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
-              label: const Text(
-                'إغلاق التطبيق الآن',
-                style: TextStyle(fontFamily: 'cairo', color: Colors.white),
+              label: Text(
+                tr('إغلاق التطبيق الآن'),
+                style: const TextStyle(
+                  fontFamily: 'cairo',
+                  color: Colors.white,
+                ),
               ),
             ),
           ],

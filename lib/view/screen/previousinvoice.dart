@@ -2,13 +2,15 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:laundry/controller/previousinvoicecontroller.dart';
-import 'package:laundry/controller/printInvoicecontroller.dart';
 import 'package:laundry/core/theme/app_colors.dart';
 import 'package:laundry/core/services/invoice_share_service.dart';
-import 'package:laundry/services/business_info_service.dart';
+import 'package:laundry/services/i18n/currency.dart';
+import 'package:laundry/services/i18n/l10n.dart';
+import 'package:laundry/services/payment/payment_method.dart';
 import 'package:laundry/view/widget/common/animation_wrappers.dart';
 import 'package:laundry/view/widget/common/common_widgets.dart';
 import 'package:laundry/view/widget/customappbar.dart';
+import 'package:laundry/services/i18n/ui_direction.dart';
 
 class PreviousInvoice extends StatefulWidget {
   const PreviousInvoice({super.key});
@@ -36,8 +38,8 @@ class _PreviousInvoiceState extends State<PreviousInvoice> {
 
     return Scaffold(
       appBar: CustomAppbar(
-        title: 'الفواتير السابقة',
-        subtitle: 'سجل جميع الفواتير المصدرة',
+        title: tr('الفواتير السابقة'),
+        subtitle: tr('سجل جميع الفواتير المصدرة'),
       ),
       body: Container(
         decoration: BoxDecoration(
@@ -58,7 +60,7 @@ class _PreviousInvoiceState extends State<PreviousInvoice> {
                     const CircularProgressIndicator(strokeWidth: 3),
                     const SizedBox(height: 16),
                     Text(
-                      'جاري تحميل الفواتير...',
+                      tr('جاري تحميل الفواتير...'),
                       style: TextStyle(
                         fontFamily: 'cairo',
                         fontSize: 14,
@@ -79,7 +81,7 @@ class _PreviousInvoiceState extends State<PreviousInvoice> {
                     controller: _searchCtrl,
                     onChanged: (v) => setState(() => _query = v.trim()),
                     decoration: InputDecoration(
-                      hintText: 'ابحث برقم الفاتورة أو اسم الزبون...',
+                      hintText: tr('ابحث برقم الفاتورة أو اسم الزبون...'),
                       prefixIcon: const Icon(Icons.search),
                       suffixIcon:
                           _query.isEmpty
@@ -99,39 +101,46 @@ class _PreviousInvoiceState extends State<PreviousInvoice> {
                   child: Row(
                     children: [
                       _FilterChipBtn(
-                        label: 'الكل',
+                        label: tr('الكل'),
                         selected: _paymentFilter.isEmpty,
                         color: AppColors.primary,
                         onTap: () => setState(() => _paymentFilter = ''),
                       ),
                       const SizedBox(width: 6),
                       _FilterChipBtn(
-                        label: 'كاش',
-                        selected: _paymentFilter == 'كاش',
+                        label: PaymentMethod.cash.label,
+                        selected: _paymentFilter == PaymentMethod.cash.key,
                         color: AppColors.success,
-                        onTap: () => setState(() => _paymentFilter = 'كاش'),
+                        onTap: () => setState(
+                          () => _paymentFilter = PaymentMethod.cash.key,
+                        ),
                       ),
                       const SizedBox(width: 6),
                       _FilterChipBtn(
-                        label: 'شبكة',
-                        selected: _paymentFilter == 'شبكة',
+                        label: PaymentMethod.card.label,
+                        selected: _paymentFilter == PaymentMethod.card.key,
                         color: AppColors.info,
-                        onTap: () => setState(() => _paymentFilter = 'شبكة'),
+                        onTap: () => setState(
+                          () => _paymentFilter = PaymentMethod.card.key,
+                        ),
                       ),
                       const SizedBox(width: 6),
                       _FilterChipBtn(
-                        label: 'آجل',
-                        selected: _paymentFilter == 'آجل',
+                        label: PaymentMethod.credit.label,
+                        selected: _paymentFilter == PaymentMethod.credit.key,
                         color: AppColors.warning,
-                        onTap: () => setState(() => _paymentFilter = 'آجل'),
+                        onTap: () => setState(
+                          () => _paymentFilter = PaymentMethod.credit.key,
+                        ),
                       ),
                       const SizedBox(width: 6),
                       _FilterChipBtn(
-                        label: 'اشتراك',
-                        selected: _paymentFilter == 'اشتراك شهري',
+                        label: PaymentMethod.subscription.label,
+                        selected:
+                            _paymentFilter == PaymentMethod.subscription.key,
                         color: AppColors.violet,
                         onTap: () => setState(
-                          () => _paymentFilter = 'اشتراك شهري',
+                          () => _paymentFilter = PaymentMethod.subscription.key,
                         ),
                       ),
                     ],
@@ -142,10 +151,10 @@ class _PreviousInvoiceState extends State<PreviousInvoice> {
             );
 
             if (controller.invoices.isEmpty && !controller.isLoading.value) {
-              return const EmptyState(
+              return EmptyState(
                 icon: Icons.receipt_long_outlined,
-                title: 'لا توجد فواتير متاحة',
-                subtitle: 'ستظهر هنا الفواتير بعد إصدارها من الشاشة الرئيسية',
+                title: tr('لا توجد فواتير متاحة'),
+                subtitle: tr('ستظهر هنا الفواتير بعد إصدارها من الشاشة الرئيسية'),
               );
             }
 
@@ -168,7 +177,10 @@ class _PreviousInvoiceState extends State<PreviousInvoice> {
       final customer = (mapdata['customername'] ?? '').toString();
       final num = inv['invoices_id']?.toString() ?? '';
 
-      if (_paymentFilter.isNotEmpty && payment != _paymentFilter) continue;
+      if (_paymentFilter.isNotEmpty &&
+          PaymentMethods.keyOf(payment) != _paymentFilter) {
+        continue;
+      }
       if (_query.isNotEmpty &&
           !num.contains(_query) &&
           !customer.contains(_query)) {
@@ -181,8 +193,8 @@ class _PreviousInvoiceState extends State<PreviousInvoice> {
       return Expanded(
         child: EmptyState(
           icon: Icons.search_off,
-          title: 'لا توجد نتائج مطابقة',
-          subtitle: 'جرّب تغيير كلمة البحث أو الفلتر',
+          title: tr('لا توجد نتائج مطابقة'),
+          subtitle: tr('جرّب تغيير كلمة البحث أو الفلتر'),
         ),
       );
     }
@@ -308,13 +320,13 @@ class _WhatsAppShareBtn extends StatelessWidget {
           borderRadius: BorderRadius.circular(8),
           border: Border.all(color: const Color(0xFF25D366), width: 1),
         ),
-        child: const Row(
+        child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(Icons.chat, color: Color(0xFF25D366), size: 13),
             SizedBox(width: 4),
             Text(
-              'واتساب',
+              tr('واتساب'),
               style: TextStyle(
                 fontFamily: 'cairo',
                 fontSize: 11,
@@ -342,7 +354,7 @@ class _InvoiceCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isCash = mapdata['payment'] == 'كاش';
+    final isCash = PaymentMethods.isCash('');
     final paymentColor = isCash ? AppColors.success : AppColors.info;
     final total = double.tryParse(mapdata['summation']?.toString() ?? '0') ?? 0;
 
@@ -391,7 +403,7 @@ class _InvoiceCard extends StatelessWidget {
                         ),
                         const SizedBox(width: 8),
                         Text(
-                          'فاتورة #${invoice['invoices_id']}',
+                          trf('فاتورة #{0}', [invoice['invoices_id']]),
                           style: TextStyle(
                             fontFamily: 'cairo',
                             fontSize: 14,
@@ -401,7 +413,7 @@ class _InvoiceCard extends StatelessWidget {
                         ),
                         const Spacer(),
                         LabelChip(
-                          text: mapdata['payment'] ?? 'كاش',
+                          text: PaymentMethods.label(''),
                           color: paymentColor,
                           icon: isCash ? Icons.payments : Icons.credit_card,
                         ),
@@ -450,7 +462,7 @@ class _InvoiceCard extends StatelessWidget {
                     // ─── البنود ───
                     Expanded(
                       child: Directionality(
-                        textDirection: TextDirection.rtl,
+                        textDirection: appTextDirection,
                         child:
                             listdata.isEmpty
                                 ? const SizedBox.shrink()
@@ -458,7 +470,7 @@ class _InvoiceCard extends StatelessWidget {
                                   children:
                                       listdata.take(3).map((item) {
                                           return Text(
-                                            '• ${item['vestments']} (${item['content']}) — ${item['count']} × ${item['price']}',
+                                            '• ${localized(item, 'vestments')} (${localized(item, 'content')}) — ${item['count']} × ${item['price']}',
                                             overflow: TextOverflow.ellipsis,
                                             style: TextStyle(
                                               fontFamily: 'cairo',
@@ -472,7 +484,8 @@ class _InvoiceCard extends StatelessWidget {
                                           listdata.length > 3
                                               ? [
                                                 Text(
-                                                  '... و${listdata.length - 3} أصناف أخرى',
+                                                  trf('... و{0} أصناف أخرى',
+                                                      [listdata.length - 3]),
                                                   style: TextStyle(
                                                     fontFamily: 'cairo',
                                                     fontSize: 11,
@@ -491,28 +504,11 @@ class _InvoiceCard extends StatelessWidget {
                       children: [
                         InkWell(
                           borderRadius: BorderRadius.circular(8),
-                          onTap: () {
-                            final data = {
-                              'payment': mapdata['payment'],
-                              'logoImage':
-                                  PrintInvoiceController.logoImageBytes!,
-                              'riyalImage':
-                                  PrintInvoiceController.riyalImageBytes!,
-                              'arabicFont': PrintInvoiceController.arabicFont!,
-                              'invoiceItems': listdata,
-                              'summation': mapdata['summation'],
-                              'invoiceNumber': invoice['invoices_id'],
-                              'customername': mapdata['customername'],
-                              'date': mapdata['date'],
-                              'bizName': BusinessInfoService.instance.name,
-                              'bizPhone': BusinessInfoService.instance.phone,
-                              'bizAddress': BusinessInfoService.instance.address,
-                              'createdByName': '',
-                            };
-                            Get.find<PreviousInvoiceController>().printPDF(
-                              data,
-                            );
-                          },
+                          // كل التفاصيل (الهاتف · رمز الاستلام · الضريبة ·
+                          // المقاس · ورقة المغسلة) تُبنى في المتحكّم من صفّ
+                          // القاعدة، لا من خريطة عرض ناقصة هنا.
+                          onTap: () => Get.find<PreviousInvoiceController>()
+                              .printInvoice(invoice),
                           child: Container(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 12,
@@ -522,7 +518,7 @@ class _InvoiceCard extends StatelessWidget {
                               gradient: AppColors.primaryGradient,
                               borderRadius: BorderRadius.circular(8),
                             ),
-                            child: const Row(
+                            child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Icon(
@@ -532,7 +528,7 @@ class _InvoiceCard extends StatelessWidget {
                                 ),
                                 SizedBox(width: 4),
                                 Text(
-                                  'طباعة',
+                                  tr('طباعة'),
                                   style: TextStyle(
                                     fontFamily: 'cairo',
                                     fontSize: 11,
@@ -544,6 +540,37 @@ class _InvoiceCard extends StatelessWidget {
                             ),
                           ),
                         ),
+                        const SizedBox(width: 6),
+                        // ورقة المغسلة وحدها — للورقة التي فُقدت أو تلفت.
+                        // الزرّ صريح، فلا يتقيّد بمفتاح «الطباعة عند البيع».
+                        Tooltip(
+                          message: tr('طباعة ورقة المغسلة فقط'),
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(8),
+                            onTap: () => Get.find<PreviousInvoiceController>()
+                                .printLaundrySlip(invoice),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 5,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppColors.primary.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: AppColors.primary.withValues(
+                                    alpha: 0.35,
+                                  ),
+                                ),
+                              ),
+                              child: Icon(
+                                Icons.receipt_long_outlined,
+                                color: AppColors.primary,
+                                size: 15,
+                              ),
+                            ),
+                          ),
+                        ),
                         const Spacer(),
                         _WhatsAppShareBtn(
                           invoice: invoice,
@@ -552,7 +579,7 @@ class _InvoiceCard extends StatelessWidget {
                         ),
                         const SizedBox(width: 8),
                         Text(
-                          '${total.toStringAsFixed(2)} ر.س',
+                          '${total.toStringAsFixed(2)} ${Currency.symbol}',
                           style: TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.bold,

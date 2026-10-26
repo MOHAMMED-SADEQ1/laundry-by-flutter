@@ -4,9 +4,11 @@ import 'package:intl/intl.dart' show DateFormat;
 import 'package:laundry/controller/reports/report_controller.dart';
 import 'package:laundry/core/constant/routes.dart';
 import 'package:laundry/core/theme/app_colors.dart';
+import 'package:laundry/services/i18n/l10n.dart';
 import 'package:laundry/view/widget/common/animation_wrappers.dart';
 import 'package:laundry/view/widget/common/common_widgets.dart';
 import 'package:laundry/view/widget/common/developer_credit.dart';
+import 'package:laundry/services/i18n/ui_direction.dart';
 
 class ReportsScreen extends StatelessWidget {
   const ReportsScreen({super.key});
@@ -16,14 +18,14 @@ class ReportsScreen extends StatelessWidget {
     final controller = Get.put(ReportController());
 
     return Directionality(
-      textDirection: TextDirection.rtl,
+      textDirection: L10n.isRtl ? appTextDirection : TextDirection.ltr,
       child: DefaultTabController(
         length: 4,
         child: Scaffold(
           appBar: AppBar(
-            title: const Text(
-              'التقارير',
-              style: TextStyle(
+            title: Text(
+              tr('التقارير'),
+              style: const TextStyle(
                 fontFamily: 'cairo',
                 fontWeight: FontWeight.bold,
               ),
@@ -45,11 +47,11 @@ class ReportsScreen extends StatelessWidget {
                 fontFamily: 'cairo',
                 fontSize: 13,
               ),
-              tabs: const [
-                Tab(text: 'يومي'),
-                Tab(text: 'أسبوعي'),
-                Tab(text: 'شهري'),
-                Tab(text: 'سنوي'),
+              tabs: [
+                Tab(text: tr('يومي')),
+                Tab(text: tr('أسبوعي')),
+                Tab(text: tr('شهري')),
+                Tab(text: tr('سنوي')),
               ],
             ),
           ),
@@ -97,9 +99,13 @@ Widget _summaryCards({
       profit >= 0 ? AppColors.primaryGradient : AppColors.dangerGradient,
       // نُفصّل الأساس حتى يُعرف من أين جاء الرقم: ربح مساهم − مصروفات
       subtitle: expenses > 0
-          ? 'مساهم ${grossProfit.toStringAsFixed(2)} − مصروفات '
-                '${expenses.toStringAsFixed(2)}'
-          : (cost > 0 ? 'بعد خصم تكلفة ${cost.toStringAsFixed(2)} ر.س' : null),
+          ? trf('مساهم {0} − مصروفات {1}', [
+              grossProfit.toStringAsFixed(2),
+              expenses.toStringAsFixed(2),
+            ])
+          : (cost > 0
+                ? trf('بعد خصم تكلفة {0} ر.س', [cost.toStringAsFixed(2)])
+                : null),
     ),
     // المصروفات التشغيلية — كانت لا تُسجَّل أصلًا ولا تُخصم من الربح
     if (expenses > 0)
@@ -109,7 +115,7 @@ Widget _summaryCards({
         'ر.س',
         Icons.payments_outlined,
         AppColors.dangerGradient,
-        subtitle: 'تُخصم من صافي الربح',
+        subtitle: tr('تُخصم من صافي الربح'),
       ),
     _ReportStat(
       'الفواتير',
@@ -157,7 +163,7 @@ Widget _summaryCards({
         'ر.س',
         Icons.receipt_outlined,
         AppColors.inkGradient,
-        subtitle: 'مستحقة للهيئة — خارج الربح',
+        subtitle: tr('مستحقة للهيئة — خارج الربح'),
       ),
   ];
 
@@ -226,7 +232,7 @@ class _ReportStatCard extends StatelessWidget {
               const SizedBox(width: 5),
               Flexible(
                 child: Text(
-                  stat.title,
+                  tr(stat.title),
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     fontFamily: 'cairo',
@@ -242,7 +248,7 @@ class _ReportStatCard extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(top: 2),
               child: Text(
-                stat.subtitle!,
+                tr(stat.subtitle!),
                 overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.center,
                 style: TextStyle(
@@ -254,7 +260,7 @@ class _ReportStatCard extends StatelessWidget {
             ),
           const SizedBox(height: 2),
           Text(
-            '${stat.value.toStringAsFixed(2)} ${stat.unit}',
+            '${stat.value.toStringAsFixed(2)} ${tr(stat.unit)}'.trim(),
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
               fontFamily: 'cairo',
@@ -294,7 +300,7 @@ Widget _datePickerRow({required String label, required VoidCallback onTap}) {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'الفترة المحددة',
+                tr('الفترة المحددة'),
                 style: TextStyle(
                   fontFamily: 'cairo',
                   fontSize: 10,
@@ -338,7 +344,7 @@ Widget _breakdownTable(Map<String, dynamic> report, String type) {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SectionHeader(
-          title: 'التفصيل — $type',
+          title: trf('التفصيل — {0}', [tr(type)]),
           icon: Icons.table_chart_outlined,
         ),
         const SizedBox(height: 12),
@@ -356,10 +362,10 @@ Widget _breakdownTable(Map<String, dynamic> report, String type) {
           children: [
             TableRow(
               decoration: BoxDecoration(color: AppColors.surfaceSoft),
-              children: const [
-                _TableHeaderCell('التاريخ'),
-                _TableHeaderCell('المبيعات'),
-                _TableHeaderCell('الفواتير'),
+              children: [
+                _TableHeaderCell(tr('التاريخ')),
+                _TableHeaderCell(tr('المبيعات')),
+                _TableHeaderCell(tr('الفواتير')),
               ],
             ),
             ...breakdown.map((row) {
@@ -370,7 +376,7 @@ Widget _breakdownTable(Map<String, dynamic> report, String type) {
                 children: [
                   _TableCell('$label', bold: true),
                   _TableCell(
-                    '${sales.toStringAsFixed(2)} ر.س',
+                    trf('{0} ر.س', [sales.toStringAsFixed(2)]),
                     color: AppColors.success,
                   ),
                   _TableCell('$count'),
@@ -450,9 +456,9 @@ Widget _debtReportsLauncher() {
             const Icon(Icons.account_balance_wallet,
                 size: 18, color: AppColors.danger),
             const SizedBox(width: 7),
-            const Text(
-              'تحليل ذمم الزبائن',
-              style: TextStyle(
+            Text(
+              tr('تحليل ذمم الزبائن'),
+              style: const TextStyle(
                 fontFamily: 'cairo',
                 fontSize: 13.5,
                 fontWeight: FontWeight.bold,
@@ -462,9 +468,9 @@ Widget _debtReportsLauncher() {
           ],
         ),
         const SizedBox(height: 4),
-        const Text(
-          'أعمار الديون تكشف منذ متى الذمة، والمطابقة تكشف أي خلل في الأرصدة.',
-          style: TextStyle(
+        Text(
+          tr('أعمار الديون تكشف منذ متى الذمة، والمطابقة تكشف أي خلل في الأرصدة.'),
+          style: const TextStyle(
             fontFamily: 'cairo',
             fontSize: 10.5,
             color: AppColors.textSecondary,
@@ -478,8 +484,8 @@ Widget _debtReportsLauncher() {
               child: _debtLauncherTile(
                 icon: Icons.timelapse,
                 color: AppColors.warning,
-                title: 'أعمار الديون',
-                subtitle: 'توزيع الذمم على فئات تأخر',
+                title: tr('أعمار الديون'),
+                subtitle: tr('توزيع الذمم على فئات تأخر'),
                 onTap: () => Get.toNamed(AppRoute.debtAging),
               ),
             ),
@@ -488,8 +494,8 @@ Widget _debtReportsLauncher() {
               child: _debtLauncherTile(
                 icon: Icons.fact_check_outlined,
                 color: AppColors.info,
-                title: 'المطابقة والدفتر',
-                subtitle: 'فحص الأرصدة وسجل الحركات',
+                title: tr('المطابقة والدفتر'),
+                subtitle: tr('فحص الأرصدة وسجل الحركات'),
                 onTap: () => Get.toNamed(AppRoute.debtReconciliation),
               ),
             ),
@@ -557,13 +563,13 @@ Widget _developerFooter() {
 
 Widget _printButton() {
   return GradientButton(
-    label: 'طباعة التقرير',
+    label: tr('طباعة التقرير'),
     icon: Icons.print,
     gradient: AppColors.primaryGradient,
     onPressed: () {
       Get.snackbar(
-        'ملاحظة',
-        'ميزة الطباعة قيد التطوير',
+        tr('ملاحظة'),
+        tr('ميزة الطباعة قيد التطوير'),
         snackPosition: SnackPosition.BOTTOM,
       );
     },
@@ -599,10 +605,10 @@ class _DailyTabState extends State<_DailyTab> {
       }
       final report = widget.controller.dailyReport;
       if (report.isEmpty) {
-        return const EmptyState(
+        return EmptyState(
           icon: Icons.event_note_outlined,
-          title: 'اضغط لاختيار التاريخ',
-          subtitle: 'اختر يوماً لعرض تقريره التفصيلي',
+          title: tr('اضغط لاختيار التاريخ'),
+          subtitle: tr('اختر يوماً لعرض تقريره التفصيلي'),
         );
       }
       return RefreshIndicator(
@@ -690,9 +696,9 @@ class _WeeklyTabState extends State<_WeeklyTab> {
       }
       final report = widget.controller.weeklyReport;
       if (report.isEmpty) {
-        return const EmptyState(
+        return EmptyState(
           icon: Icons.date_range_outlined,
-          title: 'اضغط لاختيار الأسبوع',
+          title: tr('اضغط لاختيار الأسبوع'),
         );
       }
       return RefreshIndicator(
@@ -783,9 +789,9 @@ class _MonthlyTabState extends State<_MonthlyTab> {
       }
       final report = widget.controller.monthlyReport;
       if (report.isEmpty) {
-        return const EmptyState(
+        return EmptyState(
           icon: Icons.calendar_month_outlined,
-          title: 'اختر الشهر',
+          title: tr('اختر الشهر'),
         );
       }
       return RefreshIndicator(
@@ -880,9 +886,9 @@ class _AnnualTabState extends State<_AnnualTab> {
       }
       final report = widget.controller.annualReport;
       if (report.isEmpty) {
-        return const EmptyState(
+        return EmptyState(
           icon: Icons.calendar_view_month_outlined,
-          title: 'اختر السنة',
+          title: tr('اختر السنة'),
         );
       }
       return RefreshIndicator(

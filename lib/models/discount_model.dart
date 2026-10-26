@@ -1,6 +1,9 @@
+import 'package:laundry/services/i18n/l10n.dart';
+
 class DiscountModel {
   final int? discountId;
   final String name;
+  final String nameEn;
   final String type; // 'percentage' or 'fixed'
   final double value;
   final DateTime startDate;
@@ -13,6 +16,7 @@ class DiscountModel {
   DiscountModel({
     this.discountId,
     required this.name,
+    this.nameEn = '',
     required this.type,
     required this.value,
     DateTime? startDate,
@@ -27,6 +31,7 @@ class DiscountModel {
     return DiscountModel(
       discountId: map['discount_id'],
       name: map['name'] ?? '',
+      nameEn: map['name_en'] ?? '',
       type: map['type'] ?? 'percentage',
       value: (map['value'] ?? 0).toDouble(),
       startDate: DateTime.parse(map['start_date']),
@@ -42,6 +47,7 @@ class DiscountModel {
     return {
       'discount_id': discountId,
       'name': name,
+      'name_en': nameEn.trim().isEmpty ? null : nameEn.trim(),
       'type': type,
       'value': value,
       'start_date': startDate.toIso8601String(),
@@ -52,6 +58,8 @@ class DiscountModel {
       'code': code,
     };
   }
+
+  String get displayName => L10n.pick(name, nameEn);
 
   bool get isExpired => endDate != null && DateTime.now().isAfter(endDate!);
   bool get isMaxedOut => maxUses != null && currentUses >= maxUses!;

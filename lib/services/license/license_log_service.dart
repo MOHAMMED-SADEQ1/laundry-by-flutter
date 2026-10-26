@@ -25,11 +25,7 @@ class LicenseLogService {
     final placeholders = List.filled(actions.length, '?').join(', ');
     try {
       final rows = await _db.readData(
-        'SELECT a.*, u.username AS user_name '
-        'FROM audit_log a '
-        'LEFT JOIN users u ON u.user_id = a.user_id '
-        'WHERE a.action IN ($placeholders) '
-        'ORDER BY a.log_id DESC LIMIT ?',
+        'SELECT a.*, u.username AS user_name FROM audit_log a LEFT JOIN users u ON u.user_id = a.user_id WHERE a.action IN ($placeholders) ORDER BY a.log_id DESC LIMIT ?',
         [...actions, limit],
       );
       return rows.map(LicenseEvent.fromMap).toList();
@@ -44,9 +40,7 @@ class LicenseLogService {
     final placeholders = List.filled(actions.length, '?').join(', ');
     try {
       final rows = await _db.readData(
-        'SELECT * FROM audit_log '
-        'WHERE action IN ($placeholders) '
-        'ORDER BY log_id DESC LIMIT ?',
+        'SELECT * FROM audit_log WHERE action IN ($placeholders) ORDER BY log_id DESC LIMIT ?',
         [...actions, limit],
       );
       return rows.map(LicenseEvent.fromMap).toList();

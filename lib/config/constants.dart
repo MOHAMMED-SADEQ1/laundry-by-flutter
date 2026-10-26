@@ -1,7 +1,7 @@
 class AppConstants {
   static const String appName = 'نظام المغاسل';
   static const String dbName = 'laundry_pos.db';
-  static const int dbVersion = 6;
+  static const int dbVersion = 7;
 
   // ─── الحسابات الافتراضية ───
   //
@@ -54,14 +54,23 @@ class AppConstants {
   // ─── ما يظهر على الفاتورة ───
   static const String settingInvoiceTitleText = 'invoice_title_text';
   static const String settingInvoiceShowLogo = 'invoice_show_logo';
+  static const String settingInvoiceLogoSize = 'invoice_logo_size';
+
+  /// مقاس شعار الفاتورة المربّع بالمليمتر.
+  ///
+  /// 53 مم ≈ 150 نقطة — وهو المقاس الثابت القديم، فالقيمة الافتراضية
+  /// **لا تغيّر شكل أي فاتورة قائمة**. والحفظ بالمليمتر لأن المستخدم يفهمه،
+  /// والتحويل إلى نقاط يقع في مولّد PDF وحده.
+  static const int invoiceLogoSizeDefaultMm = 53;
+  static const int invoiceLogoSizeMinMm = 10;
+  static const int invoiceLogoSizeMaxMm = 120;
   static const String settingInvoiceShowTaxNumber = 'invoice_show_tax_number';
   static const String settingInvoiceShowCrNumber = 'invoice_show_cr_number';
   static const String settingInvoiceShowShortAddress =
       'invoice_show_short_address';
   static const String settingInvoiceShowCashier = 'invoice_show_cashier';
   static const String settingInvoiceShowDatetime = 'invoice_show_datetime';
-  static const String settingInvoiceShowPickupCode =
-      'invoice_show_pickup_code';
+  static const String settingInvoiceShowPickupCode = 'invoice_show_pickup_code';
   static const String settingInvoiceShowTaxLine = 'invoice_show_tax_line';
   static const String settingInvoiceShowTaxBase = 'invoice_show_tax_base';
   static const String settingInvoiceShowDiscountLine =
@@ -84,6 +93,43 @@ class AppConstants {
   static const String settingPrintAutoPaperSize = 'print_auto_paper_size';
   static const String settingInvoiceCopies = 'invoice_copies';
   static const String settingReceiptFooterNote = 'receipt_footer_note';
+
+  // ─── خطّ الطباعة ───
+  //
+  // مفتاح واحد يحكم خطّ **كل** المستندات المطبوعة (فاتورة · كشف · وردية).
+  // القيم المسموحة في `PrintFonts.all` — لا تُكتب هنا ولا في الواجهة.
+  static const String settingPrintFont = 'print_font';
+  static const String printFontDefault = 'al_mohanad';
+
+  // ─── الطابعة (ويندوز/سطح المكتب) ───
+  //
+  // اختيار الطابعة **مرة واحدة** للنظام: يُحفظ معرّف الطابعة (`url` من
+  // حزمة الطباعة) واسمها المعروض في جدول `settings`. وعند تفعيل
+  // `print_use_default_printer` تُطبَع الفاتورة **مباشرةً** على هذه الطابعة
+  // بلا حوار طباعة. وعند تعطيله يبقى حوار طباعة النظام (السلوك السابق).
+  //
+  // ملاحظة: هذه المفاتيح تُخزَّن مباشرةً كأي إعداد (لا حاجة لعمود جديد)،
+  // وقراءتها من `PrinterService`.
+  static const String settingPrinterSelectedUrl = 'printer_selected_url';
+  static const String settingPrinterSelectedName = 'printer_selected_name';
+  static const String settingPrintUseDefaultPrinter =
+      'print_use_default_printer';
+
+  // ─── إخراج الفاتورة (طباعة / PDF) ───
+  //
+  // **مفتاحان مستقلّان** لا إعداد واحد: فيمكن تشغيل الطباعة وحدها (الوضع
+  // السابق)، أو حفظ PDF وحده (نقطة بيع بلا ورق)، أو الاثنين معًا (طباعة +
+  // أرشيف). ومسار الحفظ يُختار مرة واحدة ويُخزَّن كما يُخزَّن معرّف الطابعة.
+  static const String settingInvoicePrintOnSale = 'invoice_print_on_sale';
+  static const String settingInvoicePdfExport = 'invoice_pdf_export';
+  static const String settingInvoicePdfDirectory = 'invoice_pdf_directory';
+
+  /// طباعة «ورقة المغسلة» (نسخة المحل) بعد فاتورة العميل — بنفس مقاس الورق.
+  ///
+  /// مفتاح واحد فقط بلا مقاس مستقلّ: الورقة تتبع `invoice_paper_size` دائمًا،
+  /// فلا يمكن أن تخرج فاتورة 80 مم وورقة مغسلة A4 بسبب إعدادين متعارضين.
+  static const String settingInvoicePrintLaundrySlip =
+      'invoice_print_laundry_slip';
 
   // ─── الضريبة الموسّعة ───
   static const String settingTaxPricesInclude = 'tax_prices_include';
@@ -149,6 +195,9 @@ class AppConstants {
       'pos_default_payment_method';
   static const String settingPosSoundOnSale = 'pos_sound_on_sale';
 
+  /// ترتيب أصناف اللبس في شاشة البيع — قيمته مفتاح من `ClothingSort`.
+  static const String settingClothingSort = 'clothing_sort';
+
   // ─── الزبائن ───
   static const String settingCustomerRequirePhone = 'customer_require_phone';
   static const String settingCustomerDefaultTier = 'customer_default_tier';
@@ -170,7 +219,11 @@ class AppConstants {
   static const String shiftPaperSizeDefault = 'a6';
   static const String statementPaperSizeDefault = 'a4';
   static const String labelPaperSizeDefault = 'label_50x30';
-  static const String posDefaultPaymentMethodDefault = 'كاش';
+  /// الطريقة المحدَّدة عند **كل** فتح لنافذة الدفع في نقطة البيع.
+  ///
+  /// «شبكة» هي الافتراضي المطلوب تشغيليًّا؛ يمكن للموظف اختيار أي طريقة
+  /// أخرى يدويًّا داخل النافذة، ويعود الافتراضي عند الفتح التالي.
+  static const String posDefaultPaymentMethodDefault = 'card';
   static const String customerDefaultTierDefault = 'bronze';
   static const double defaultCreditLimitDefault = 0;
   static const double debtProvisionRateDefault = 0.25;
@@ -269,4 +322,9 @@ class AppConstants {
   static const String spLastBackup = 'last_backup';
   static const String spDarkMode = 'dark_mode';
   static const String spFontSize = 'font_size';
+
+  /// 🌐 لغة الواجهة — مفتاح خام في `settings` (مثل `font_size`) لا خيار في
+  /// `SettingOptions`: تظهر في بطاقة «المظهر» لا في قائمة منسدلة عامة.
+  /// قيمته كود من `AppLanguage` (`ar` · `en` · `system`).
+  static const String settingLanguage = 'language';
 }

@@ -1,6 +1,9 @@
 import 'package:flutter/foundation.dart';
+import 'package:laundry/services/permission/permission_catalog.dart';
+import 'package:laundry/services/permission/permission_service.dart';
 import 'package:laundry/services/security/session_manager.dart';
 import 'package:laundry/sqldb.dart';
+import 'package:laundry/services/i18n/l10n.dart';
 
 /// نتيجة بند ذمة واحد
 class DebtItem {
@@ -56,11 +59,7 @@ class CustomerLedgerService {
   Future<List<DebtItem>> openDebts(int customerId) async {
     try {
       final rows = await _db.readData(
-        'SELECT invoices_id, invoice_date, final_amount, paid_amount, '
-        'remaining_amount FROM invoices '
-        'WHERE customer_id = ? AND subscription_id IS NULL '
-        'AND remaining_amount > 0.004 '
-        'ORDER BY invoice_date ASC',
+        'SELECT invoices_id, invoice_date, final_amount, paid_amount, remaining_amount FROM invoices WHERE customer_id = ? AND subscription_id IS NULL AND remaining_amount > 0.004 ORDER BY invoice_date ASC',
         [customerId],
       );
       return rows
@@ -88,9 +87,7 @@ class CustomerLedgerService {
   Future<int> debtCents(int customerId) async {
     try {
       final rows = await _db.readData(
-        'SELECT COALESCE(SUM(remaining_amount), 0) AS due FROM invoices '
-        'WHERE customer_id = ? AND subscription_id IS NULL '
-        'AND remaining_amount > 0.004',
+        'SELECT COALESCE(SUM(remaining_amount), 0) AS due FROM invoices WHERE customer_id = ? AND subscription_id IS NULL AND remaining_amount > 0.004',
         [customerId],
       );
       if (rows.isEmpty) return 0;
@@ -157,12 +154,21 @@ class CustomerLedgerService {
   }
 
   /// إعادة حساب أرصدة **كل** الزبائن — للتصحيح بعد ترحيل أو استعادة نسخة.
+  ///
+  /// 🛡️ **محمية بصلاحية `debt.repair`**: العملية تُعيد كتابة حقل `balance`
+  /// لكل زبون دفعةً واحدة. أي مستخدم يملك «تسجيل دفعة» لا يجوز أن يملك
+  /// «إعادة اشتقاق كل الأرصدة» — فالثانية تُلغي أثر تدقيق الأول. عند
+  /// الفقد ترجع `-1` (لا صفرًا) كي يُفرّق المنادي بين «لا شيء لتصحيحه»
+  /// و«لم أُنفّذ».
   Future<int> rebuildAllBalances() async {
+    if (!PermissionService.can(PermissionKeys.debtRepair)) {
+      debugPrint('rebuildAllBalances مرفوض: لا صلاحية debt.repair');
+      return -1;
+    }
     int fixed = 0;
     try {
       final customers = await _db.readData(
-        'SELECT customer_id, balance FROM customers '
-        'WHERE COALESCE(is_active, 1) = 1',
+        'SELECT customer_id, balance FROM customers WHERE COALESCE(is_active, 1) = 1',
       );
       for (final c in customers) {
         final id = c['customer_id'] as int?;
@@ -306,8 +312,7 @@ class CustomerLedgerService {
           tableName: 'invoices',
           recordId: item.invoiceId,
           newValues:
-              '{"credit_used":${fromCents(take)},'
-              '"remaining":$newRemaining}',
+              '{"credit_used":${fromCents(take)},"remaining":$newRemaining}',
         );
 
         // صف في دفتر الدفعات بمصدر `credit_use` حتى يتعرّف تقرير الصندوق
@@ -318,7 +323,7 @@ class CustomerLedgerService {
           'amount': fromCents(take),
           'payment_method': 'رصيد',
           'payment_date': DateTime.now().toIso8601String(),
-          'notes': 'استهلاك رصيد سلفة على فاتورة #${item.invoiceId}',
+          'notes': trf('استهلاك رصيد سلفة على فاتورة #{0}', [item.invoiceId]),
           'recorded_by': SessionManager.currentUserId,
           'source': 'credit_use',
           'invoice_id': item.invoiceId,

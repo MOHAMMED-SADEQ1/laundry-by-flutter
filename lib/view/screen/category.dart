@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:laundry/core/theme/app_colors.dart';
 import 'package:laundry/view/widget/customappbar.dart';
+import 'package:laundry/view/widget/home/catalog_refresh_button.dart';
 import 'package:laundry/view/widget/home/customviewcaregory.dart';
+import 'package:laundry/services/i18n/l10n.dart';
 
 class Category extends StatelessWidget {
   Category({super.key});
@@ -11,15 +13,16 @@ class Category extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: CustomAppbar(
-        title: "حذف - تعديل صنف لبس",
-        subtitle: 'إدارة الأسعار والخدمات',
+        title: tr("حذف - تعديل صنف لبس"),
+        subtitle: tr('إدارة الأسعار والخدمات'),
+        actions: const CatalogRefreshButton(),
       ),
       body: Column(
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 14, 14, 8),
             child: SectionHeaderCard(
-              title: 'قائمة الأصناف والأسعار',
+              title: tr('قائمة الأصناف والأسعار'),
               icon: Icons.price_change_outlined,
             ),
           ),
@@ -33,14 +36,14 @@ class Category extends StatelessWidget {
               ),
               boxShadow: AppColors.softShadow(blur: 8, y: 3),
             ),
-            child: const Row(
+            child: Row(
               children: [
                 _HeaderCell(text: '', width: 2),
-                _HeaderCell(text: 'سعر الكوي مستعجل', width: 1),
-                _HeaderCell(text: 'سعر الكوي عادي', width: 1),
-                _HeaderCell(text: 'سعر الغسيل مستعجل', width: 1),
-                _HeaderCell(text: 'سعر الغسيل عادي', width: 1),
-                _HeaderCell(text: 'اسم اللبس', width: 1, noBorder: true),
+                _HeaderCell(text: tr('سعر الكوي مستعجل'), width: 1),
+                _HeaderCell(text: tr('سعر الكوي عادي'), width: 1),
+                _HeaderCell(text: tr('سعر الغسيل مستعجل'), width: 1),
+                _HeaderCell(text: tr('سعر الغسيل عادي'), width: 1),
+                _HeaderCell(text: tr('اسم اللبس'), width: 1, noBorder: true),
               ],
             ),
           ),

@@ -177,10 +177,7 @@ class DashboardController extends GetxController {
 
       // الإيراد المُعترف به اليوم: قيمة الغسيل المُستهلك من فواتير الاشتراكات
       final recognized = await _db.readData(
-        'SELECT COALESCE(SUM(COALESCE(i.subscription_used_value, 0)), 0) '
-        '  AS v '
-        'FROM invoices i '
-        'WHERE DATE(i.invoice_date) = ? AND i.subscription_id IS NOT NULL',
+        'SELECT COALESCE(SUM(COALESCE(i.subscription_used_value, 0)), 0)   AS v FROM invoices i WHERE DATE(i.invoice_date) = ? AND i.subscription_id IS NOT NULL',
         [today],
       );
       todaySubscriptionRevenue.value =
@@ -253,7 +250,11 @@ class DashboardController extends GetxController {
     // الترتيب الثانوي بـ item_name يجعل الناتج حتميًا عند تعادل الإيراد
     // (كان الترتيب غير معرَّف عند التعادل فيتغيّر بين تحميل وآخر).
     final result = await _db.readData(
+      // 🚨 `MAX(...vestments_en)` لا `json_extract` مباشرة: العمود غير مجمَّع
+      // و`GROUP BY item_name` يمنعه. و`MAX` آمنة هنا لأن الاسم الإنجليزي
+      // تابع وظيفيًّا للعربي، فكل صفوف المجموعة تحمل نفس القيمة أو `NULL`.
       "SELECT json_extract(value, '\$.vestments') as item_name, "
+      "  MAX(json_extract(value, '\$.vestments_en')) as item_name_en, "
       "  SUM(json_extract(value, '\$.total_price')) as total_revenue, "
       "  SUM(json_extract(value, '\$.count')) as total_count "
       "FROM invoices, json_each(list_data) "

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:laundry/core/theme/app_colors.dart';
+import 'package:laundry/services/i18n/l10n.dart';
 
 /// حالة فارغة أنيقة موحّدة لكل الشاشات
 class EmptyState extends StatelessWidget {
@@ -157,7 +158,7 @@ class SectionHeader extends StatelessWidget {
         const SizedBox(width: 10),
         Flexible(
           child: Text(
-            title,
+            tr(title),
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
               fontFamily: 'cairo',

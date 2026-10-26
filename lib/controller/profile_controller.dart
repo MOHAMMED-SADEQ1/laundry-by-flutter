@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:laundry/services/i18n/l10n.dart';
+import 'package:laundry/services/permission/permission_catalog.dart';
 import 'package:laundry/services/security/security_service.dart';
 import 'package:laundry/services/security/session_manager.dart';
 import 'package:laundry/sqldb.dart';
@@ -51,7 +53,7 @@ class ProfileController extends GetxController {
       );
 
       if (rows.isEmpty) {
-        Get.snackbar('خطأ', 'المستخدم غير موجود',
+        Get.snackbar(tr('خطأ'), tr('المستخدم غير موجود'),
             snackPosition: SnackPosition.BOTTOM);
         return false;
       }
@@ -60,7 +62,7 @@ class ProfileController extends GetxController {
       final isCorrect = SecurityService.verifyPassword(currentPassword, storedHash);
 
       if (!isCorrect) {
-        Get.snackbar('خطأ', 'كلمة المرور الحالية غير صحيحة',
+        Get.snackbar(tr('خطأ'), tr('كلمة المرور الحالية غير صحيحة'),
             snackPosition: SnackPosition.BOTTOM);
         return false;
       }
@@ -80,35 +82,26 @@ class ProfileController extends GetxController {
         recordId: userId,
       );
 
-      Get.snackbar('نجاح', 'تم تغيير كلمة المرور بنجاح',
+      Get.snackbar(tr('نجاح'), tr('تم تغيير كلمة المرور بنجاح'),
           snackPosition: SnackPosition.BOTTOM,
           backgroundColor: const Color(0xFF16A34A),
           colorText: Colors.white);
       return true;
     } catch (e) {
       debugPrint('changePassword error: $e');
-      Get.snackbar('خطأ', 'فشل في تغيير كلمة المرور: $e',
+      Get.snackbar(tr('خطأ'), trf('فشل في تغيير كلمة المرور: {0}', [e]),
           snackPosition: SnackPosition.BOTTOM);
       return false;
     }
   }
 
-  static String roleLabel(String role) {
-    switch (role) {
-      case 'admin':
-        return 'مدير النظام';
-      case 'manager':
-        return 'مدير';
-      case 'cashier':
-        return 'كاشير';
-      case 'accountant':
-        return 'محاسب';
-      case 'worker':
-        return 'عامل';
-      default:
-        return role;
-    }
-  }
+  /// اسم الدور المعروض — **من الكتالوج لا من نسخة محلية**.
+  ///
+  /// كانت هنا نسخة `switch` ثالثة من الأسماء. النسخ الثلاث تتباعد بأول
+  /// إضافة: دور جديد يُترجَم في مكان ولا يُترجَم في آخر فيظهر للمستخدم
+  /// بلغتين. المصدر الآن واحد (`PermissionCatalog.roleLabelOf`) ويخدم
+  /// الواجهة كلها.
+  static String roleLabel(String role) => PermissionCatalog.roleLabelOf(role);
 
   static Color roleColor(String role) {
     switch (role) {

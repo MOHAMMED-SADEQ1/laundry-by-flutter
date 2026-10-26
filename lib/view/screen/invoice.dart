@@ -10,6 +10,8 @@ import 'package:laundry/view/widget/invoice/custompayinvoice.dart';
 import 'package:laundry/view/widget/invoice/customremoveinvoce.dart';
 import 'package:laundry/view/widget/invoice/customviewinvoice.dart';
 import 'package:laundry/view/widget/invoice/customdrafts.dart';
+import 'package:laundry/services/i18n/ui_direction.dart';
+import 'package:laundry/services/i18n/l10n.dart';
 
 class Invoice extends StatelessWidget {
   const Invoice({super.key});
@@ -40,11 +42,11 @@ class Invoice extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
-                    children: const [
+                    children: [
                       Icon(Icons.receipt_long, size: 20, color: Colors.white),
                       SizedBox(width: 8),
                       Text(
-                        "الفاتورة",
+                        tr("الفاتورة"),
                         style: TextStyle(
                           fontFamily: 'cairo',
                           fontSize: 17,
@@ -62,7 +64,7 @@ class Invoice extends StatelessWidget {
                 Expanded(
                   flex: 7,
                   child: Directionality(
-                    textDirection: TextDirection.rtl,
+                    textDirection: appTextDirection,
                     child:
                         controller.invoice.isEmpty
                             ? const _EmptyInvoice()
@@ -134,7 +136,7 @@ class _EmptyInvoice extends StatelessWidget {
           Icon(Icons.receipt_long, size: 52, color: AppColors.border),
           SizedBox(height: 10),
           Text(
-            "الفاتورة فارغة",
+            tr("الفاتورة فارغة"),
             style: TextStyle(
               fontFamily: 'cairo',
               fontSize: 14,
@@ -144,7 +146,7 @@ class _EmptyInvoice extends StatelessWidget {
           ),
           SizedBox(height: 4),
           Text(
-            "اضغط على صنف من القائمة لإضافته",
+            tr("اضغط على صنف من القائمة لإضافته"),
             style: TextStyle(
               fontFamily: 'cairo',
               fontSize: 12,
@@ -168,7 +170,7 @@ class _TotalSection extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(color: AppColors.surfaceSoft),
       child: Directionality(
-        textDirection: TextDirection.rtl,
+        textDirection: appTextDirection,
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
@@ -177,7 +179,7 @@ class _TotalSection extends StatelessWidget {
                 Icon(Icons.calculate, size: 19, color: AppColors.primary),
                 SizedBox(width: 6),
                 Text(
-                  "الإجمالي",
+                  tr("الإجمالي"),
                   style: TextStyle(
                     fontFamily: 'cairo',
                     fontSize: 15,

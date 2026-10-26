@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.2.0+2
+version: 1.6.4
 
 environment:
   sdk: ^3.7.2
@@ -29,6 +29,13 @@ environment:
 # versions available, run `flutter pub outdated`.
 dependencies:
   flutter:
+    sdk: flutter
+  # 🌐 تعريب عناصر Material (منتقي التاريخ · أزرار الحوارات · Tooltips).
+  # **كانت غائبة** فكان `locale: Locale('ar')` في `main` بلا أثر، وكل عناصر
+  # Material تعمل بالإنجليزية. تمرير `Locale('ar')` بلا هذه الحزمة في
+  # `showDateRangePicker` كان **يُسقط التطبيق** (موثّق في
+  # `customer_statement_sheet.dart`). إضافتها شرط لأي تبديل لغة سليم.
+  flutter_localizations:
     sdk: flutter
 
   # The following adds the Cupertino Icons font to your application.
@@ -107,6 +114,17 @@ flutter:
   # To add assets to your application, add an assets section, like this:
   assets:
     - assets/images/
+    # 🚨 إعلان مجلد **لا يشمل مجلداته الفرعية** في Flutter: `assets/fonts/`
+    # وحدها لا تحزم `assets/fonts/Noto/…`. ولهذا تُذكر كل عائلة بسطرها —
+    # وإلا اختفى الخطّ من الحزمة بلا أي خطأ وقت البناء، وفشل تحميله عند
+    # العميل فقط. (اكتُشف: `TRAD.ttf` و`saudi_riyal.ttf` لم يُحزما رغم وجودهما.)
+    - assets/fonts/Almarai/
+    - assets/fonts/Amiri/
+    - assets/fonts/Cairo/
+    - assets/fonts/DTHULUTH/
+    - assets/fonts/IBMPlex/
+    - assets/fonts/Noto/
+    - assets/fonts/Tajawal/
   #   - images/a_dot_ham.jpeg
 
   # An image asset can refer to one or more resolution-specific "variants", see
@@ -131,6 +149,46 @@ flutter:
     - family: DTHULUTH
       fonts:
         - asset: assets/fonts/DTHULUTH/DTHULUTH-II-1.ttf
+
+    # ─── خطوط الطباعة (اختيارية من الإعدادات) ───
+    # كل عائلة هنا مرتبطة بخطّ في `lib/services/pdf/print_font.dart`،
+    # فمعاينة الخطّ في الواجهة تظهر **بنفس الخطّ** الذي سيُطبع.
+    # حرس `verify_print_font.dart` يتحقق من تطابق العائلات والمسارات.
+    - family: notoSans
+      fonts:
+        - asset: assets/fonts/Noto/NotoSansArabic-Regular.ttf
+
+    - family: notoNaskh
+      fonts:
+        - asset: assets/fonts/Noto/NotoNaskhArabic-Regular.ttf
+
+    - family: notoKufi
+      fonts:
+        - asset: assets/fonts/Noto/NotoKufiArabic-Regular.ttf
+
+    - family: ibmPlex
+      fonts:
+        - asset: assets/fonts/IBMPlex/IBMPlexSansArabic-Regular.ttf
+
+    - family: ibmPlexLight
+      fonts:
+        - asset: assets/fonts/IBMPlex/IBMPlexSansArabic-Light.ttf
+
+    - family: almarai
+      fonts:
+        - asset: assets/fonts/Almarai/Almarai-Regular.ttf
+
+    - family: almaraiLight
+      fonts:
+        - asset: assets/fonts/Almarai/Almarai-Light.ttf
+
+    - family: tajawal
+      fonts:
+        - asset: assets/fonts/Tajawal/Tajawal-Regular.ttf
+
+    - family: amiri
+      fonts:
+        - asset: assets/fonts/Amiri/Amiri-Regular.ttf
   # example:
   # fonts:
   #   - family: Schyler

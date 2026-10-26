@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:laundry/services/catalog/clothing_sort.dart';
 import 'package:laundry/services/security/session_manager.dart';
 import 'package:laundry/services/settings/setting_option.dart';
 import 'package:laundry/services/tax/tax_policy.dart';
@@ -110,8 +111,7 @@ class AppSettingsService {
   String? stored(String key) => _values[key];
 
   /// هل الخيار مُفعَّل فعلًا (نفسه وكل أسلافه)؟
-  bool effectiveOn(SettingOption option) =>
-      isEffectivelyOn(option, stored);
+  bool effectiveOn(SettingOption option) => isEffectivelyOn(option, stored);
 
   /// القيمة الفعلية لخيار بعد مراعاة سلسلة التفعيل.
   String effectiveOf(SettingOption option) => effectiveValue(option, stored);
@@ -147,7 +147,8 @@ class AppSettingsService {
   // ─── الفاتورة والترقيم ───
 
   String get invoiceNumberPrefix => rawOf(SettingOptions.invoiceNumberPrefix);
-  int get invoiceNumberPadding => integerOf(SettingOptions.invoiceNumberPadding);
+  int get invoiceNumberPadding =>
+      integerOf(SettingOptions.invoiceNumberPadding);
   bool get invoiceRequireCustomer =>
       isOn(SettingOptions.invoiceRequireCustomer);
   bool get invoiceAllowCredit => isOn(SettingOptions.invoiceAllowCredit);
@@ -160,6 +161,7 @@ class AppSettingsService {
 
   String get invoiceTitleText => rawOf(SettingOptions.invoiceTitleText);
   bool get invoiceShowLogo => isOn(SettingOptions.invoiceShowLogo);
+  int get invoiceLogoSizeMm => integerOf(SettingOptions.invoiceLogoSize);
   bool get invoiceShowTaxNumber => isOn(SettingOptions.invoiceShowTaxNumber);
   bool get invoiceShowCrNumber => isOn(SettingOptions.invoiceShowCrNumber);
   bool get invoiceShowShortAddress =>
@@ -183,24 +185,34 @@ class AppSettingsService {
 
   // ─── الطباعة ───
 
+  /// مفتاح خطّ الطباعة المحفوظ (قد يكون مجهولًا إن جاء من نسخة قديمة).
+  ///
+  /// لا يُستعمل مباشرة: `PrintFonts.byKey` تُسقط المجهول إلى الافتراضي،
+  /// و`PrintFontService` هي التي تُحمّل الملفّ.
+  String get printFontKey => rawOf(SettingOptions.printFont);
+
   String get invoicePaperSize => rawOf(SettingOptions.invoicePaperSize);
   String get shiftPaperSize => rawOf(SettingOptions.shiftPaperSize);
   String get statementPaperSize => rawOf(SettingOptions.statementPaperSize);
   String get labelPaperSize => rawOf(SettingOptions.labelPaperSize);
-  bool get printAskSizeEachTime =>
-      isOn(SettingOptions.printAskSizeEachTime);
+  bool get printAskSizeEachTime => isOn(SettingOptions.printAskSizeEachTime);
   bool get printAutoAfterSale => isOn(SettingOptions.printAutoAfterSale);
   String get printAutoPaperSize => rawOf(SettingOptions.printAutoPaperSize);
   int get invoiceCopies => integerOf(SettingOptions.invoiceCopies);
   String get receiptFooterNote => rawOf(SettingOptions.receiptFooterNote);
+
+  /// هل تُطبع ورقة المغسلة (نسخة المحل) مع فاتورة العميل؟
+  ///
+  /// **لا مقاس خاص بها**: تُطبع دائمًا بنفس [invoicePaperSize].
+  bool get invoicePrintLaundrySlip =>
+      isOn(SettingOptions.invoicePrintLaundrySlip);
 
   // ─── الضريبة ───
 
   bool get taxPricesInclude => isOn(SettingOptions.taxPricesInclude);
   bool get taxApplyToSubscriptions =>
       effectiveOn(SettingOptions.taxApplyToSubscriptions);
-  bool get taxApplyToDelivery =>
-      effectiveOn(SettingOptions.taxApplyToDelivery);
+  bool get taxApplyToDelivery => effectiveOn(SettingOptions.taxApplyToDelivery);
   String get taxExemptCategories =>
       effectiveText(SettingOptions.taxExemptCategories.key);
   bool get taxShowInStatement => effectiveOn(SettingOptions.taxShowInStatement);
@@ -231,8 +243,7 @@ class AppSettingsService {
 
   // ─── الذمم ───
 
-  double get defaultCreditLimit =>
-      decimalOf(SettingOptions.defaultCreditLimit);
+  double get defaultCreditLimit => decimalOf(SettingOptions.defaultCreditLimit);
   double get debtProvisionRate => decimalOf(SettingOptions.debtProvisionRate);
   bool get creditBlockOnExceed => isOn(SettingOptions.creditBlockOnExceed);
   bool get statementShowTax => effectiveOn(SettingOptions.statementShowTax);
@@ -240,8 +251,7 @@ class AppSettingsService {
 
   // ─── الاشتراكات ───
 
-  int get subUsageWarnPercent =>
-      integerOf(SettingOptions.subUsageWarnPercent);
+  int get subUsageWarnPercent => integerOf(SettingOptions.subUsageWarnPercent);
   bool get subRequirePaymentBeforeUse =>
       isOn(SettingOptions.subRequirePaymentBeforeUse);
   int get subGraceDays => integerOf(SettingOptions.subGraceDays);
@@ -262,15 +272,15 @@ class AppSettingsService {
       effectiveOn(SettingOptions.processingNotifyWhatsapp);
   bool get processingPrintItemTags =>
       effectiveOn(SettingOptions.processingPrintItemTags);
-  double get minOrderAmount => effectiveDecimal(SettingOptions.minOrderAmount.key);
+  double get minOrderAmount =>
+      effectiveDecimal(SettingOptions.minOrderAmount.key);
 
   // ─── مصنعية العمال ───
 
   bool get laborCostEnabled => isOn(SettingOptions.laborCostEnabled);
   double get laborRatePerPiece =>
       effectiveDecimal(SettingOptions.laborRatePerPiece.key);
-  bool get laborRequireWorker =>
-      effectiveOn(SettingOptions.laborRequireWorker);
+  bool get laborRequireWorker => effectiveOn(SettingOptions.laborRequireWorker);
   int get laborIncentiveThreshold =>
       effectiveInt(SettingOptions.laborIncentiveThreshold.key);
   double get laborIncentivePercent =>
@@ -284,12 +294,15 @@ class AppSettingsService {
       rawOf(SettingOptions.posDefaultPaymentMethod);
   bool get posSoundOnSale => isOn(SettingOptions.posSoundOnSale);
 
+  /// ترتيب بطاقات الأصناف في شاشة البيع (مفتاح من [ClothingSort]).
+  ClothingSort get clothingSort =>
+      ClothingSort.byKey(rawOf(SettingOptions.clothingSort));
+
   // ─── الزبائن والولاء ───
 
   bool get customerRequirePhone => isOn(SettingOptions.customerRequirePhone);
   String get customerDefaultTier => rawOf(SettingOptions.customerDefaultTier);
-  bool get loyaltyRoundUp =>
-      effectiveOn(SettingOptions.loyaltyRoundUp);
+  bool get loyaltyRoundUp => effectiveOn(SettingOptions.loyaltyRoundUp);
 
   /// يكتب قيمة خيار ويعيد القيمة **المطبَّعة** فعلًا (بعد الحدود والنوع).
   ///

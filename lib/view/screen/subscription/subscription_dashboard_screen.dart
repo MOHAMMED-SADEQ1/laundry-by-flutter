@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 import 'package:intl/intl.dart';
 import 'package:laundry/controller/subscriptions_controller.dart';
 import 'package:laundry/core/theme/app_colors.dart';
+import 'package:laundry/services/i18n/l10n.dart';
 import 'package:laundry/services/subscription/subscription_service.dart';
 import 'package:laundry/view/widget/common/animation_wrappers.dart';
 import 'package:laundry/view/widget/common/common_widgets.dart';
@@ -67,8 +68,8 @@ class _SubscriptionDashboardScreenState
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: CustomAppbar(
-        title: 'لوحة الاشتراكات',
-        subtitle: 'الربحية والالتزامات والإيراد المتكرّر',
+        title: tr('لوحة الاشتراكات'),
+        subtitle: tr('الربحية والالتزامات والإيراد المتكرّر'),
       ),
       body: Container(
         decoration: BoxDecoration(
@@ -107,8 +108,8 @@ class _SubscriptionDashboardScreenState
                   delayMs: 60,
                   child: _SectionTitle(
                     icon: Icons.balance,
-                    title: 'المطابقة المحاسبية',
-                    subtitle: 'ما قُبض نقدًا مقابل ما قُدِّم من خدمة',
+                    title: tr('المطابقة المحاسبية'),
+                    subtitle: tr('ما قُبض نقدًا مقابل ما قُدِّم من خدمة'),
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -123,8 +124,8 @@ class _SubscriptionDashboardScreenState
                   delayMs: 120,
                   child: _SectionTitle(
                     icon: Icons.groups_2_outlined,
-                    title: 'حالة المحفظة',
-                    subtitle: 'توزيع المشتركين على الحالات',
+                    title: tr('حالة المحفظة'),
+                    subtitle: tr('توزيع المشتركين على الحالات'),
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -139,8 +140,8 @@ class _SubscriptionDashboardScreenState
                   delayMs: 180,
                   child: _SectionTitle(
                     icon: Icons.speed,
-                    title: 'مراقبة السقف',
-                    subtitle: 'اشتراكات بلغت 80% من حدّها أو تجاوزته',
+                    title: tr('مراقبة السقف'),
+                    subtitle: tr('اشتراكات بلغت 80% من حدّها أو تجاوزته'),
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -158,14 +159,17 @@ class _SubscriptionDashboardScreenState
                   delayMs: 240,
                   child: _SectionTitle(
                     icon: Icons.trending_down,
-                    title: 'ربحية المشتركين',
-                    subtitle:
-                        'الأكثر خسارة أولًا — '
-                        '${DateFormat('yyyy-MM-dd').format(_rangeStart)} ← '
-                        '${DateFormat('yyyy-MM-dd').format(_rangeEnd)}',
+                    title: tr('ربحية المشتركين'),
+                    subtitle: trf(
+                      tr('الأكثر خسارة أولًا — {0} ← {1}'),
+                      [
+                        DateFormat('yyyy-MM-dd').format(_rangeStart),
+                        DateFormat('yyyy-MM-dd').format(_rangeEnd),
+                      ],
+                    ),
                     trailing: IconButton(
                       icon: const Icon(Icons.date_range, size: 19),
-                      tooltip: 'تغيير الفترة',
+                      tooltip: tr('تغيير الفترة'),
                       onPressed: _pickRange,
                     ),
                   ),
@@ -258,10 +262,10 @@ class _HeroCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 9),
-              const Expanded(
+              Expanded(
                 child: Text(
-                  'الإيراد الشهري المتكرّر (MRR)',
-                  style: TextStyle(
+                  tr('الإيراد الشهري المتكرّر (MRR)'),
+                  style: const TextStyle(
                     fontFamily: 'cairo',
                     fontSize: 12.5,
                     fontWeight: FontWeight.bold,
@@ -288,7 +292,7 @@ class _HeroCard extends StatelessWidget {
               ),
               const SizedBox(width: 6),
               Text(
-                'ر.س / شهر',
+                tr('ر.س / شهر'),
                 style: TextStyle(
                   fontFamily: 'cairo',
                   fontSize: 12,
@@ -299,8 +303,9 @@ class _HeroCard extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            'مُطبَّع على شهر 30 يومًا — الاشتراكات ذات المدد المختلفة مُوحَّدة '
-            'لتصبح قابلة للجمع',
+            tr(
+              'مُطبَّع على شهر 30 يومًا — الاشتراكات ذات المدد المختلفة مُوحَّدة لتصبح قابلة للجمع',
+            ),
             style: TextStyle(
               fontFamily: 'cairo',
               fontSize: 10,
@@ -319,9 +324,9 @@ class _HeroCard extends StatelessWidget {
               children: [
                 Expanded(
                   child: _HeroStat(
-                    label: 'التزام متبقٍّ',
+                    label: tr('التزام متبقٍّ'),
                     value: deferred.toStringAsFixed(0),
-                    hint: 'خدمة لم تُقدَّم',
+                    hint: tr('خدمة لم تُقدَّم'),
                     warn: deferred > collected && collected > 0,
                   ),
                 ),
@@ -332,9 +337,9 @@ class _HeroCard extends StatelessWidget {
                 ),
                 Expanded(
                   child: _HeroStat(
-                    label: 'محصَّل هذا الشهر',
+                    label: tr('محصَّل هذا الشهر'),
                     value: collected.toStringAsFixed(0),
-                    hint: 'نقدية',
+                    hint: tr('نقدية'),
                     warn: false,
                   ),
                 ),
@@ -345,9 +350,9 @@ class _HeroCard extends StatelessWidget {
                 ),
                 Expanded(
                   child: _HeroStat(
-                    label: 'خدمة مُقدَّمة',
+                    label: tr('خدمة مُقدَّمة'),
                     value: recognized.toStringAsFixed(0),
-                    hint: 'إيراد مُعترف به',
+                    hint: tr('إيراد مُعترف به'),
                     warn: false,
                   ),
                 ),
@@ -443,21 +448,21 @@ class _ReconciliationPanel extends StatelessWidget {
       child: Column(
         children: [
           _row(
-            'النقدية المقبوضة',
+            tr('النقدية المقبوضة'),
             collected,
             AppColors.success,
             Icons.payments_outlined,
           ),
           const SizedBox(height: 8),
           _row(
-            'قيمة الخدمة المُقدَّمة',
+            tr('قيمة الخدمة المُقدَّمة'),
             recognized,
             AppColors.info,
             Icons.local_laundry_service_outlined,
           ),
           const Divider(height: 20),
           _row(
-            'الالتزام المتبقّي',
+            tr('الالتزام المتبقّي'),
             deferred,
             AppColors.violet,
             Icons.pending_actions_outlined,
@@ -478,7 +483,7 @@ class _ReconciliationPanel extends StatelessWidget {
                   children: [
                     Expanded(
                       child: Text(
-                        'فرق القبض عن الخدمة',
+                        tr('فرق القبض عن الخدمة'),
                         style: TextStyle(
                           fontFamily: 'cairo',
                           fontSize: 11.5,
@@ -501,10 +506,12 @@ class _ReconciliationPanel extends StatelessWidget {
                 const SizedBox(height: 4),
                 Text(
                   gap >= 0
-                      ? 'قبضنا أكثر مما قدّمنا ⇒ الرصيد خدمة غير مُقدَّمة، '
-                            'وليس ربحًا خالصًا. سيُستنفد مع استمرار الغسيل.'
-                      : 'قدّمنا خدمة أكثر مما قبضنا ⇒ ذمم أو تجاوزات تستحق '
-                            'المتابعة والتحصيل.',
+                      ? tr(
+                          'قبضنا أكثر مما قدّمنا ⇒ الرصيد خدمة غير مُقدَّمة، وليس ربحًا خالصًا. سيُستنفد مع استمرار الغسيل.',
+                        )
+                      : tr(
+                          'قدّمنا خدمة أكثر مما قبضنا ⇒ ذمم أو تجاوزات تستحق المتابعة والتحصيل.',
+                        ),
                   style: TextStyle(
                     fontFamily: 'cairo',
                     fontSize: 10,
@@ -554,7 +561,7 @@ class _ReconciliationPanel extends StatelessWidget {
         ),
         const SizedBox(width: 3),
         Text(
-          'ر.س',
+          tr('ر.س'),
           style: TextStyle(
             fontFamily: 'cairo',
             fontSize: 9.5,
@@ -577,25 +584,25 @@ class _StatusGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     final items = [
       (
-        'نشط',
+        tr('نشط'),
         fin?.activeCount ?? 0,
         AppColors.success,
         Icons.verified_user_outlined,
       ),
       (
-        'مستهلك السقف',
+        tr('مستهلك السقف'),
         fin?.cappedCount ?? 0,
         AppColors.warning,
         Icons.speed,
       ),
       (
-        'متأخر',
+        tr('متأخر'),
         fin?.overdueCount ?? 0,
         AppColors.danger,
         Icons.schedule,
       ),
       (
-        'لم يُسدد',
+        tr('لم يُسدد'),
         fin?.pendingCount ?? 0,
         AppColors.slate,
         Icons.hourglass_empty,
@@ -646,8 +653,10 @@ class _StatusGrid extends StatelessWidget {
                 const SizedBox(width: 5),
                 Expanded(
                   child: Text(
-                    'إجمالي $total اشتراك — القطع المُستهلكة هذا الشهر: '
-                    '${fin?.totalPiecesUsed ?? 0}',
+                    trf(
+                      'إجمالي {0} اشتراك — القطع المُستهلكة هذا الشهر: {1}',
+                      ['$total', '${fin?.totalPiecesUsed ?? 0}'],
+                    ),
                     style: TextStyle(
                       fontFamily: 'cairo',
                       fontSize: 10,
@@ -745,7 +754,7 @@ class _WatchlistCard extends StatelessWidget {
             const SizedBox(width: 10),
             Expanded(
               child: Text(
-                'لا يوجد اشتراك قارب سقفه — كل المشتركين داخل الحدود.',
+                tr('لا يوجد اشتراك قارب سقفه — كل المشتركين داخل الحدود.'),
                 style: TextStyle(
                   fontFamily: 'cairo',
                   fontSize: 11.5,
@@ -794,7 +803,9 @@ class _WatchlistCard extends StatelessWidget {
                       ),
                     ),
                     LabelChip(
-                      text: capped ? 'استُهلك السقف' : '${(ratio * 100).round()}%',
+                      text: capped
+                          ? tr('استُهلك السقف')
+                          : '${(ratio * 100).round()}%',
                       color: color,
                     ),
                   ],
@@ -816,7 +827,7 @@ class _WatchlistCard extends StatelessWidget {
                   children: [
                     if (lp > 0)
                       Text(
-                        'القطع: $usedP / $lp',
+                        trf('القطع: {0} / {1}', ['$usedP', '$lp']),
                         style: TextStyle(
                           fontFamily: 'cairo',
                           fontSize: 10,
@@ -826,8 +837,10 @@ class _WatchlistCard extends StatelessWidget {
                       ),
                     if (lv > 0)
                       Text(
-                        'القيمة: ${usedV.toStringAsFixed(2)} / '
-                        '${lv.toStringAsFixed(2)}',
+                        trf('القيمة: {0} / {1}', [
+                          usedV.toStringAsFixed(2),
+                          lv.toStringAsFixed(2),
+                        ]),
                         style: TextStyle(
                           fontFamily: 'cairo',
                           fontSize: 10,
@@ -836,7 +849,7 @@ class _WatchlistCard extends StatelessWidget {
                         ),
                       ),
                     Text(
-                      'حتى ${_fmtDate(r['paid_until_date'])}',
+                      trf('حتى {0}', [_fmtDate(r['paid_until_date'])]),
                       style: TextStyle(
                         fontFamily: 'cairo',
                         fontSize: 10,
@@ -848,8 +861,8 @@ class _WatchlistCard extends StatelessWidget {
                 const SizedBox(height: 4),
                 Text(
                   capped || ratio >= 0.95
-                      ? 'يحتاج تجديدًا أو رفع سقف قبل الفاتورة القادمة.'
-                      : 'راقبه — يقترب من الحدّ.',
+                      ? tr('يحتاج تجديدًا أو رفع سقف قبل الفاتورة القادمة.')
+                      : tr('راقبه — يقترب من الحدّ.'),
                   style: TextStyle(
                     fontFamily: 'cairo',
                     fontSize: 9.5,
@@ -886,7 +899,7 @@ class _ProfitabilityList extends StatelessWidget {
         padding: const EdgeInsets.all(20),
         child: Center(
           child: Text(
-            'لا توجد اشتراكات نشطة لتحليل ربحيتها',
+            tr('لا توجد اشتراكات نشطة لتحليل ربحيتها'),
             style: TextStyle(
               fontFamily: 'cairo',
               fontSize: 12,
@@ -943,8 +956,8 @@ class _ProfitabilityList extends StatelessWidget {
                     ),
                     LabelChip(
                       text: loss
-                          ? 'خاسر'
-                          : 'هامش ${(p.margin * 100).round()}%',
+                          ? tr('خاسر')
+                          : trf('هامش {0}%', ['${(p.margin * 100).round()}']),
                       color: color,
                     ),
                   ],
@@ -953,24 +966,23 @@ class _ProfitabilityList extends StatelessWidget {
                 Row(
                   children: [
                     _cell(
-                      'السعر',
+                      tr('السعر'),
                       p.price.toStringAsFixed(0),
                       AppColors.textPrimary,
                     ),
                     _cell(
-                      'مُحصَّل',
+                      tr('مُحصَّل'),
                       p.paymentCollected.toStringAsFixed(0),
                       AppColors.success,
                     ),
                     _cell(
-                      'تكلفة الخدمة',
+                      tr('تكلفة الخدمة'),
                       p.costOfService.toStringAsFixed(2),
                       AppColors.danger,
                     ),
                     _cell(
-                      'الصافي',
-                      '${p.netContribution >= 0 ? '+' : ''}'
-                          '${p.netContribution.toStringAsFixed(2)}',
+                      tr('الصافي'),
+                      '${p.netContribution >= 0 ? '+' : ''}${p.netContribution.toStringAsFixed(2)}',
                       color,
                       bold: true,
                     ),
@@ -982,7 +994,7 @@ class _ProfitabilityList extends StatelessWidget {
                   runSpacing: 3,
                   children: [
                     Text(
-                      'القطع: ${p.pieces}',
+                      trf('القطع: {0}', ['${p.pieces}']),
                       style: TextStyle(
                         fontFamily: 'cairo',
                         fontSize: 10,
@@ -990,7 +1002,9 @@ class _ProfitabilityList extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      'القيمة المستهلكة: ${p.consumedValue.toStringAsFixed(2)}',
+                      trf('القيمة المستهلكة: {0}', [
+                        p.consumedValue.toStringAsFixed(2),
+                      ]),
                       style: TextStyle(
                         fontFamily: 'cairo',
                         fontSize: 10,
@@ -998,8 +1012,9 @@ class _ProfitabilityList extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      'الاستهلاك من السعر: '
-                      '${(p.utilization * 100).round()}%',
+                      trf('الاستهلاك من السعر: {0}%', [
+                        '${(p.utilization * 100).round()}',
+                      ]),
                       style: TextStyle(
                         fontFamily: 'cairo',
                         fontSize: 10,
@@ -1020,8 +1035,9 @@ class _ProfitabilityList extends StatelessWidget {
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
-                      'تكلفة الخدمة تتجاوز ما حُصِّل — هذا الاشتراك يُنزف. '
-                      'الخيارات: رفع السعر، تقليص السقف، أو إنهاء الاشتراك.',
+                      tr(
+                        'تكلفة الخدمة تتجاوز ما حُصِّل — هذا الاشتراك يُنزف. الخيارات: رفع السعر، تقليص السقف، أو إنهاء الاشتراك.',
+                      ),
                       style: TextStyle(
                         fontFamily: 'cairo',
                         fontSize: 10,

@@ -97,25 +97,33 @@ ok("تستعمل MultiPage (لا Page)", 'pw.MultiPage' in stmt)
 ok("تستعمل خط AL-Mohanad", 'AL-Mohanad.ttf' in stmt)
 
 print("\n[2] 🚨 كل نصّ RTL — لا `pw.Text` عارية داخل الكشف")
-# الدالة تستعمل مُساعدًا واحدًا `tx` هو الوحيد المسموح له بإنشاء pw.Text.
-helper_start = stmt.find('pw.Text tx(')
+# 2026-10-24: نقطة الرسم انتقلت إلى `_docText` على مستوى الملف (تخدم المستندات
+# الثلاثة)، فصار `tx` في الكشف مجرّد تمرير لنمط الحقل:
+#     pw.Widget tx(String t, String key, {align}) => _docText(...)
+# ⇒ المطلوب: (أ) الكشف لا ينشئ `pw.Text` إطلاقًا، (ب) النقطة الوحيدة تضبط RTL.
+helper_start = stmt.find('pw.Widget tx(')
 helper_end = stmt.find('pw.Widget kv(')
 ok("مُساعد tx موجود", helper_start > 0)
 ok("مُساعد tx يرتّب الخطوة قبل kv", 0 < helper_start < helper_end)
 
 helper_body = stmt[helper_start:helper_end] if helper_start >= 0 else ''
+ok("tx تمرّر النصّ إلى نقطة الرسم الموحّدة", '_docText(' in helper_body)
+ok("tx تأخذ نمط الحقل من القالب", 'doc.style(key)' in helper_body)
+
+# نقطة الرسم الموحّدة هي التي تضبط الاتجاه — مرة واحدة لكل المستندات.
+draw_start = pdf_src.find('static pw.Widget _docText(')
+draw_end = pdf_src.find('static pw.Widget _totalRow(')
+draw_body = pdf_src[draw_start:draw_end] if draw_start >= 0 else ''
+ok("نقطة الرسم `_docText` موجودة", draw_start > 0)
 ok(
-    "tx تضبط textDirection.rtl",
-    'textDirection: pw.TextDirection.rtl' in helper_body,
+    "نقطة الرسم تجعل الاتجاه تابعًا للغة",
+    "rtl ? pw.TextDirection.rtl : pw.TextDirection.ltr" in draw_body,
 )
 
-# احسب `pw.Text(` في الكشف كله ثم اطرح ما هو داخل tx (واحد) + ما هو نصّي في الشرح.
-inside_helper = helper_body.count('pw.Text(')
-outside = stmt.count('pw.Text(') - inside_helper
 ok(
-    "لا pw.Text خارج مُساعد tx",
-    outside == 0,
-    f"خارج tx = {outside} · داخل tx = {inside_helper}",
+    "لا pw.Text في الكشف كله (كل نصّ عبر tx)",
+    stmt.count('pw.Text(') == 0,
+    f"عدد pw.Text في الكشف = {stmt.count('pw.Text(')}",
 )
 
 print("\n[3] 🚨 الشرطة الطويلة U+2014 غير مدعومة في الخط")
@@ -125,9 +133,12 @@ ok(
     '\u2014' not in pdf_src,
     [l.strip() for l in pdf_src.splitlines() if '\u2014' in l][:3],
 )
+# 2026-10-24: نصّ الاشتراك انتقل إلى السجلّ (`kSubsNote`) — يُفحص هناك.
+_catalog_src = open('lib/services/pdf/doc_template.dart', encoding='utf-8').read()
 ok(
     "نصّ الاشتراك يستعمل شرطة قصيرة",
-    'مغطّى بالاشتراك الشهري \u2013' in pdf_src,
+    'مغطّى بالاشتراك الشهري \u2013' in _catalog_src
+    or 'مغطّى بالاشتراك الشهري \u2013' in pdf_src,
 )
 
 print("\n[4] الأصناف في **جدول واحد** (تاريخ + صنف + عدد + قيمة)")
@@ -135,7 +146,10 @@ ok("يقرأ itemsDetailed من البيانات", "data['itemsDetailed']" in st
 ok("عمود التاريخ والوقت موجود", "'التاريخ والوقت'" in stmt)
 ok(
     "أعمدة الجدول الواحد: تاريخ + صنف + عدد + قيمة",
-    "['التاريخ والوقت', 'الصنف', 'العدد', 'القيمة (ريال)']" in stmt,
+    all(
+        f"_t(data, '{col}')" in stmt
+        for col in ('التاريخ والوقت', 'الصنف', 'العدد', 'القيمة (ريال)')
+    ),
 )
 ok(
     "🚨 الجدول المجمَّع حُذف نهائيًا",
@@ -148,9 +162,10 @@ ok(
 )
 ok(
     "🚨 جدول واحد فقط للأصناف (لا جدول ثانٍ)",
-    stmt.count("sectionTitle('الأصناف التي أخذها')") == 1
+    # 2026-10-24: عنوان القسم صار نصّ الحقل نفسه في القالب (`kItemsTable`).
+    stmt.count('sectionTitle(doc.text(DocCatalog.kItemsTable))') == 1
     and stmt.count('التاريخ والوقت') == 1,
-    f"sectionTitle={stmt.count(chr(39)+'الأصناف التي أخذها'+chr(39))} · "
+    f"sectionTitle={stmt.count('sectionTitle(doc.text(DocCatalog.kItemsTable))')} · "
     f"عمود التاريخ={stmt.count('التاريخ والوقت')}",
 )
 ok(
@@ -158,16 +173,20 @@ ok(
     "'items':" not in ctrl_src,
 )
 
-print("\n[4ب] تكبير خطّ الكشف")
-ok("base كُبِّر إلى 13", 'const double base = 13' in stmt)
-ok("small كُبِّر إلى 11", 'const double small = 11' in stmt)
-ok("خطّ خلايا الجداول 12", 'const double cellSize = 12' in stmt)
-ok(
-    "خلايا الجداول تستخدم cellSize لا small",
-    'tx(t, size: cellSize' in stmt,
-)
-ok("عنوان الأقسام 14", 'tx(text, size: 14, bold: true)' in stmt)
-ok("عنوان «كشف حساب زبون» 19", "tx('كشف حساب زبون', size: 19" in stmt)
+print("\n[4ب] أحجام الخطّ صارت من قالب المستند لا من ثوابت في الكود")
+# 2026-10-24: كل نصّ يمرّ من `_docText` بنمط حقله (`doc.style(key)`)، فلم يبق
+# في المولّد حجم مكتوب. الأرقام نفسها (19 · 14 · 13 · 12) تُفحص في الحارس
+# Dart (`tool/verify_doc_template.dart` §4) لأنه يستورد السجلّ ويقرأ قيمه؛
+# وهنا يُفحص **العقد**: كل حجم يُقرأ من القالب، ولا ثابت في الكود.
+ok("لا ثوابت أحجام في المولّد", "const double base" not in stmt)
+ok("لا ثوابت أحجام في المولّد (small)", "const double small" not in stmt)
+ok("لا ثوابت أحجام في المولّد (cellSize)", "const double cellSize" not in stmt)
+ok("لا `fontSize` في المولّد", "fontSize:" not in stmt)
+ok("لا `fontWeight` في المولّد (بلا أثر مع وجه صريح)", "fontWeight" not in stmt)
+ok("العنوان يأخذ نمطه من القالب", "DocCatalog.kTitle" in stmt)
+ok("خلايا الجداول تأخذ نمط جدولها", "tx(t, styleKey" in stmt)
+ok("عنوان القسم يأخذ نمطه من القالب", "tx(text, DocCatalog.kSectionTitle)" in stmt)
+ok("الإجماليات تأخذ نمطها من القالب", "key: DocCatalog.kTotals" in stmt or "DocCatalog.kTotals" in stmt)
 
 print("\n[4ج] 🚨 ترتيب الأعمدة RTL — العمود الأول يمينًا")
 # `pw.Table` يرصف من اليسار ⇒ بلا عكس يظهر العمود الأول في أقصى اليسار.
@@ -191,9 +210,13 @@ print("\n[4د] 🚨 الكتلة الختامية (الملخّص + التذيي
 # `pw.Row` الأفقي (canSpan=false) مع `pw.Expanded` كي يبقى العرض كاملًا
 # فتعمل `spaceBetween` في صفوف `kv`.
 i_wrap = stmt.find('pw.Expanded(')
-i_last_table = stmt.find("sectionTitle('سجل استهلاك الاشتراك")
-i_sum = stmt.find("'الملخّص'")
-i_foot = stmt.find('هذا الكشف صادر آليًا من النظام')
+i_last_table = stmt.find('sectionTitle(doc.text(DocCatalog.kUsagesTable))')
+# 2026-10-24: عنوان الملخّص صار نصًّا في القالب (`kSummaryTitle` ·
+# `kSummaryTitlePeriod`) — الموضع يُفحص بقراءته من القالب لا بالنصّ الحرفي.
+i_sum = stmt.find('doc.text(DocCatalog.kSummaryTitle)')
+# 2026-10-23: نصّ التذييل انتقل إلى السجلّ (`statementFooterDefault`) —
+# الموضع يُفحص بالبحث عن قراءته من القالب لا عن النصّ الحرفي.
+i_foot = stmt.find('doc.text(DocCatalog.kFooter)')
 ok(
     "كتلة الختام ملفوفة بـ pw.Expanded (canSpan=false)",
     i_wrap > i_last_table > 0,
@@ -215,9 +238,13 @@ ok(
 ok(
     "لكل بند تاريخ واسم وعدد وقيمة",
     "'date': _dt(inv.date)" in ctrl_src
-    and "'name': it.name" in ctrl_src
+    and "'name': localizedText(it.name, it.nameEn)" in ctrl_src
     and "'count': it.count" in ctrl_src
     and "'value': it.value" in ctrl_src,
+)
+ok(
+    "اسم البند في الكشف يمرّ من localizedText لا خامًّا",
+    "'name': it.name," not in ctrl_src,
 )
 ok(
     "_dt تُنسّق التاريخ والوقت معًا",
@@ -240,11 +267,14 @@ ok(
     "'$base \u2013 $note'" in ctrl_raw or '$base \u2013 $note' in ctrl_raw,
 )
 
-print("\n[6] مقارنة: الفاتورة العادية كانت تضبط الاتجاه (السبب الجذري)")
+print("\n[6] مقارنة: الاتجاه RTL يُضبط في نقطة رسم واحدة")
+# 2026-10-24: بعد توحيد نقطة الرسم، صار `textDirection` يُكتب **مرة واحدة**
+# في `_docText` ويخدم المستندات الثلاثة. الموضع الثاني الوحيد المسموح هو
+# `pw.Directionality` في ملخّص الوردية (تغليف الصفحة كلها).
 ok(
-    "generatePdfData تضبط textDirection على نصوصها",
-    pdf_src.count('textDirection: pw.TextDirection.rtl') > 10,
-    pdf_src.count('textDirection: pw.TextDirection.rtl'),
+    "لا `textDirection` مكرّر داخل المولّدات (نقطتان: _docText + Directionality)",
+    pdf_src.count('pw.TextDirection.rtl') == 2,
+    pdf_src.count('pw.TextDirection.rtl'),
 )
 
 # ══════════════════════════════════════════════════════════════════════
@@ -339,36 +369,33 @@ ok(
     f"موجود {pdf_src.count('س.ر ')} مرة",
 )
 
-# نحسب يدويًا: عدد مرات ظهور _money(payable) داخل أي pw.Text في الفاتورة
-payable_calls = []
-for m in re.finditer(r'pw\.Text\(', inv_seg):
-    i = m.end() - 1
-    depth = 0
-    j = i
-    while j < len(inv_seg):
-        if inv_seg[j] == '(':
-            depth += 1
-        elif inv_seg[j] == ')':
-            depth -= 1
-            if depth == 0:
-                break
-        j += 1
-    call = inv_seg[i:j + 1]
-    if '_money(payable)' in call:
-        payable_calls.append(' '.join(call.split()))
-
+# 2026-10-24: لم يبق في الفاتورة `pw.Text` إطلاقًا — كل نصّ عبر `tx(...)`.
+# المبلغ يظهر في نداء `tx` واحد فقط، داخله فرعان (مع العملة/بلاها) ⇒
+# `_money(payable)` مرّتان، ونمط واحد (`kTotalAmount`).
 ok(
-    "المستحق يُطبع في pw.Text واحدة فقط",
-    len(payable_calls) == 1,
-    f"عدد={len(payable_calls)}",
+    "المستحق في نداء واحد (فرعان: مع العملة/بلاها)",
+    inv_seg.count('_money(payable)') == 2
+    and inv_seg.count('DocCatalog.kTotalAmount') == 1,
+    f"_money(payable)={inv_seg.count('_money(payable)')} · "
+    f"kTotalAmount={inv_seg.count('DocCatalog.kTotalAmount')}",
 )
 
-if len(payable_calls) == 1:
-    only = payable_calls[0]
-    ok("السطر الوحيد بالصيغة «X ر.س»", 'ر.س' in only and 'س.ر ' not in only)
-    ok("السطر الوحيد يحمل rtl", 'TextDirection.rtl' in only)
-    ok("السطر الوحيد كبير (priceStyle = 24pt)", 'priceStyle' in only,
-       only[:90])
+_payable_block = [
+    ' '.join(l.split())
+    for l in inv_seg.splitlines()
+    if 'currencyLabel' in l and '_money(payable)' in l
+]
+ok(
+    "المستحق يستخدم رمز العملة من القالب",
+    len(_payable_block) == 1
+    and 'currencyLabel' in _payable_block[0]
+    and 'ر.س' not in _payable_block[0],
+    _payable_block[:1],
+)
+ok(
+    "لا حجم مكتوب في سطر المستحق",
+    all('fontSize' not in l for l in _payable_block),
+)
 
 print("\n" + "═" * 40)
 print(f"النتيجة الكلية: {PASS} نجحت · {FAIL} فشلت")

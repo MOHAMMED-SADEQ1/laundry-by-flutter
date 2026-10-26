@@ -1,11 +1,13 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:laundry/services/i18n/l10n.dart';
 import 'package:get/get.dart';
 import 'package:laundry/controller/customersnumbercontroller.dart';
 import 'package:laundry/core/constant/routes.dart';
 import 'package:laundry/core/theme/app_colors.dart';
 import 'package:laundry/view/widget/common/common_widgets.dart';
+import 'package:laundry/services/i18n/ui_direction.dart';
 
 /// 🔎 نافذة البحث عن زبون بالاسم أو رقم الجوال — من الشاشة الرئيسية.
 ///
@@ -154,10 +156,10 @@ class _CustomerSearchDialogState extends State<_CustomerSearchDialog> {
         children: [
           const Icon(Icons.person_search, color: Colors.white, size: 20),
           const SizedBox(width: 8),
-          const Expanded(
+          Expanded(
             child: Text(
-              'البحث عن زبون',
-              style: TextStyle(
+              tr('البحث عن زبون'),
+              style: const TextStyle(
                 fontFamily: 'cairo',
                 fontSize: 15,
                 fontWeight: FontWeight.bold,
@@ -166,7 +168,7 @@ class _CustomerSearchDialogState extends State<_CustomerSearchDialog> {
             ),
           ),
           IconButton(
-            tooltip: 'إغلاق',
+            tooltip: tr('إغلاق'),
             onPressed: () => Get.back(),
             icon: const Icon(Icons.close, color: Colors.white, size: 20),
           ),
@@ -184,16 +186,16 @@ class _CustomerSearchDialogState extends State<_CustomerSearchDialog> {
         onChanged: _onChanged,
         textInputAction: TextInputAction.search,
         style: const TextStyle(fontFamily: 'cairo', fontSize: 14),
-        textDirection: TextDirection.rtl,
+        textDirection: appTextDirection,
         decoration: InputDecoration(
-          hintText: 'الاسم أو رقم الجوال...',
+          hintText: tr('الاسم أو رقم الجوال...'),
           hintStyle: const TextStyle(fontFamily: 'cairo', fontSize: 12.5),
           prefixIcon: const Icon(Icons.search, color: AppColors.primary),
           suffixIcon:
               _query.isEmpty
                   ? null
                   : IconButton(
-                    tooltip: 'مسح',
+                    tooltip: tr('مسح'),
                     icon: const Icon(Icons.close, size: 18),
                     onPressed: _clear,
                   ),
@@ -218,12 +220,12 @@ class _CustomerSearchDialogState extends State<_CustomerSearchDialog> {
 
   Widget _body() {
     if (_query.isEmpty) {
-      return const EmptyState(
+      return EmptyState(
         icon: Icons.person_search,
-        title: 'ابحث عن زبون',
-        subtitle:
-            'اكتب اسم الزبون أو رقم جواله — يعمل البحث بأي جزء من الرقم '
-            'وبأي صيغة (مسافات أو أرقام عربية).',
+        title: tr('ابحث عن زبون'),
+        subtitle: tr(
+          'اكتب اسم الزبون أو رقم جواله — يعمل البحث بأي جزء من الرقم وبأي صيغة (مسافات أو أرقام عربية).',
+        ),
       );
     }
 
@@ -239,9 +241,11 @@ class _CustomerSearchDialogState extends State<_CustomerSearchDialog> {
     if (_results.isEmpty) {
       return EmptyState(
         icon: Icons.search_off,
-        title: 'لا توجد نتائج',
-        subtitle:
-            'لم نجد زبونًا يطابق «$_query» — تحقق من الاسم أو رقم الجوال.',
+        title: tr('لا توجد نتائج'),
+        subtitle: trf(
+          tr('لم نجد زبونًا يطابق «{0}» — تحقق من الاسم أو رقم الجوال.'),
+          [_query],
+        ),
       );
     }
 
@@ -316,7 +320,7 @@ class _ResultTile extends StatelessWidget {
                       const SizedBox(width: 4),
                       Expanded(
                         child: Text(
-                          phones.isEmpty ? 'بلا رقم' : phones.join('  ·  '),
+                          phones.isEmpty ? tr('بلا رقم') : phones.join('  ·  '),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(

@@ -5,6 +5,11 @@ import 'package:barcode/barcode.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:laundry/core/services/paper_size.dart';
+import 'package:laundry/services/i18n/l10n.dart';
+import 'package:laundry/services/payment/payment_method.dart';
+import 'package:laundry/services/pdf/arabic_text.dart';
+import 'package:laundry/services/pdf/doc_template.dart';
+import 'package:laundry/services/pdf/invoice_logo_size.dart';
 import 'package:laundry/services/tax/tax_service.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:pdf/pdf.dart';
@@ -30,6 +35,19 @@ class PreparePDF {
     return double.tryParse('${value ?? ''}') ?? 0.0;
   }
 
+  /// نصّ ثابت بلغة المستند — يعمل داخل العزل بلا حالة عامة.
+  ///
+  /// [data] تحمل `docEnglish` من [DocTemplateService.transport]، ويُمرَّر من
+  /// الواجهة العربية فارغًا فتظل النصوص عربية.
+  static String _t(Map<String, dynamic> data, String arabic) {
+    final map = data['docEnglish'];
+    if (map is Map) {
+      final v = map[arabic];
+      if (v is String && v.isNotEmpty) return v;
+    }
+    return arabic;
+  }
+
   /// نسبة مئوية بلا أصفار زائدة (0.15 ⇒ «15»).
   static String _percent(double rate) {
     final v = rate * 100;
@@ -37,37 +55,126 @@ class PreparePDF {
     return s.replaceFirst(RegExp(r'0+$'), '').replaceFirst(RegExp(r'\.$'), '');
   }
 
+  /// **نصّ المستند بنمط القالب** — المعبر الوحيد لرسم أي نصّ في المستندات
+  /// الثلاثة (فاتورة · كشف حساب · ملخص وردية).
+  ///
+  /// يطبّق المحاور الثلاثة التي يطلبها المستخدم:
+  ///
+  ///   • **الحجم** → `fontSize` من [DocStyle.size].
+  ///   • **العرض** → **تضييق أفقي** بـ[pw.Transform] ومصفوفة تمديد.
+  ///     🚨 **لا `letterSpacing`**: أُثبت بمسبار (`_probe_font_weight.dart`)
+  ///     أنه **يكسر اتصال الحروف العربية** فتصير «ضريبية» «ض ر ي ب ي ة».
+  ///     والتمديد يُوسّع الحرف نفسه فيبقى متّصلًا.
+  ///     🚨 **التضييق فقط (75..100%)**: `Transform` يرسم ولا يشارك في التخطيط،
+  ///     فالتوسيع يُخرج السطر خارج الورقة ويتداخل مع الخلايا المجاورة —
+  ///     مُقاسًا لا مُقدَّرًا (انظر [DocStyle.width]).
+  ///   • **الوزن** → **تعريض صناعي**: رسم السطر مرّتين، النسخة الثانية مُزاحة
+  ///     أفقيًا بمقدار [DocStyle.boldOffset] (ما تفعله المتصفّحات نفسها).
+  ///
+  /// 🚨 **`StackFit.passthrough` إلزامي**: بـ`loose` (الافتراضي) يأخذ الابن
+  /// `constraints.loosen()` فيفقد `textAlign` داخل خلايا الجداول (عرض الخلية
+  /// يصير عرض النصّ لا عرض الخلية). و`passthrough` يمرّر القيود كما هي،
+  /// فيبقى الالتفاف والمحاذاة سليمين. أُثبت بصريًا على 220 dpi في
+  /// `tool/_probe_weight_width.dart` (خلية بنصّ طويل التفّ على سطرين).
+  ///
+  /// ⚠️ **لا `fontWeight` هنا ولا في أي مولّد**: بلا أثر إطلاقًا. كل نمط
+  /// يمرّر `font:` صريحًا، و`pdf` تحسم الوجه بـ`style.font!.getFont(context)`
+  /// (`text.dart:170`) فلا تُقرأ `fontWeight`. ولهذا كانت كل الفواتير
+  /// المطبوعة قبل 2026-10-24 بوزن **عادي** رغم `bold` المكتوب في الكود.
+  ///
+  /// ## الحدود
+  /// الحجم والعرض مُقيَّدان في [DocStyle] (6..36 نقطة · 80..140%). الحدّ
+  /// الأعلى محسوب لا تعسّفي: فوقه يخرج أطول سطر لا يلتفّ عن الورقة، ولا
+  /// يُصلَح بتصغير تلقائي (انظر [tx] أدناه) بل بمنع القيمة أصلًا.
+  /// محاذاة «نهاية السطر» في مستندات PDF — تتبع لغة الواجهة.
+  ///
+  /// كانت `pw.TextAlign.right` مكتوبة حرفيًّا، فتظهر الأرقام في
+  /// المستند الإنجليزي ملتصقة باليمين بلا سبب.
+  static pw.TextAlign get _endAlign => _endAlignOf(L10n.isRtl);
+
+  /// محاذاة النهاية بلغة **صريحة** — تُستخدم داخل العزل حيث لا تُقرأ [L10n].
+  static pw.TextAlign _endAlignOf(bool isRtl) =>
+      isRtl ? pw.TextAlign.right : pw.TextAlign.left;
+
+  /// هل المستند من اليمين لليسار؟ يُقرأ من `data['docLang']` لا من [L10n].
+  ///
+  /// 🚨 **هذا هو سبب «الفاتورة تُطبع بالعربية دائمًا»**: مولّد الفاتورة يعمل
+  /// داخل `compute` — عزل مستقلّ لا يرى الحالة الساكنة لـ`L10n` — فكان
+  /// `L10n.isEnglish` يُرجع `false` دائمًا وكل النصوص تُرسم عربية.
+  /// اللغة تُختم في `DocTemplateService.transport` (الخيط الرئيسي) وتُقرأ هنا.
+  ///
+  /// عند غياب `docLang` (حمولة قديمة أو نداء مباشر من الاختبارات) نرجع
+  /// لـ[L10n] كي لا يتغيّر سلوك المسارات التي تعمل في الخيط الرئيسي.
+  static bool _rtlOf(Map<String, dynamic> data) {
+    final code = '${data['docLang'] ?? ''}'.trim().toLowerCase();
+    if (code.isEmpty) return L10n.isRtl;
+    return code != 'en';
+  }
+
+  static pw.Widget _docText(
+    String text,
+    DocStyle style, {
+    required pw.Font font,
+    pw.TextAlign? align,
+    PdfColor? color,
+    bool? isRtl,
+  }) {
+    final rtl = isRtl ?? L10n.isRtl;
+    pw.Widget layer() => pw.Text(
+      // إصلاح المسافة قبل «ا ل ا» يخصّ العربية وحدها؛ لا يُطبَّق على
+      // الإنجليزية لأنه يُدخل مسافة مزدوجة بلا سبب.
+      rtl ? ArabicText.safe(text) : text,
+      // 🚨 الاتجاه **يتبع اللغة** لا يُكتب حرفيًّا: نصّ إنجليزي باتجاه rtl
+      // تُقرأ كلماته من آخرها وتُصفّ علاماته في غير موضعها.
+      textDirection: rtl ? pw.TextDirection.rtl : pw.TextDirection.ltr,
+      textAlign: align,
+      style: pw.TextStyle(font: font, fontSize: style.size, color: color),
+    );
+
+    var out = layer();
+    final dx = style.boldOffset;
+    if (dx > 0) {
+      out = pw.Stack(
+        fit: pw.StackFit.passthrough,
+        overflow: pw.Overflow.visible,
+        children: [
+          out,
+          pw.Transform.translate(offset: PdfPoint(dx, 0), child: layer()),
+        ],
+      );
+    }
+    if (style.width != 100) {
+      out = pw.Transform(
+        transform: Matrix4.diagonal3Values(style.widthScale, 1, 1),
+        alignment: pw.Alignment.center,
+        child: out,
+      );
+    }
+    return out;
+  }
+
   /// سطر تفصيلي في جدول الإجماليات — المبلغ يسار والوصف يمين.
   static pw.Widget _totalRow(
-    Map<String, dynamic> data,
     String label,
     String value,
-    pw.TextStyle style, {
+    DocStyle style, {
+    required pw.Font font,
     PdfColor? color,
+    bool? isRtl,
   }) {
     return pw.Padding(
       padding: const pw.EdgeInsets.symmetric(vertical: 2),
       child: pw.Row(
         children: [
-          pw.Text(
-            value,
-            style: pw.TextStyle(
-              font: data['arabicFont'],
-              fontSize: style.fontSize,
-              fontWeight: pw.FontWeight.bold,
-              color: color,
-            ),
-          ),
+          _docText(value, style, font: font, color: color, isRtl: isRtl),
           pw.Spacer(),
-          pw.Text(
+          _docText(
             label,
-            textDirection: pw.TextDirection.rtl,
-            textAlign: pw.TextAlign.right,
-            style: pw.TextStyle(
-              font: data['arabicFont'],
-              fontSize: style.fontSize,
-              color: color,
-            ),
+            style,
+            font: font,
+            color: color,
+            align: _endAlignOf(isRtl ?? L10n.isRtl),
+            isRtl: isRtl,
           ),
         ],
       ),
@@ -76,6 +183,12 @@ class PreparePDF {
 
   static Future<Uint8List> generatePdfData(Map<String, dynamic> data) async {
     final pdf = pw.Document();
+
+    // 🚨 لغة المستند تُقرأ من الحمولة لا من `L10n` — هذا المولّد يعمل في
+    // `compute` (عزل مستقلّ) فالحالة الساكنة لـ`L10n` فيه هي الافتراضية
+    // (العربية)، وكان ذلك يجعل كل فاتورة عربية في الوضع الإنجليزي.
+    final isRtl = _rtlOf(data);
+    final endAlign = _endAlignOf(isRtl);
 
     // ─── مقاس الورق من الإعدادات (A4 · A5 · A6 · حراري 80/58 مم · ملصقات) ───
     // الحرارية ارتفاعها مفتوح فتُضبط لأطول صفحة، وهوامشها ضيقة.
@@ -88,35 +201,29 @@ class PreparePDF {
       marginAll: paper.isThermal ? PaperSizes.mmToPoints(2) : PdfPageFormat.cm,
     );
 
+    // مقاس الشعار من الإعداد (مم) ثم يُقيَّد بعرض الورق — لا شعار يخرج عن
+    // الصفحة على الحراري 58 مم. القيمة الافتراضية 53 مم ≈ 150 نقطة، أي
+    // المقاس الثابت القديم نفسه.
+    final logoPoints = InvoiceLogoSize.resolvePoints(
+      data['logoSizeMm'],
+      maxWidth: pageFormat.availableWidth,
+    );
+
+    // 🚨 نوع الدفع يُطبع **بالعربية دائمًا**، بغضّ النظر عن لغة الواجهة:
+    // الفاتورة قد تُطبع في وضع إنجليزي، وكانت تكتب `cash`/`card` بجانب
+    // «المدفوع». التسميات من `PaymentMethods` وحدها (كاش · شبكة · آجل ·
+    // رصيد · اشتراك شهري · استرداد نقدي)، والقيمة المجهولة تُترك كما هي
+    // بدل أن تُبتلع خلف تسمية مضلِّلة.
+    final paymentLabel = PaymentMethods.arabicLabel('${data['payment'] ?? ''}');
+
     final items = data['invoiceItems'] as List;
     final photoBytes = await _loadPhotoBytes(items);
     data['_photoBytes'] = photoBytes;
 
     // ضغط الصور إلى JPEG لتقليل الحجم
     final logoBytes = _compressToJpeg(data['logoImage'] as Uint8List, 80, 80);
-    // final riyalBytes = _compressToJpeg(data['riyalImage'] as Uint8List, 24, 24);
-
-    // final riyalIcon = pw.Image(
-    //   pw.MemoryImage(riyalBytes),
-    //   width: 18,
-    //   height: 18,
-    // );
 
     final bool hidePrices = data['hidePrices'] == true;
-
-    final itemStyle = pw.TextStyle(
-      font: data['arabicFont'],
-      fontSize: 27,
-      fontWeight: pw.FontWeight.bold,
-    );
-
-    final priceStyle = pw.TextStyle(
-      fontSize: 24,
-      font: data['arabicFont'],
-      fontWeight: pw.FontWeight.bold,
-    );
-
-    final smallStyle = pw.TextStyle(font: data['arabicFont'], fontSize: 20);
 
     // ─── مبالغ الخصم والضريبة كما حُفظت (لا كما تُعاد حسابها) ───
     final grossAmount = _num(data['summation']);
@@ -134,13 +241,45 @@ class PreparePDF {
     final discountCode = '${data['discountCode'] ?? ''}'.trim();
     final bizTaxNumber = '${data['bizTaxNumber'] ?? ''}'.trim();
 
+    // ─── قالب المستند ───
+    //
+    // 🚨 **لماذا لا نصوص مكتوبة هنا؟** كان كل سطر في الفاتورة نصًّا ثابتًا في
+    // الكود وقرار إظهاره `if` مبعثرًا بين خيارات بعضها **ميّت لا يُقرأ**.
+    // فكان تغيير كلمة واحدة يحتاج مبرمجًا. الآن كل نصّ وقرار ونمط من
+    // `DocTemplate`، والسجلّ `DocCatalog` هو المرجع عند غياب القالب (فلا
+    // مستند أسوأ من الافتراضي أبدًا).
+    //
+    // ⚠️ يُعرَّف **قبل** QR لأن قرار طباعة الرمز نفسه من القالب.
+    final doc = DocTemplateView.of(data, DocKind.invoice);
+    final font = data['arabicFont'] as pw.Font;
+
+    /// نصّ الفاتورة بنمط حقلها.
+    ///
+    /// لا تصغير تلقائي (`FittedBox`) هنا: يَخرج عن حدود الورقة لا يُصلَح
+    /// بتصغير يُلغى التفاف النصّ فيقتطع في وسطه، وهو أسوأ من الفائض نفسه.
+    /// الحدود المقيَّدة في `DocStyle` (6..48 نقطة · 80..140%) تكفي.
+    pw.Widget tx(
+      String text,
+      String key, {
+      pw.TextAlign? align,
+      PdfColor? color,
+    }) => _docText(
+      text,
+      doc.style(key),
+      font: font,
+      align: align,
+      color: color,
+      // اتجاه النصّ وتشكيل العربية يتبعان لغة **المستند** لا لغة العزل.
+      isRtl: isRtl,
+    );
+
     // ─── QR هيئة الزكاة والضريبة والجمارك (المرحلة الأولى) ───
     //
     // الفاتورة كانت تُطبع بعنوان «فاتورة ضريبية مبسطة» **بلا رقم ضريبي ولا
     // QR**، وهو ما لا يجتاز مراجعة الهيئة. الترميز (TLV ثم Base64) في
     // `TaxService.zatcaQrPayload` منطق خالص مختبَر، لا سطور تُبنى هنا.
     String? qrSvg;
-    if (bizTaxNumber.isNotEmpty && data['showQr'] != false) {
+    if (bizTaxNumber.isNotEmpty && doc.isOn(DocCatalog.kQr)) {
       try {
         final payload = TaxService.zatcaQrPayload(
           sellerName: '${data['bizName'] ?? ''}',
@@ -155,150 +294,154 @@ class PreparePDF {
       }
     }
 
+    /// تجاوز نصّي: الفراغ يعني «استخدم قيمة معلومات النشاط».
+    final nameOverride = doc.text(DocCatalog.kBusinessName, '').trim();
+    final addressOverride = doc.text(DocCatalog.kBusinessAddress, '').trim();
+    final bizName =
+        nameOverride.isNotEmpty
+            ? nameOverride
+            : '${data['bizName'] ?? ''}'.trim().isEmpty
+            ? _t(data, 'نظام المغاسل')
+            : '${data['bizName']}'.trim();
+    final bizAddress =
+        addressOverride.isNotEmpty
+            ? addressOverride
+            : '${data['bizAddress'] ?? ''}'.trim();
+
+    final bizCrNumber = '${data['bizCrNumber'] ?? ''}'.trim();
+    final bizShortAddress = '${data['bizShortAddress'] ?? ''}'.trim();
+    final bizPhone = '${data['bizPhone'] ?? ''}'.trim();
+    final createdBy = '${data['createdByName'] ?? ''}'.trim();
+    final custName = '${data['customername'] ?? ''}'.trim();
+    final custPhone = '${data['customerPhone'] ?? ''}'.trim();
+    final pickup = '${data['pickupCode'] ?? ''}'.trim();
+    final currencyLabel =
+        doc.isOn(DocCatalog.kCurrency)
+            ? doc.text(DocCatalog.kCurrency).trim()
+            : '';
+    final footerText = doc.text(DocCatalog.kFooter, '').trim();
+
+    /// سطر «بادئة: قيمة» — يعيد لا شيء عندما تكون القيمة فارغة، فلا يبقى
+    /// عنوان يتيم بلا قيمة (كان يطبع `اسم العميل: null`).
+    pw.Widget? labelRow(String fieldKey, String value, {bool center = true}) {
+      final v = value.trim();
+      if (v.isEmpty || !doc.isOn(fieldKey)) return null;
+      final label = doc.text(fieldKey).trim();
+      final text = label.isEmpty ? v : '$label: $v';
+      final widget = tx(text, fieldKey, align: pw.TextAlign.center);
+      return center ? pw.Center(child: widget) : widget;
+    }
+
+    // أسطر «بادئة: قيمة» — تُحسب مسبقًا لأن `null` يعني «لا سطر».
+    final crRow = labelRow(DocCatalog.kCrNumber, bizCrNumber);
+    final shortAddrRow = labelRow(DocCatalog.kShortAddress, bizShortAddress);
+    final taxRow = labelRow(DocCatalog.kTaxNumber, bizTaxNumber);
+    final cashierRow = labelRow(DocCatalog.kCashier, createdBy);
+    final customerRow = labelRow(DocCatalog.kCustomerName, custName);
+    final customerPhoneRow = labelRow(DocCatalog.kCustomerPhone, custPhone);
+    final pickupRow = labelRow(DocCatalog.kPickupCode, pickup);
+
     // ─── الرأس ───
     final List<pw.Widget> headerWidgets = [
-      if (data['showLogo'] != false)
+      if (doc.isOn(DocCatalog.kLogo))
         pw.Center(
-          child: pw.Image(pw.MemoryImage(logoBytes), width: 150, height: 150),
+          child: pw.Image(
+            pw.MemoryImage(logoBytes),
+            width: logoPoints,
+            height: logoPoints,
+          ),
         ),
-      pw.SizedBox(height: 6),
-      pw.Center(
-        child: pw.Text(
-          data['bizName'] ?? 'نظام المغاسل',
-          textDirection: pw.TextDirection.rtl,
-          textAlign: pw.TextAlign.center,
-          style: itemStyle,
+      if (doc.isOn(DocCatalog.kBusinessName)) ...[
+        pw.SizedBox(height: 6),
+        pw.Center(
+          child: tx(
+            bizName,
+            DocCatalog.kBusinessName,
+            align: pw.TextAlign.center,
+          ),
         ),
-      ),
-      pw.SizedBox(height: 4),
-      pw.Center(
-        child: pw.Text(
-          data['bizAddress'] ?? '',
-          textDirection: pw.TextDirection.rtl,
-          textAlign: pw.TextAlign.center,
-          style: pw.TextStyle(font: data['arabicFont'], fontSize: 22),
+      ],
+      if (doc.isOn(DocCatalog.kBusinessAddress) && bizAddress.isNotEmpty) ...[
+        pw.SizedBox(height: 4),
+        pw.Center(
+          child: tx(
+            bizAddress,
+            DocCatalog.kBusinessAddress,
+            align: pw.TextAlign.center,
+          ),
         ),
-      ),
-      pw.SizedBox(height: 10),
-      pw.Divider(),
-      pw.SizedBox(height: 10),
-      // عنوان الفاتورة — من الإعدادات (افتراضيًا: فاتورة ضريبية مبسطة)
-      pw.Center(
-        child: pw.Text(
-          '${data['invoiceTitle'] ?? 'فاتورة ضريبية مبسطة'}',
-          textDirection: pw.TextDirection.rtl,
-          textAlign: pw.TextAlign.center,
-          style: itemStyle,
+      ],
+      // 🚨 سطر «نسعد بتواصلكم…» **مع هوية النشاط في الأعلى**، لا بعد الخط
+      // الفاصل. كان مرسومًا بعد الخط الثاني فيظهر كأنه من الأصناف: عنوان
+      // تواصل تابع للمحل يُفصل عن الأصناف بخط، فمكانه الطبيعي مع الاسم
+      // والعنوان قبل الخط الأول.
+      if (doc.isOn(DocCatalog.kPhoneLine) && bizPhone.isNotEmpty) ...[
+        pw.SizedBox(height: 4),
+        pw.Center(
+          child: tx(
+            '${doc.text(DocCatalog.kPhoneLine)}  $bizPhone',
+            DocCatalog.kPhoneLine,
+            align: pw.TextAlign.center,
+          ),
         ),
-      ),
-      pw.SizedBox(height: 6),
+      ],
+      if (doc.isOn(DocCatalog.kDivider)) ...[
+        pw.SizedBox(height: 10),
+        pw.Divider(),
+        pw.SizedBox(height: 10),
+      ],
+      // عنوان الفاتورة — نصّه من القالب (افتراضيًا: فاتورة ضريبية مبسطة)
+      if (doc.isOn(DocCatalog.kTitle))
+        pw.Center(
+          child: tx(
+            doc.text(DocCatalog.kTitle),
+            DocCatalog.kTitle,
+            align: pw.TextAlign.center,
+          ),
+        ),
       // رقم الإيصال
-      pw.Center(
-        child: pw.Text(
-          "رقم الإيصال: ${data['invoiceNumberText'] ?? data['invoiceNumber']}",
-          textDirection: pw.TextDirection.rtl,
-          textAlign: pw.TextAlign.center,
-          style: itemStyle,
-        ),
-      ),
-      pw.SizedBox(height: 6),
-      // التاريخ — يتبع خيار إظهار التاريخ
-      if (data['showDatetime'] != false)
+      if (doc.isOn(DocCatalog.kReceiptNo)) ...[
+        pw.SizedBox(height: 6),
         pw.Center(
-          child: pw.Text(
-            "التأريخ: ${data['date']}",
-            textDirection: pw.TextDirection.rtl,
-            textAlign: pw.TextAlign.center,
-            style: itemStyle,
+          child: tx(
+            '${doc.text(DocCatalog.kReceiptNo)}: ${data['invoiceNumberText'] ?? data['invoiceNumber']}',
+            DocCatalog.kReceiptNo,
+            align: pw.TextAlign.center,
           ),
         ),
-      // السجل التجاري — يتبع خياره
-      if ('${data['bizCrNumber'] ?? ''}'.trim().isNotEmpty &&
-          data['showCrNumber'] != false)
+      ],
+      if (doc.isOn(DocCatalog.kDatetime)) ...[
+        pw.SizedBox(height: 6),
         pw.Center(
-          child: pw.Text(
-            "السجل التجاري: ${data['bizCrNumber']}",
-            textDirection: pw.TextDirection.rtl,
-            textAlign: pw.TextAlign.center,
-            style: itemStyle,
+          child: tx(
+            '${doc.text(DocCatalog.kDatetime)}: ${data['date']}',
+            DocCatalog.kDatetime,
+            align: pw.TextAlign.center,
           ),
         ),
-      // العنوان الوطني — يتبع خياره
-      if ('${data['bizShortAddress'] ?? ''}'.trim().isNotEmpty &&
-          data['showShortAddress'] == true)
-        pw.Center(
-          child: pw.Text(
-            "العنوان الوطني: ${data['bizShortAddress']}",
-            textDirection: pw.TextDirection.rtl,
-            textAlign: pw.TextAlign.center,
-            style: itemStyle,
-          ),
-        ),
-      // ─── الرقم الضريبي (إلزامي على الفاتورة الضريبية) ───
-      if (bizTaxNumber.isNotEmpty && data['showTaxNumber'] != false)
-        pw.Center(
-          child: pw.Text(
-            "الرقم الضريبي: $bizTaxNumber",
-            textDirection: pw.TextDirection.rtl,
-            textAlign: pw.TextAlign.center,
-            style: smallStyle,
-          ),
-        ),
+      ],
+      // السجل التجاري · العنوان الوطني · الرقم الضريبي — بلا قيمة لا سطر
+      if (crRow != null) crRow,
+      if (shortAddrRow != null) shortAddrRow,
+      if (taxRow != null) taxRow,
       // ─── QR الهيئة — يقرأه المفتش من الورق مباشرة ───
-      if (qrSvg != null && data['showQr'] != false) ...[
+      if (qrSvg != null && doc.isOn(DocCatalog.kQr)) ...[
         pw.SizedBox(height: 10),
         pw.Center(child: pw.SvgImage(svg: qrSvg, width: 100, height: 100)),
         pw.SizedBox(height: 6),
       ],
-      // صدر بواسطة — يتبع خيار إظهار اسم المستخدم
-      if ('${data['createdByName']}'.isNotEmpty &&
-          data['showCashier'] != false)
-        pw.Center(
-          child: pw.Text(
-            "صدر بواسطة: ${data['createdByName']}",
-            textDirection: pw.TextDirection.rtl,
-            textAlign: pw.TextAlign.center,
-            style: smallStyle,
-          ),
-        ),
-      if ('${data['customername']}'.isNotEmpty)
-        pw.Center(
-          child: pw.Text(
-            "اسم العميل: ${data['customername']}",
-            textDirection: pw.TextDirection.rtl,
-            textAlign: pw.TextAlign.center,
-            style: itemStyle,
-          ),
-        ),
-      pw.SizedBox(height: 10),
-      pw.Divider(),
-      pw.SizedBox(height: 10),
-      pw.Center(
-        child: pw.Text(
-          "نسعد بتواصلكم عبر الأرقام:  ${data['bizPhone'] ?? ''}",
-          textDirection: pw.TextDirection.rtl,
-          textAlign: pw.TextAlign.center,
-          style: itemStyle,
-        ),
-      ),
-      pw.Center(
-        child: pw.Text(
-          "-----------------------------------------------------",
-          textDirection: pw.TextDirection.rtl,
-          textAlign: pw.TextAlign.center,
-          style: itemStyle,
-        ),
-      ),
-      // تذييل حرّ من الإعدادات
-      if ('${data['footerNote'] ?? ''}'.trim().isNotEmpty)
-        pw.Center(
-          child: pw.Text(
-            '${data['footerNote']}'.trim(),
-            textDirection: pw.TextDirection.rtl,
-            textAlign: pw.TextAlign.center,
-            style: smallStyle,
-          ),
-        ),
+      if (cashierRow != null) cashierRow,
+      if (customerRow != null) customerRow,
+      if (customerPhoneRow != null) customerPhoneRow,
+      if (pickupRow != null) pickupRow,
+      if (doc.isOn(DocCatalog.kDivider)) ...[
+        pw.SizedBox(height: 10),
+        pw.Divider(),
+        pw.SizedBox(height: 10),
+      ],
+      // 🚨 لا سطر هاتف ولا تذييل هنا: كلاهما انتقل — الهاتف إلى أعلى
+      // الترويسة مع هوية النشاط، والتذييل إلى **أسفل المستند** بعد
+      // المجاميع (وهو موضعه في السجلّ: `DocSections.footer`).
     ];
 
     // ─── الأصناف — RTL: السعر يسار، الصنف يمين ───
@@ -316,19 +459,16 @@ class PreparePDF {
                 padding: const pw.EdgeInsets.only(left: 10),
                 child:
                     hidePrices
-                        ? pw.Text(
-                          'اشتراك',
-                          textDirection: pw.TextDirection.rtl,
-                          style: pw.TextStyle(
-                            fontSize: 20,
-                            font: data['arabicFont'],
-                            fontWeight: pw.FontWeight.bold,
-                            color: PdfColor.fromInt(0xFF7C3AED),
-                          ),
-                        )
-                        : pw.Text(
+                        ? (doc.isOn(DocCatalog.kSubsBadge)
+                            ? tx(
+                              doc.text(DocCatalog.kSubsBadge),
+                              DocCatalog.kSubsBadge,
+                              color: PdfColor.fromInt(0xFF7C3AED),
+                            )
+                            : pw.SizedBox())
+                        : tx(
                           _money(item['total_price']),
-                          style: priceStyle,
+                          DocCatalog.kItemPrice,
                         ),
               ),
               // الصنف يمين
@@ -336,21 +476,24 @@ class PreparePDF {
                 child: pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.end,
                   children: [
-                    pw.Text(
-                      "${item['vestments']} (${item['content']})",
-                      textDirection: pw.TextDirection.rtl,
-                      textAlign: pw.TextAlign.right,
-                      style: itemStyle,
+                    tx(
+                      // 🚨 الاسم بلغة الواجهة: `vestments_en` ثم القاموس ثم
+                      // العربي. الفاتورة القديمة قد لا تحمل `vestments_en`.
+                      // واللغة تُمرَّر صريحة لأننا داخل عزل `compute`.
+                      "${localized(item, 'vestments', english: !isRtl)} "
+                      "(${localized(item, 'content', english: !isRtl)})",
+                      DocCatalog.kItemLine,
+                      align: endAlign,
                     ),
                     if (!hidePrices)
-                      pw.Text(
+                      tx(
                         "${item['price']} x ${item['count']}",
-                        textDirection: pw.TextDirection.rtl,
-                        textAlign: pw.TextAlign.right,
-                        style: priceStyle,
+                        DocCatalog.kItemPrice,
+                        align: endAlign,
                       ),
                     if (item['note'] != null &&
-                        '${item['note']}'.trim().isNotEmpty)
+                        '${item['note']}'.trim().isNotEmpty &&
+                        doc.isOn(DocCatalog.kItemNote))
                       pw.Container(
                         margin: const pw.EdgeInsets.only(top: 4, bottom: 2),
                         padding: const pw.EdgeInsets.symmetric(
@@ -361,20 +504,16 @@ class PreparePDF {
                           color: PdfColor.fromInt(0xFFFEF3C7),
                           borderRadius: pw.BorderRadius.circular(6),
                         ),
-                        child: pw.Text(
-                          "ملاحظة: ${item['note']}",
-                          textDirection: pw.TextDirection.rtl,
-                          textAlign: pw.TextAlign.right,
-                          style: pw.TextStyle(
-                            fontSize: 20,
-                            color: PdfColor.fromInt(0xFFB45309),
-                            font: data['arabicFont'],
-                            fontWeight: pw.FontWeight.bold,
-                          ),
+                        child: tx(
+                          '${doc.text(DocCatalog.kItemNote)}: ${item['note']}',
+                          DocCatalog.kItemNote,
+                          align: endAlign,
+                          color: PdfColor.fromInt(0xFFB45309),
                         ),
                       ),
                     if (item['photo'] != null &&
                         '${item['photo']}'.trim().isNotEmpty &&
+                        doc.isOn(DocCatalog.kPhotos) &&
                         data['_photoBytes'] is List &&
                         index < (data['_photoBytes'] as List).length &&
                         (data['_photoBytes'] as List)[index] != null)
@@ -402,69 +541,72 @@ class PreparePDF {
     final List<pw.Widget> footerWidgets = [
       pw.Divider(),
       if (hidePrices)
-        pw.Center(
-          child: pw.Container(
-            padding: const pw.EdgeInsets.symmetric(
-              horizontal: 18,
-              vertical: 10,
-            ),
-            decoration: pw.BoxDecoration(
-              color: PdfColor.fromInt(0xFFF5F3FF),
-              border: pw.Border.all(
-                color: PdfColor.fromInt(0xFF7C3AED),
-                width: 1.5,
+        (doc.isOn(DocCatalog.kSubsNote)
+            ? pw.Center(
+              child: pw.Container(
+                padding: const pw.EdgeInsets.symmetric(
+                  horizontal: 18,
+                  vertical: 10,
+                ),
+                decoration: pw.BoxDecoration(
+                  color: PdfColor.fromInt(0xFFF5F3FF),
+                  border: pw.Border.all(
+                    color: PdfColor.fromInt(0xFF7C3AED),
+                    width: 1.5,
+                  ),
+                  borderRadius: pw.BorderRadius.circular(10),
+                ),
+                child: tx(
+                  doc.text(DocCatalog.kSubsNote),
+                  DocCatalog.kSubsNote,
+                  color: PdfColor.fromInt(0xFF7C3AED),
+                ),
               ),
-              borderRadius: pw.BorderRadius.circular(10),
-            ),
-            child: pw.Text(
-              // ⚠️ شرطة قصيرة `–` لا طويلة `—`: الخط لا يحوي U+2014.
-              'مغطّى بالاشتراك الشهري – لا يُطلب مبلغ عند التسليم',
-              textDirection: pw.TextDirection.rtl,
-              style: pw.TextStyle(
-                fontSize: 24,
-                font: data['arabicFont'],
-                fontWeight: pw.FontWeight.bold,
-                color: PdfColor.fromInt(0xFF7C3AED),
-              ),
-            ),
-          ),
-        )
+            )
+            : pw.SizedBox())
       else
         pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.stretch,
           children: [
             // ─── تفصيل الخصم والضريبة ───
             // يظهر **فقط عند وجودهما**، فلا تتغيّر فاتورة بلا خصم ولا ضريبة
-            // ولا يزدحم الإيصال بسطور أصفار.
+            // ولا يزدحم الإيصال بسطور أصفار. وكل سطر يتبع مُفتاحه في القالب:
+            // تعطيله يُخفيه، وتعديل نصّه يغيّر عنوانه، ونمطه يغيّر حجمه.
             if (hasDiscount || hasTax) ...[
-              if (hasDiscount)
+              if (hasDiscount && doc.isOn(DocCatalog.kGross))
                 _totalRow(
-                  data,
-                  'الإجمالي قبل الخصم',
+                  doc.text(DocCatalog.kGross),
                   _money(grossAmount),
-                  smallStyle,
+                  doc.style(DocCatalog.kGross),
+                  font: font,
+                  isRtl: isRtl,
                 ),
-              if (hasDiscount)
+              if (hasDiscount && doc.isOn(DocCatalog.kDiscount))
                 _totalRow(
-                  data,
-                  discountCode.isEmpty ? 'الخصم' : 'الخصم ($discountCode)',
+                  discountCode.isEmpty
+                      ? doc.text(DocCatalog.kDiscount)
+                      : '${doc.text(DocCatalog.kDiscount)} ($discountCode)',
                   '- ${_money(discountAmount)}',
-                  smallStyle,
+                  doc.style(DocCatalog.kDiscount),
+                  font: font,
+                  isRtl: isRtl,
                   color: PdfColor.fromInt(0xFF16A34A),
                 ),
-              if (hasTax)
+              if (hasTax && doc.isOn(DocCatalog.kTaxBase))
                 _totalRow(
-                  data,
-                  'الأساس الخاضع للضريبة',
+                  doc.text(DocCatalog.kTaxBase),
                   _money(taxBase),
-                  smallStyle,
+                  doc.style(DocCatalog.kTaxBase),
+                  font: font,
+                  isRtl: isRtl,
                 ),
-              if (hasTax)
+              if (hasTax && doc.isOn(DocCatalog.kTaxLine))
                 _totalRow(
-                  data,
-                  'ضريبة القيمة المضافة ${_percent(taxRate)}%',
+                  '${doc.text(DocCatalog.kTaxLine)} ${_percent(taxRate)}%',
                   _money(taxAmount),
-                  smallStyle,
+                  doc.style(DocCatalog.kTaxLine),
+                  font: font,
+                  isRtl: isRtl,
                 ),
               pw.SizedBox(height: 8),
               pw.Divider(),
@@ -474,56 +616,70 @@ class PreparePDF {
               crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: [
                 // المبلغ يسار
-                pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
-                  children: [
-                    pw.Row(
-                      mainAxisSize: pw.MainAxisSize.min,
-                      crossAxisAlignment: pw.CrossAxisAlignment.center,
-                      children: [
-                        pw.Text(
-                          '${_money(payable)} ر.س',
-                          style: priceStyle,
-                          textDirection: pw.TextDirection.rtl,
-                        ),
-                      ],
-                    ),
-                  ],
+                tx(
+                  currencyLabel.isEmpty
+                      ? _money(payable)
+                      : '${_money(payable)} $currencyLabel',
+                  DocCatalog.kTotalAmount,
                 ),
                 pw.Spacer(),
                 // الوصف يمين
                 pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.end,
                   children: [
-                    pw.Text(
-                      hasDiscount ? "المستحق بعد الخصم" : "المجموع: ",
-                      textDirection: pw.TextDirection.rtl,
-                      textAlign: pw.TextAlign.right,
-                      style: itemStyle,
-                    ),
-                    pw.SizedBox(height: 10),
-                    pw.Text(
-                      "الدفع: ${data['payment']}",
-                      textDirection: pw.TextDirection.rtl,
-                      textAlign: pw.TextAlign.right,
-                      style: pw.TextStyle(
-                        font: data['arabicFont'],
-                        fontSize: 18,
+                    if (doc.isOn(
+                      hasDiscount ? DocCatalog.kDue : DocCatalog.kSum,
+                    ))
+                      tx(
+                        doc.text(
+                          hasDiscount ? DocCatalog.kDue : DocCatalog.kSum,
+                        ),
+                        hasDiscount ? DocCatalog.kDue : DocCatalog.kSum,
+                        align: endAlign,
                       ),
-                    ),
+                    // طريقة الدفع
+                    if (doc.isOn(DocCatalog.kPaid) &&
+                        paymentLabel.isNotEmpty) ...[
+                      pw.SizedBox(height: 10),
+                      tx(
+                        '${doc.text(DocCatalog.kPaid)}: $paymentLabel',
+                        DocCatalog.kPaid,
+                        align: endAlign,
+                      ),
+                    ],
+                    // المتبقي — سطر جديد (لم يكن يُطبع أصلًا) ومُعطَّل افتراضيًا
+                    if (doc.isOn(DocCatalog.kRemaining) &&
+                        data['remainingAmount'] != null) ...[
+                      pw.SizedBox(height: 4),
+                      tx(
+                        currencyLabel.isEmpty
+                            ? '${doc.text(DocCatalog.kRemaining)}: ${_money(data['remainingAmount'])}'
+                            : '${doc.text(DocCatalog.kRemaining)}: ${_money(data['remainingAmount'])} $currencyLabel',
+                        DocCatalog.kRemaining,
+                        align: endAlign,
+                      ),
+                    ],
                   ],
                 ),
               ],
             ),
           ],
         ),
-        pw.Divider(),
+      pw.Divider(),
+      // تذييل حرّ من القالب — **أسفل المستند** كما يقتضيه اسمه ووصفه في
+      // السجلّ («نصّ حرّ أسفل الفاتورة»). كان في الترويسة فيظهر قبل الأصناف.
+      if (doc.isOn(DocCatalog.kFooter) && footerText.isNotEmpty) ...[
+        pw.SizedBox(height: 6),
+        pw.Center(
+          child: tx(footerText, DocCatalog.kFooter, align: pw.TextAlign.center),
+        ),
+      ],
     ];
 
     pdf.addPage(
       pw.MultiPage(
         pageFormat: pageFormat,
-        theme: pw.ThemeData.withFont(base: data['arabicFont']),
+        theme: pw.ThemeData.withFont(base: font),
         build: (pw.Context context) {
           return [...headerWidgets, ...itemWidgets, ...footerWidgets];
         },
@@ -552,6 +708,12 @@ class PreparePDF {
     return photoBytes;
   }
 
+  /// **ملخّص الوردية** — A6، عربي RTL.
+  ///
+  /// كان **خارج** نظام القوالب حتى 2026-10-24: نصوصه (`'رقم الوردية:'` ·
+  /// `'مجموع الكاش:'` · `'--- شكراً لكم ---'`) وأحجامه (`20/18/12`) مكتوبة
+  /// في الكود، فلا يستطيع صاحب النشاط تغيير كلمة ولا تكبير سطر. الآن يقرأ
+  /// قالبه (`doc_template_shift`) مثل الفاتورة وكشف الحساب تمامًا.
   static Future<Uint8List> generateShiftSummaryPdf(
     Map<String, dynamic> shiftData,
   ) async {
@@ -560,6 +722,11 @@ class PreparePDF {
       await rootBundle.load("assets/fonts/Noto/AL-Mohanad.ttf"),
     );
 
+    final doc = DocTemplateView.of(shiftData, DocKind.shift);
+
+    pw.Widget tx(String text, String key, {pw.TextAlign? align}) =>
+        _docText(text, doc.style(key), font: font, align: align);
+
     final String startTime = DateFormat(
       'yyyy-MM-dd hh:mm a',
     ).format(DateTime.parse(shiftData['start_time']));
@@ -567,15 +734,36 @@ class PreparePDF {
       'yyyy-MM-dd hh:mm a',
     ).format(DateTime.parse(shiftData['end_time']));
 
-    final bizName = shiftData['bizName'] ?? '';
-    final bizPhone = shiftData['bizPhone'] ?? '';
-    final bizAddress = shiftData['bizAddress'] ?? '';
+    // تجاوز نصّي: الفراغ ⇒ قيمة «معلومات النشاط».
+    final bizName =
+        doc.text(DocCatalog.kBusinessName, '').trim().isEmpty
+            ? '${shiftData['bizName'] ?? ''}'.trim()
+            : doc.text(DocCatalog.kBusinessName, '').trim();
+    final bizAddress =
+        doc.text(DocCatalog.kBusinessAddress, '').trim().isEmpty
+            ? '${shiftData['bizAddress'] ?? ''}'.trim()
+            : doc.text(DocCatalog.kBusinessAddress, '').trim();
+    final bizPhone = '${shiftData['bizPhone'] ?? ''}'.trim();
+    final currency =
+        doc.isOn(DocCatalog.kCurrency)
+            ? ' ${doc.text(DocCatalog.kCurrency)}'
+            : '';
+    final footer = doc.text(DocCatalog.kFooter, '').trim();
 
-    // ملخص الوردية على A6 — كما كان قبل أي تعديل طباعة.
+    /// سطر «بادئة … قيمة»: القيمة يسار والبادئة يمين (كشف الحساب نفسه).
+    pw.Widget row(String key, String value) => pw.Padding(
+      padding: const pw.EdgeInsets.symmetric(vertical: 4),
+      child: pw.Row(
+        children: [
+          tx(value, key),
+          pw.Spacer(),
+          tx('${doc.text(key)}:', key, align: _endAlign),
+        ],
+      ),
+    );
+
+    // ملخص الوردية على A6 — المقاس قرار طباعة مستقلّ عن القالب.
     final format = PdfPageFormat.a6;
-    const double nameSize = 20;
-    const double smallSize = 12;
-    const double titleTextSize = 18;
 
     pdf.addPage(
       pw.Page(
@@ -583,82 +771,78 @@ class PreparePDF {
         theme: pw.ThemeData.withFont(base: font, bold: font),
         build: (pw.Context context) {
           return pw.Directionality(
-            textDirection: pw.TextDirection.rtl,
+            textDirection:
+                L10n.isRtl ? pw.TextDirection.rtl : pw.TextDirection.ltr,
             child: pw.Column(
               crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: [
-                if (bizName.isNotEmpty)
+                if (bizName.isNotEmpty && doc.isOn(DocCatalog.kBusinessName))
                   pw.Center(
-                    child: pw.Text(
+                    child: tx(
                       bizName,
-                      style: pw.TextStyle(
-                        font: font,
-                        fontSize: nameSize,
-                        fontWeight: pw.FontWeight.bold,
-                      ),
+                      DocCatalog.kBusinessName,
+                      align: pw.TextAlign.center,
                     ),
                   ),
-                if (bizAddress.isNotEmpty)
+                if (bizAddress.isNotEmpty &&
+                    doc.isOn(DocCatalog.kBusinessAddress))
                   pw.Center(
-                    child: pw.Text(
+                    child: tx(
                       bizAddress,
-                      style: pw.TextStyle(font: font, fontSize: smallSize),
+                      DocCatalog.kBusinessAddress,
+                      align: pw.TextAlign.center,
                     ),
                   ),
-                if (bizPhone.isNotEmpty)
+                if (bizPhone.isNotEmpty && doc.isOn(DocCatalog.kPhoneLine))
                   pw.Center(
-                    child: pw.Text(
-                      'هاتف: $bizPhone',
-                      style: pw.TextStyle(font: font, fontSize: smallSize),
+                    child: tx(
+                      '${doc.text(DocCatalog.kPhoneLine)}: $bizPhone',
+                      DocCatalog.kPhoneLine,
+                      align: pw.TextAlign.center,
                     ),
                   ),
                 pw.SizedBox(height: 10),
-                pw.Center(
-                  child: pw.Text(
-                    'ملخص الوردية',
-                    style: pw.TextStyle(
-                      font: font,
-                      fontSize: titleTextSize,
-                      fontWeight: pw.FontWeight.bold,
+                if (doc.isOn(DocCatalog.kTitle))
+                  pw.Center(
+                    child: tx(
+                      doc.text(DocCatalog.kTitle),
+                      DocCatalog.kTitle,
+                      align: pw.TextAlign.center,
                     ),
                   ),
-                ),
                 pw.SizedBox(height: 20),
-                _buildRow(
-                  'رقم الوردية:',
-                  shiftData['shift_id'].toString(),
-                  font,
-                  smallSize,
-                ),
-                pw.Divider(),
-                _buildRow('وقت البدء:', startTime, font, smallSize),
-                _buildRow('وقت الإنتهاء:', endTime, font, smallSize),
-                pw.Divider(),
-                _buildRow(
-                  'عدد الفواتير:',
-                  shiftData['invoice_count'].toString(),
-                  font,
-                  smallSize,
-                ),
-                _buildRow(
-                  'مجموع الكاش:',
-                  '${(shiftData['total_cash'] ?? 0.0).toStringAsFixed(2)} ريال',
-                  font,
-                  smallSize,
-                ),
-                _buildRow(
-                  'مجموع الشبكة:',
-                  '${(shiftData['total_network'] ?? 0.0).toStringAsFixed(2)} ريال',
-                  font,
-                  smallSize,
-                ),
-                pw.SizedBox(height: 40),
-                pw.Center(
-                  child: pw.Text(
-                    '--- شكراً لكم ---',
-                    style: pw.TextStyle(font: font, fontSize: smallSize),
+                if (doc.isOn(DocCatalog.kShiftId))
+                  row(DocCatalog.kShiftId, '${shiftData['shift_id']}'),
+                if (doc.isOn(DocCatalog.kDivider)) pw.Divider(),
+                if (doc.isOn(DocCatalog.kStartTime))
+                  row(DocCatalog.kStartTime, startTime),
+                if (doc.isOn(DocCatalog.kEndTime))
+                  row(DocCatalog.kEndTime, endTime),
+                if (doc.isOn(DocCatalog.kDivider)) pw.Divider(),
+                if (doc.isOn(DocCatalog.kInvoiceCount))
+                  row(
+                    DocCatalog.kInvoiceCount,
+                    '${shiftData['invoice_count']}',
                   ),
-                ),
+                if (doc.isOn(DocCatalog.kTotalCash))
+                  row(
+                    DocCatalog.kTotalCash,
+                    '${_money(shiftData['total_cash'] ?? 0.0)}$currency',
+                  ),
+                if (doc.isOn(DocCatalog.kTotalNetwork))
+                  row(
+                    DocCatalog.kTotalNetwork,
+                    '${_money(shiftData['total_network'] ?? 0.0)}$currency',
+                  ),
+                pw.SizedBox(height: 40),
+                if (doc.isOn(DocCatalog.kFooter) && footer.isNotEmpty)
+                  pw.Center(
+                    child: tx(
+                      footer,
+                      DocCatalog.kFooter,
+                      align: pw.TextAlign.center,
+                    ),
+                  ),
               ],
             ),
           );
@@ -684,12 +868,33 @@ class PreparePDF {
       await rootBundle.load("assets/fonts/Noto/AL-Mohanad.ttf"),
     );
 
-    final bizName = '${data['bizName'] ?? ''}';
-    final bizPhone = '${data['bizPhone'] ?? ''}';
-    final bizAddress = '${data['bizAddress'] ?? ''}';
-    final custName = '${data['customerName'] ?? ''}';
-    final custPhone = '${data['customerPhone'] ?? ''}';
-    final printedAt = '${data['printedAt'] ?? ''}';
+    final bizNameRaw = '${data['bizName'] ?? ''}'.trim();
+    final bizPhone = '${data['bizPhone'] ?? ''}'.trim();
+    final bizAddressRaw = '${data['bizAddress'] ?? ''}'.trim();
+    final custName = '${data['customerName'] ?? ''}'.trim();
+    final custPhone = '${data['customerPhone'] ?? ''}'.trim();
+    final printedAt = '${data['printedAt'] ?? ''}'.trim();
+
+    // ─── قالب المستند — كل نصّ وقرار إظهار ونمط من `DocCatalog` ───
+    final doc = DocTemplateView.of(data, DocKind.statement);
+    final nameOverride = doc.text(DocCatalog.kBusinessName, '').trim();
+    final addressOverride = doc.text(DocCatalog.kBusinessAddress, '').trim();
+    final bizName = nameOverride.isNotEmpty ? nameOverride : bizNameRaw;
+    final bizAddress =
+        addressOverride.isNotEmpty ? addressOverride : bizAddressRaw;
+
+    /// الشعار — يُحمَّل من الأصول فقط عند تفعيله (لا كلفة عند تعطيله).
+    Uint8List? logoBytes;
+    if (doc.isOn(DocCatalog.kLogo)) {
+      try {
+        logoBytes =
+            (await rootBundle.load(
+              'assets/images/logo-wash.png',
+            )).buffer.asUint8List();
+      } catch (e) {
+        debugPrint('statement logo skipped: $e');
+      }
+    }
 
     /// نصّ الفترة («من … إلى …») — فارغ ⇒ كشف كامل بلا تقييد.
     final period = '${data['period'] ?? ''}';
@@ -700,47 +905,43 @@ class PreparePDF {
     final payments = (data['payments'] as List?) ?? const [];
     final usages = (data['usages'] as List?) ?? const [];
 
-    // أحجام الخطوط (كُبِّرت 2026-10-03 بطلب المستخدم: 10/9 ⇒ 13/11/12).
-    const double base = 13; // النصّ العادي (kv والأقسام)
-    const double small = 11; // الترويسة والتذييل
-    const double cellSize = 12; // خلايا الجداول
+    /// لاحقة العملة — تُحذف كاملةً إن عطّل المستخدم حقلها.
+    final currency =
+        doc.isOn(DocCatalog.kCurrency)
+            ? ' ${doc.text(DocCatalog.kCurrency)}'
+            : '';
 
-    pw.TextStyle st(double size, {bool bold = false}) => pw.TextStyle(
-      font: font,
-      fontSize: size,
-      fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
-    );
-
-    /// كل نصّ في الكشف **RTL صريح**.
+    /// كل نصّ في الكشف **بنمط حقله**، و**RTL صريح**.
     ///
-    /// 🚨 **لماذا إلزامي؟** حزمة `pdf` لا تُشكّل العربية (اختيار الصورة
+    /// 🚨 **لماذا RTL إلزامي؟** حزمة `pdf` لا تُشكّل العربية (اختيار الصورة
     /// الابتدائية/الوسطى/النهائية وترتيب الكلمات) إلا إذا كان
     /// `textDirection == pw.TextDirection.rtl` — انظر
     /// `pdf/src/widgets/text.dart`: `textDirection ?? Directionality.of(context)`،
     /// ثم `arabic.convert(...)` / `bidi.logicalToVisual(...)` محصوران بشرط
     /// `_textDirection == TextDirection.rtl`. بدونها يُرسم النص بترتيبه
-    /// المنطقي فتُقرأ الحروف **مقطّعة ومعكوسة**.
-    /// الفاتورة العادية تضبط الاتجاه على كل نص؛ هذا الكشف كان **بلا أي ضبط**.
-    pw.Text tx(
-      String t, {
-      double size = base,
-      bool bold = false,
-      pw.TextAlign? align,
-    }) => pw.Text(
-      t,
-      style: st(size, bold: bold),
-      textAlign: align,
-      textDirection: pw.TextDirection.rtl,
-    );
+    /// المنطقي فتُقرأ الحروف **مقطّعة ومعكوسة**. (وهذا يفعله [_docText]
+    /// لكل نصّ بلا استثناء.)
+    pw.Widget tx(String t, String key, {pw.TextAlign? align}) =>
+        _docText(t, doc.style(key), font: font, align: align);
 
-    pw.Widget kv(String label, String value, {bool bold = false}) => pw.Row(
+    /// سطر «عنوان … قيمة» — **العنوان يمينًا والقيمة يسارًا**.
+    ///
+    /// 🚨 `pw.Row` في حزمة `pdf` يرصف من **اليسار** ولا يعكس الاتجاه (بخلاف
+    /// `Table` التي عكسناها صراحةً)، فكان ترتيب `[label, value]` يضع العنوان
+    /// في أقصى اليسار والقيمة في أقصى اليمين — أي أن قارئ العربية يبدأ
+    /// بالقيمة ثم يبحث عن عنوانها. أُصلح 2026-10-23 بترتيب `[value, label]`.
+    pw.Widget kv(
+      String label,
+      String value, {
+      String key = DocCatalog.kTotals,
+    }) => pw.Row(
       mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-      children: [tx(label, bold: bold), tx(value, bold: bold)],
+      children: [tx(value, key), tx(label, key)],
     );
 
     pw.Widget sectionTitle(String text) => pw.Padding(
       padding: const pw.EdgeInsets.only(top: 12, bottom: 6),
-      child: tx(text, size: 14, bold: true),
+      child: tx(text, DocCatalog.kSectionTitle),
     );
 
     // جدول بسيط بترويسة ملوّنة خفيفة — بلا أي اعتماد على TableHelper.
@@ -752,14 +953,18 @@ class PreparePDF {
     // الترويسة وكل صف هنا فيصير العمود الأول (التاريخ مثلًا) في **أقصى
     // اليمين**. ونعكس مفاتيح `widths` معها كي يبقى كل عرض على عموده.
     // ⇒ كل منادات `table()` تمرّر الأعمدة **بترتيبها المنطقي** بلا قلق.
+    //
+    // [styleKey] هو حقل الجدول نفسه (`kItemsTable` …) فيتحكّم في حجم خطّ
+    // خلاياه من القالب — لا ثابت `cellSize` في الكود.
     pw.Widget table(
       List<String> headers,
       List<List<String>> rows, {
+      required String styleKey,
       Map<int, pw.TableColumnWidth>? widths,
     }) {
       pw.Widget cell(String t, {bool head = false}) => pw.Container(
         padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-        child: tx(t, size: cellSize, bold: head, align: pw.TextAlign.center),
+        child: tx(t, styleKey, align: pw.TextAlign.center),
       );
 
       final n = headers.length;
@@ -792,26 +997,79 @@ class PreparePDF {
         build:
             (pw.Context context) => [
               // ─── ترويسة النشاط ───
-              if (bizName.isNotEmpty)
-                pw.Center(child: tx(bizName, size: 20, bold: true)),
-              if (bizAddress.isNotEmpty)
-                pw.Center(child: tx(bizAddress, size: small)),
-              if (bizPhone.isNotEmpty)
-                pw.Center(child: tx('هاتف: $bizPhone', size: small)),
-              pw.Divider(),
-              pw.Center(child: tx('كشف حساب زبون', size: 19, bold: true)),
-              // سطر الفترة — يظهر فقط عندما يكون الكشف مقيَّدًا بمدى تاريخي.
-              if (period.isNotEmpty)
+              if (logoBytes != null)
                 pw.Center(
-                  child: tx('الفترة: $period', size: small, bold: true),
+                  child: pw.Image(
+                    pw.MemoryImage(logoBytes),
+                    width: 80,
+                    height: 80,
+                  ),
+                ),
+              if (doc.isOn(DocCatalog.kBusinessName) && bizName.isNotEmpty)
+                pw.Center(
+                  child: tx(
+                    bizName,
+                    DocCatalog.kBusinessName,
+                    align: pw.TextAlign.center,
+                  ),
+                ),
+              if (doc.isOn(DocCatalog.kBusinessAddress) &&
+                  bizAddress.isNotEmpty)
+                pw.Center(
+                  child: tx(
+                    bizAddress,
+                    DocCatalog.kBusinessAddress,
+                    align: pw.TextAlign.center,
+                  ),
+                ),
+              if (doc.isOn(DocCatalog.kPhoneLine) && bizPhone.isNotEmpty)
+                pw.Center(
+                  child: tx(
+                    '${doc.text(DocCatalog.kPhoneLine)}: $bizPhone',
+                    DocCatalog.kPhoneLine,
+                    align: pw.TextAlign.center,
+                  ),
+                ),
+              if (doc.isOn(DocCatalog.kDivider)) pw.Divider(),
+              if (doc.isOn(DocCatalog.kTitle))
+                pw.Center(
+                  child: tx(
+                    doc.text(DocCatalog.kTitle),
+                    DocCatalog.kTitle,
+                    align: pw.TextAlign.center,
+                  ),
+                ),
+              // سطر الفترة — يظهر فقط عندما يكون الكشف مقيَّدًا بمدى تاريخي.
+              if (period.isNotEmpty && doc.isOn(DocCatalog.kPeriod))
+                pw.Center(
+                  child: tx(
+                    '${doc.text(DocCatalog.kPeriod)}: $period',
+                    DocCatalog.kPeriod,
+                    align: pw.TextAlign.center,
+                  ),
                 ),
               pw.SizedBox(height: 8),
 
               // ─── بيانات الزبون ───
-              kv('الزبون:', custName, bold: true),
-              if (custPhone.isNotEmpty) kv('الهاتف:', custPhone),
-              if (printedAt.isNotEmpty) kv('تاريخ الطباعة:', printedAt),
-              pw.Divider(),
+              if (custName.isNotEmpty && doc.isOn(DocCatalog.kCustomerName))
+                kv(
+                  '${doc.text(DocCatalog.kCustomerName)}:',
+                  custName,
+                  key: DocCatalog.kCustomerName,
+                ),
+              if (custPhone.isNotEmpty && doc.isOn(DocCatalog.kCustomerPhone))
+                kv(
+                  '${doc.text(DocCatalog.kCustomerPhone)}:',
+                  custPhone,
+                  key: DocCatalog.kCustomerPhone,
+                ),
+              if (printedAt.isNotEmpty && doc.isOn(DocCatalog.kPrintedAt))
+                kv(
+                  '${doc.text(DocCatalog.kPrintedAt)}:',
+                  printedAt,
+                  key: DocCatalog.kPrintedAt,
+                ),
+              if (doc.isOn(DocCatalog.kDivider)) pw.Divider(),
 
               // ⚠️ الملخّص **لم يعد هنا**: نُقل إلى أسفل الكشف (بعد كل الجداول)
               // بطلب المستخدم 2026-10-03 ليكون خاتمة الكشف لا مقدمته.
@@ -821,10 +1079,16 @@ class PreparePDF {
               // «تفاصيل» (بالتاريخ) ⇒ الصنف يظهر مرتين وتطول الفاتورة بلا جدوى.
               // طلب المستخدم (2026-10-03): عمود/جدول واحد فقط، كل بند بتاريخه
               // وعدده وقيمته. المجمَّع حُذف بالكامل (وأُزيل `items` من البيانات).
-              if (itemsDetailed.isNotEmpty) ...[
-                sectionTitle('الأصناف التي أخذها'),
+              if (itemsDetailed.isNotEmpty &&
+                  doc.isOn(DocCatalog.kItemsTable)) ...[
+                sectionTitle(doc.text(DocCatalog.kItemsTable)),
                 table(
-                  ['التاريخ والوقت', 'الصنف', 'العدد', 'القيمة (ريال)'],
+                  [
+                    _t(data, 'التاريخ والوقت'),
+                    _t(data, 'الصنف'),
+                    _t(data, 'العدد'),
+                    _t(data, 'القيمة (ريال)'),
+                  ],
                   itemsDetailed
                       .map(
                         (e) => [
@@ -835,6 +1099,7 @@ class PreparePDF {
                         ],
                       )
                       .toList(),
+                  styleKey: DocCatalog.kItemsTable,
                   widths: {
                     0: const pw.FlexColumnWidth(1.55),
                     1: const pw.FlexColumnWidth(2.05),
@@ -845,10 +1110,17 @@ class PreparePDF {
               ],
 
               // ─── الفواتير ───
-              if (invoices.isNotEmpty) ...[
-                sectionTitle('الفواتير'),
+              if (invoices.isNotEmpty &&
+                  doc.isOn(DocCatalog.kInvoicesTable)) ...[
+                sectionTitle(doc.text(DocCatalog.kInvoicesTable)),
                 table(
-                  ['رقم', 'التاريخ', 'الإجمالي', 'المدفوع', 'المتبقي'],
+                  [
+                    _t(data, 'رقم'),
+                    _t(data, 'التاريخ'),
+                    _t(data, 'الإجمالي'),
+                    _t(data, 'المدفوع'),
+                    _t(data, 'المتبقي'),
+                  ],
                   invoices
                       .map(
                         (e) => [
@@ -860,14 +1132,21 @@ class PreparePDF {
                         ],
                       )
                       .toList(),
+                  styleKey: DocCatalog.kInvoicesTable,
                 ),
               ],
 
               // ─── الدفعات ───
-              if (payments.isNotEmpty) ...[
-                sectionTitle('الدفعات المسجَّلة'),
+              if (payments.isNotEmpty &&
+                  doc.isOn(DocCatalog.kPaymentsTable)) ...[
+                sectionTitle(doc.text(DocCatalog.kPaymentsTable)),
                 table(
-                  ['التاريخ', 'المبلغ', 'الطريقة', 'ملاحظة'],
+                  [
+                    _t(data, 'التاريخ'),
+                    _t(data, 'المبلغ'),
+                    _t(data, 'الطريقة'),
+                    _t(data, 'ملاحظة'),
+                  ],
                   payments
                       .map(
                         (e) => [
@@ -878,14 +1157,21 @@ class PreparePDF {
                         ],
                       )
                       .toList(),
+                  styleKey: DocCatalog.kPaymentsTable,
                 ),
               ],
 
               // ─── سجل الاشتراك (القطع التي غُسلت) ───
-              if (usages.isNotEmpty) ...[
-                sectionTitle('سجل استهلاك الاشتراك (القطع المغسولة)'),
+              if (usages.isNotEmpty && doc.isOn(DocCatalog.kUsagesTable)) ...[
+                sectionTitle(doc.text(DocCatalog.kUsagesTable)),
                 table(
-                  ['التاريخ', 'الاشتراك', 'القطع', 'القيمة (ريال)', 'الفاتورة'],
+                  [
+                    _t(data, 'التاريخ'),
+                    _t(data, 'الاشتراك'),
+                    _t(data, 'القطع'),
+                    _t(data, 'القيمة (ريال)'),
+                    _t(data, 'الفاتورة'),
+                  ],
                   usages
                       .map(
                         (e) => [
@@ -897,6 +1183,7 @@ class PreparePDF {
                         ],
                       )
                       .toList(),
+                  styleKey: DocCatalog.kUsagesTable,
                 ),
               ],
 
@@ -928,83 +1215,70 @@ class PreparePDF {
               //
               // آمن هنا لأن كتلة الملخّص + التذييل قصيرة ثابتة (لا تتجاوز صفحة
               // أبدًا) — بخلاف الجداول التي **يجب** أن تبقى قابلة للانقسام.
-              pw.Row(
-                children: [
-                  pw.Expanded(
-                    child: pw.Column(
-                      crossAxisAlignment: pw.CrossAxisAlignment.stretch,
-                      children: [
-                        pw.Divider(),
-                        sectionTitle(
-                          period.isEmpty
-                              ? 'الملخّص'
-                              : 'الملخّص (تدفّقات الفترة + الرصيد الحالي)',
-                        ),
-                        kv(
-                          'إجمالي المشتريات:',
-                          '${_money(totals['purchases'])} ريال',
-                        ),
-                        kv('المسدَّد:', '${_money(totals['paid'])} ريال'),
-                        kv(
-                          'الذمة المتبقية (عليه):',
-                          '${_money(totals['debt'])} ريال',
-                          bold: true,
-                        ),
-                        kv(
-                          'الرصيد الدائن (له):',
-                          '${_money(totals['credit'])} ريال',
-                          bold: true,
-                        ),
-                        pw.Divider(),
-                        kv(
-                          'صافي الموقف:',
-                          '${_money(totals['net'])} ريال'
-                              ' ${((totals['net'] as num?)?.toDouble() ?? 0) >= 0 ? '(له)' : '(عليه)'}',
-                          bold: true,
-                        ),
-                        if (((totals['pieces'] as num?)?.toInt() ?? 0) > 0)
-                          kv('عدد القطع:', '${totals['pieces']}'),
-                        if (((totals['subPieces'] as num?)?.toInt() ?? 0) > 0)
+              if (doc.isOn(DocCatalog.kTotals))
+                pw.Row(
+                  children: [
+                    pw.Expanded(
+                      child: pw.Column(
+                        crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+                        children: [
+                          pw.Divider(),
+                          sectionTitle(
+                            period.isEmpty
+                                ? doc.text(DocCatalog.kSummaryTitle)
+                                : doc.text(DocCatalog.kSummaryTitlePeriod),
+                          ),
                           kv(
-                            'قطع الاشتراكات المستهلكة:',
-                            '${totals['subPieces']} (بقيمة ${_money(totals['subValue'])} ريال)',
+                            '${doc.text(DocCatalog.kTotalsPurchases)}:',
+                            '${_money(totals['purchases'])}$currency',
                           ),
-                        // التذييل **داخل** الكتلة: لو بقي خارجها لانفرد وحده في
-                        // صفحة جديدة عندما يستهلك الملخّص باقي الصفحة.
-                        pw.SizedBox(height: 16),
-                        pw.Center(
-                          child: tx(
-                            '--- هذا الكشف صادر آليًا من النظام ---',
-                            size: small,
+                          kv(
+                            '${doc.text(DocCatalog.kTotalsPaid)}:',
+                            '${_money(totals['paid'])}$currency',
                           ),
-                        ),
-                      ],
+                          kv(
+                            '${doc.text(DocCatalog.kTotalsDebt)}:',
+                            '${_money(totals['debt'])}$currency',
+                          ),
+                          kv(
+                            '${doc.text(DocCatalog.kTotalsCredit)}:',
+                            '${_money(totals['credit'])}$currency',
+                          ),
+                          pw.Divider(),
+                          kv(
+                            '${doc.text(DocCatalog.kTotalsNet)}:',
+                            '${_money(totals['net'])}$currency ${((totals['net'] as num?)?.toDouble() ?? 0) >= 0 ? _t(data, '(له)') : _t(data, '(عليه)')}',
+                          ),
+                          if (((totals['pieces'] as num?)?.toInt() ?? 0) > 0)
+                            kv(
+                              '${doc.text(DocCatalog.kTotalsPieces)}:',
+                              '${totals['pieces']}',
+                            ),
+                          if (((totals['subPieces'] as num?)?.toInt() ?? 0) > 0)
+                            kv(
+                              '${doc.text(DocCatalog.kTotalsSubPieces)}:',
+                              '${totals['subPieces']} (${doc.text(DocCatalog.kTotalsSubValue)} ${_money(totals['subValue'])}$currency)',
+                            ),
+                          // التذييل **داخل** الكتلة: لو بقي خارجها لانفرد وحده في
+                          // صفحة جديدة عندما يستهلك الملخّص باقي الصفحة.
+                          pw.SizedBox(height: 16),
+                          if (doc.isOn(DocCatalog.kFooter))
+                            pw.Center(
+                              child: tx(
+                                doc.text(DocCatalog.kFooter),
+                                DocCatalog.kFooter,
+                                align: pw.TextAlign.center,
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
-                  ),
-                ],
-              ),
+                  ],
+                ),
             ],
       ),
     );
     return pdf.save();
-  }
-
-  static pw.Widget _buildRow(
-    String title,
-    String value,
-    pw.Font font, [
-    double fontSize = 12,
-  ]) {
-    return pw.Padding(
-      padding: const pw.EdgeInsets.symmetric(vertical: 4),
-      child: pw.Row(
-        children: [
-          pw.Text(value, style: pw.TextStyle(font: font, fontSize: fontSize)),
-          pw.Spacer(),
-          pw.Text(title, style: pw.TextStyle(font: font, fontSize: fontSize)),
-        ],
-      ),
-    );
   }
 
   /// ضغط الصورة إلى JPEG بأكثر كثافة لتقليل الحجم

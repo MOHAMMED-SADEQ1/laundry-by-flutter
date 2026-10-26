@@ -122,9 +122,7 @@ class UblBuilder {
     final subtype = input.simplified ? '0200000' : '0100000';
     final buf = StringBuffer();
     buf.writeln('<?xml version="1.0" encoding="UTF-8"?>');
-    buf.writeln('<Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"'
-        ' xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2"'
-        ' xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2">');
+    buf.writeln('<Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2" xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2" xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2">');
     buf.writeln('  <cbc:ID>${_esc(input.invoiceNumber)}</cbc:ID>');
     buf.writeln('  <cbc:UUID>${_esc(input.uuid)}</cbc:UUID>');
     buf.writeln('  <cbc:IssueDate>${_date(input.issueDate)}</cbc:IssueDate>');

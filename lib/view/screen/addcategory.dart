@@ -1,22 +1,51 @@
 import 'package:flutter/material.dart';
+import 'package:laundry/services/i18n/l10n.dart';
 import 'package:get/get.dart';
 import 'package:laundry/controller/addeditcategorycontroller.dart';
+import 'package:laundry/core/navigation/route_dismissal.dart';
 import 'package:laundry/core/theme/app_colors.dart';
 import 'package:laundry/view/widget/common/animation_wrappers.dart';
 import 'package:laundry/view/widget/customappbar.dart';
 import 'package:laundry/view/widget/customtextformfield.dart';
 
-class AddCategory extends StatelessWidget {
-  AddCategory({super.key});
-  GlobalKey<FormState> formstate = GlobalKey();
+class AddCategory extends StatefulWidget {
+  const AddCategory({super.key});
+
+  @override
+  State<AddCategory> createState() => _AddCategoryState();
+}
+
+class _AddCategoryState extends State<AddCategory> {
+  final formstate = GlobalKey<FormState>();
+  late final AddCategoryController controller;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    controller = Get.put(AddCategoryController());
+  }
+
+  Future<void> _save() async {
+    if (_saving) return;
+    if (!(formstate.currentState?.validate() ?? false)) return;
+    setState(() => _saving = true);
+    final saved = await controller.writeData();
+    if (!mounted) return;
+    if (saved) {
+      // الحفظ يعرض رسالة نجاح؛ `Get.back()` كان يغلقها ويترك الشاشة مفتوحة.
+      dismissRoute(context);
+    } else {
+      setState(() => _saving = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final AddCategoryController controller = Get.put(AddCategoryController());
     return Scaffold(
       appBar: CustomAppbar(
-        title: "إضافة صنف لبس",
-        subtitle: 'أضف لبساً جديداً بأسعار خدماته',
+        title: tr("إضافة صنف لبس"),
+        subtitle: tr('أضف لبساً جديداً بأسعار خدماته'),
       ),
       body: Center(
         child: SingleChildScrollView(
@@ -57,7 +86,7 @@ class AddCategory extends StatelessWidget {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  'بيانات الصنف الجديد',
+                                  tr('بيانات الصنف الجديد'),
                                   style: TextStyle(
                                     fontFamily: 'cairo',
                                     fontSize: 16,
@@ -66,7 +95,7 @@ class AddCategory extends StatelessWidget {
                                   ),
                                 ),
                                 Text(
-                                  'حدد اسم اللبس والأسعار لجميع الخدمات',
+                                  tr('حدد اسم اللبس والأسعار لجميع الخدمات'),
                                   style: TextStyle(
                                     fontFamily: 'cairo',
                                     fontSize: 11,
@@ -81,7 +110,16 @@ class AddCategory extends StatelessWidget {
                       const Divider(height: 26),
                       CustomTextFormField(
                         valueinput: controller.neme,
-                        lable: "اسم اللبس",
+                        lable: tr('اسم اللبس'),
+                        inputtype: TextInputType.text,
+                      ),
+                      const SizedBox(height: 12),
+                      // الاسم الإنجليزي — يظهر في الواجهة الإنجليزية فقط،
+                      // وفراغه يعني عرض الاسم العربي (سقوط آمن).
+                      CustomTextFormField(
+                        key: const Key('item-name-en'),
+                        valueinput: controller.nameEn,
+                        lable: tr('الاسم بالإنجليزية (اختياري)'),
                         inputtype: TextInputType.text,
                       ),
                       const SizedBox(height: 12),
@@ -90,7 +128,7 @@ class AddCategory extends StatelessWidget {
                           Expanded(
                             child: CustomTextFormField(
                               valueinput: controller.urgentwashingprice,
-                              lable: 'سعر الغسيل مستعجل',
+                              lable: tr('سعر الغسيل مستعجل'),
                               inputtype: TextInputType.number,
                             ),
                           ),
@@ -98,7 +136,7 @@ class AddCategory extends StatelessWidget {
                           Expanded(
                             child: CustomTextFormField(
                               valueinput: controller.washingprice,
-                              lable: 'سعر الغسيل عادي',
+                              lable: tr('سعر الغسيل عادي'),
                               inputtype: TextInputType.number,
                             ),
                           ),
@@ -110,7 +148,7 @@ class AddCategory extends StatelessWidget {
                           Expanded(
                             child: CustomTextFormField(
                               valueinput: controller.urgentironingprice,
-                              lable: 'سعر الكوي مستعجل',
+                              lable: tr('سعر الكوي مستعجل'),
                               inputtype: TextInputType.number,
                             ),
                           ),
@@ -118,7 +156,7 @@ class AddCategory extends StatelessWidget {
                           Expanded(
                             child: CustomTextFormField(
                               valueinput: controller.ironingprice,
-                              lable: 'سعر الكوي عادي',
+                              lable: tr('سعر الكوي عادي'),
                               inputtype: TextInputType.number,
                             ),
                           ),
@@ -138,9 +176,11 @@ class AddCategory extends StatelessWidget {
                         children: [
                           Expanded(
                             child: OutlinedButton(
-                              onPressed: () => Get.back(),
-                              child: const Text(
-                                "إلغاء",
+                              onPressed: _saving
+                                  ? null
+                                  : () => dismissRoute(context),
+                              child: Text(
+                                tr("إلغاء"),
                                 style: TextStyle(
                                   fontFamily: 'cairo',
                                   fontSize: 15,
@@ -154,19 +194,23 @@ class AddCategory extends StatelessWidget {
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: AppColors.success,
                               ),
-                              onPressed: () async {
-                                if (!formstate.currentState!.validate()) return;
-                                // نغلق الشاشة بعد نجاح الحفظ فقط، والقائمة تتحدث تلقائياً
-                                final saved = await controller.writeData();
-                                if (saved) Get.back();
-                              },
-                              child: const Text(
-                                "حفظ الصنف",
-                                style: TextStyle(
-                                  fontFamily: 'cairo',
-                                  fontSize: 15,
-                                ),
-                              ),
+                              onPressed: _saving ? null : _save,
+                              child: _saving
+                                  ? const SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Colors.white,
+                                      ),
+                                    )
+                                  : Text(
+                                      tr("حفظ الصنف"),
+                                      style: TextStyle(
+                                        fontFamily: 'cairo',
+                                        fontSize: 15,
+                                      ),
+                                    ),
                             ),
                           ),
                         ],

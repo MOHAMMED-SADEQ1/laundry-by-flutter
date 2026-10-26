@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
 import 'package:laundry/sqldb.dart';
+import 'package:laundry/services/i18n/l10n.dart';
+import 'package:laundry/services/payment/payment_method.dart';
 
 /// وضع عرض الصندوق: بالتاريخ (يوم عمل تشغيلي) أم بالوردية (عهدة درج واحدة).
 ///
@@ -103,13 +105,13 @@ class DailyCashController extends GetxController {
   /// وصف مختصر للوردية — يُستخدم في الواجهة.
   String get selectedShiftLabel {
     final s = selectedShift;
-    if (s == null) return 'لا توجد وردية محددة';
+    if (s == null) return tr('لا توجد وردية محددة');
     final id = s['shift_id'];
     final start = _formatShiftTime(s['start_time']?.toString());
     final end = s['end_time'] == null
-        ? 'مفتوحة الآن'
-        : 'أُقفلت ${_formatShiftTime(s['end_time']?.toString())}';
-    return 'وردية #$id — $start · $end';
+        ? tr('مفتوحة الآن')
+        : trf('أُقفلت {0}', [_formatShiftTime(s['end_time']?.toString())]);
+    return trf('وردية #{0} — {1} · {2}', [id, start, end]);
   }
 
   static String _formatShiftTime(String? raw) {
@@ -200,7 +202,7 @@ class DailyCashController extends GetxController {
   static bool _isCashSubscriptionPayment(Map<String, dynamic> p) {
     if ('${p['source']}' == 'cancel_refund') return false;
     final method = '${p['method'] ?? ''}'.trim();
-    if (method == 'رصيد') return false;
+    if (PaymentMethods.tryParse(method) == PaymentMethod.balance) return false;
     return true;
   }
 
@@ -217,7 +219,8 @@ class DailyCashController extends GetxController {
       .where(
         (e) =>
             '${e['source']}' == 'cancel_refund' &&
-            '${e['method'] ?? ''}'.trim() != 'رصيد',
+            PaymentMethods.tryParse('${e['method'] ?? ''}') !=
+                PaymentMethod.balance,
       )
       .fold(0.0, (sum, e) => sum + _num(e['amount']));
 
@@ -228,7 +231,11 @@ class DailyCashController extends GetxController {
   /// `closingBalance` أقل من النقد الفعلي (عجز وهمي في الإقفال) — وهو نفس
   /// الخطأ الذي أُصلح في الاستردادات القائمة على الرصيد.
   double get totalCashOut => cashOut
-      .where((e) => '${e['payment_method'] ?? 'كاش'}'.trim() == 'كاش')
+      .where(
+        (e) =>
+            PaymentMethods.keyOf('${e['payment_method'] ?? ''}') ==
+            PaymentMethod.cash.key,
+      )
       .fold(0.0, (sum, e) => sum + _num(e['amount']));
 
   /// إجمالي المصروفات لليوم بكل طرق الدفع — للإفصاح في الكشف.
@@ -277,16 +284,14 @@ class DailyCashController extends GetxController {
   Future<double> _resolveShiftOpening(int shiftId) async {
     try {
       final rows = await _db.readData(
-        'SELECT COALESCE(opening_balance, 0) as ob FROM shifts '
-        'WHERE shift_id = ?',
+        'SELECT COALESCE(opening_balance, 0) as ob FROM shifts WHERE shift_id = ?',
         [shiftId],
       );
       final ob = rows.isEmpty ? 0.0 : _num(rows.first['ob']);
       if (ob > 0) return ob;
 
       final prev = await _db.readData(
-        'SELECT COALESCE(total_cash, 0) as tc FROM shifts '
-        'WHERE shift_id < ? ORDER BY shift_id DESC LIMIT 1',
+        'SELECT COALESCE(total_cash, 0) as tc FROM shifts WHERE shift_id < ? ORDER BY shift_id DESC LIMIT 1',
         [shiftId],
       );
       return prev.isEmpty ? 0.0 : _num(prev.first['tc']);
@@ -371,8 +376,7 @@ class DailyCashController extends GetxController {
         _resetDayStocktake();
       } else {
         final shiftRows = await _db.readData(
-          'SELECT * FROM shifts WHERE DATE(start_time) = ? '
-          'ORDER BY shift_id ASC',
+          'SELECT * FROM shifts WHERE DATE(start_time) = ? ORDER BY shift_id ASC',
           [date],
         );
         dayShifts.assignAll(shiftRows);
@@ -397,46 +401,23 @@ class DailyCashController extends GetxController {
       // يُدخل نفس المال مرتين في الدرج (مرة كدفعة ومرة كفاتورة).
       final invoices = byShift
           ? await _db.readData(
-              'SELECT i.*, u.full_name as user_name '
-              'FROM invoices i '
-              'LEFT JOIN users u ON i.created_by = u.user_id '
-              'WHERE i.shift_id = ? AND i.payment_method = ? '
-              '  AND i.subscription_id IS NULL '
-              'ORDER BY i.invoice_date ASC',
-              [shiftId, 'كاش'],
+              'SELECT i.*, u.full_name as user_name FROM invoices i LEFT JOIN users u ON i.created_by = u.user_id WHERE i.shift_id = ? AND i.payment_method = ?   AND i.subscription_id IS NULL ORDER BY i.invoice_date ASC',
+              [shiftId, PaymentMethod.cash.key],
             )
           : await _db.readData(
-              'SELECT i.*, u.full_name as user_name '
-              'FROM invoices i '
-              'LEFT JOIN users u ON i.created_by = u.user_id '
-              'WHERE (i.shift_id IN ($inList) '
-              '  OR (i.shift_id IS NULL AND DATE(i.invoice_date) = ?)) '
-              '  AND i.payment_method = ? '
-              '  AND i.subscription_id IS NULL '
-              'ORDER BY i.invoice_date ASC',
-              [...dayShiftIds, date, 'كاش'],
+              'SELECT i.*, u.full_name as user_name FROM invoices i LEFT JOIN users u ON i.created_by = u.user_id WHERE (i.shift_id IN ($inList)   OR (i.shift_id IS NULL AND DATE(i.invoice_date) = ?))   AND i.payment_method = ?   AND i.subscription_id IS NULL ORDER BY i.invoice_date ASC',
+              [...dayShiftIds, date, PaymentMethod.cash.key],
             );
       cashIn.assignAll(invoices);
 
       // ─── مدفوعات ديون الزبائن (من جدول customer_payments) ───
       final payments = byShift
           ? await _db.readData(
-              'SELECT cp.*, u.full_name as user_name, c.customer_name '
-              'FROM customer_payments cp '
-              'LEFT JOIN users u ON cp.recorded_by = u.user_id '
-              'LEFT JOIN customers c ON cp.customer_id = c.customer_id '
-              'WHERE cp.shift_id = ? '
-              'ORDER BY cp.payment_date ASC',
+              'SELECT cp.*, u.full_name as user_name, c.customer_name FROM customer_payments cp LEFT JOIN users u ON cp.recorded_by = u.user_id LEFT JOIN customers c ON cp.customer_id = c.customer_id WHERE cp.shift_id = ? ORDER BY cp.payment_date ASC',
               [shiftId],
             )
           : await _db.readData(
-              'SELECT cp.*, u.full_name as user_name, c.customer_name '
-              'FROM customer_payments cp '
-              'LEFT JOIN users u ON cp.recorded_by = u.user_id '
-              'LEFT JOIN customers c ON cp.customer_id = c.customer_id '
-              'WHERE (cp.shift_id IN ($inList) '
-              '  OR (cp.shift_id IS NULL AND DATE(cp.payment_date) = ?)) '
-              'ORDER BY cp.payment_date ASC',
+              'SELECT cp.*, u.full_name as user_name, c.customer_name FROM customer_payments cp LEFT JOIN users u ON cp.recorded_by = u.user_id LEFT JOIN customers c ON cp.customer_id = c.customer_id WHERE (cp.shift_id IN ($inList)   OR (cp.shift_id IS NULL AND DATE(cp.payment_date) = ?)) ORDER BY cp.payment_date ASC',
               [...dayShiftIds, date],
             );
       debtPayments.assignAll(payments);
@@ -444,26 +425,11 @@ class DailyCashController extends GetxController {
       // ─── 💰 دفعات الاشتراكات الشهرية ───
       final subPays = byShift
           ? await _db.readData(
-              'SELECT sp.*, u.full_name as user_name, '
-              '  COALESCE(s.customer_name, c.customer_name) as customer_name '
-              'FROM subscription_payments sp '
-              'LEFT JOIN users u ON sp.recorded_by = u.user_id '
-              'LEFT JOIN subscriptions s ON s.subscription_id = sp.subscription_id '
-              'LEFT JOIN customers c ON c.customer_id = s.customer_id '
-              'WHERE sp.shift_id = ? '
-              'ORDER BY sp.paid_date ASC',
+              'SELECT sp.*, u.full_name as user_name,   COALESCE(s.customer_name, c.customer_name) as customer_name FROM subscription_payments sp LEFT JOIN users u ON sp.recorded_by = u.user_id LEFT JOIN subscriptions s ON s.subscription_id = sp.subscription_id LEFT JOIN customers c ON c.customer_id = s.customer_id WHERE sp.shift_id = ? ORDER BY sp.paid_date ASC',
               [shiftId],
             )
           : await _db.readData(
-              'SELECT sp.*, u.full_name as user_name, '
-              '  COALESCE(s.customer_name, c.customer_name) as customer_name '
-              'FROM subscription_payments sp '
-              'LEFT JOIN users u ON sp.recorded_by = u.user_id '
-              'LEFT JOIN subscriptions s ON s.subscription_id = sp.subscription_id '
-              'LEFT JOIN customers c ON c.customer_id = s.customer_id '
-              'WHERE (sp.shift_id IN ($inList) '
-              '  OR (sp.shift_id IS NULL AND DATE(sp.paid_date) = ?)) '
-              'ORDER BY sp.paid_date ASC',
+              'SELECT sp.*, u.full_name as user_name,   COALESCE(s.customer_name, c.customer_name) as customer_name FROM subscription_payments sp LEFT JOIN users u ON sp.recorded_by = u.user_id LEFT JOIN subscriptions s ON s.subscription_id = sp.subscription_id LEFT JOIN customers c ON c.customer_id = s.customer_id WHERE (sp.shift_id IN ($inList)   OR (sp.shift_id IS NULL AND DATE(sp.paid_date) = ?)) ORDER BY sp.paid_date ASC',
               [...dayShiftIds, date],
             );
       subscriptionPayments.assignAll(subPays);
@@ -484,20 +450,11 @@ class DailyCashController extends GetxController {
       // `tool/verify_cash_view_modes.py`.
       final expenses = byShift
           ? await _db.readData(
-              'SELECT e.*, u.full_name as user_name '
-              'FROM expenses e '
-              'LEFT JOIN users u ON e.recorded_by = u.user_id '
-              'WHERE e.shift_id = ? '
-              'ORDER BY e.date ASC',
+              'SELECT e.*, u.full_name as user_name FROM expenses e LEFT JOIN users u ON e.recorded_by = u.user_id WHERE e.shift_id = ? ORDER BY e.date ASC',
               [shiftId],
             )
           : await _db.readData(
-              'SELECT e.*, u.full_name as user_name '
-              'FROM expenses e '
-              'LEFT JOIN users u ON e.recorded_by = u.user_id '
-              'WHERE (e.shift_id IN ($inList) '
-              '  OR (e.shift_id IS NULL AND DATE(e.date) = ?)) '
-              'ORDER BY e.date ASC',
+              'SELECT e.*, u.full_name as user_name FROM expenses e LEFT JOIN users u ON e.recorded_by = u.user_id WHERE (e.shift_id IN ($inList)   OR (e.shift_id IS NULL AND DATE(e.date) = ?)) ORDER BY e.date ASC',
               [...dayShiftIds, date],
             );
       cashOut.assignAll(expenses);

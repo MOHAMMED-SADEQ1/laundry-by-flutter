@@ -4,7 +4,12 @@ import 'package:intl/intl.dart' hide TextDirection;
 import 'package:laundry/controller/expense/expense_controller.dart';
 import 'package:laundry/core/theme/app_colors.dart';
 import 'package:laundry/services/expense/expense_service.dart';
+import 'package:laundry/services/i18n/l10n.dart';
+import 'package:laundry/services/payment/payment_method.dart';
+import 'package:laundry/services/permission/permission_catalog.dart';
+import 'package:laundry/services/permission/permission_service.dart';
 import 'package:laundry/view/widget/customappbar.dart';
+import 'package:laundry/services/i18n/ui_direction.dart';
 
 /// شاشة المصروفات التشغيلية.
 ///
@@ -30,13 +35,13 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: CustomAppbar(title: 'المصروفات'),
+      appBar: CustomAppbar(title: tr('المصروفات')),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _showAddSheet(),
         backgroundColor: AppColors.primary,
         icon: const Icon(Icons.add, color: Colors.white),
-        label: const Text(
-          'مصروف جديد',
+        label: Text(
+          tr('مصروف جديد'),
           style: TextStyle(
             fontFamily: 'cairo',
             color: Colors.white,
@@ -129,7 +134,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                             ),
                           ),
                         Text(
-                          r.label,
+                          tr(r.label),
                           style: TextStyle(
                             fontFamily: 'cairo',
                             fontSize: 12,
@@ -201,7 +206,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                 ),
                 const SizedBox(width: 6),
                 Text(
-                  'إجمالي مصروفات الفترة',
+                  tr('إجمالي مصروفات الفترة'),
                   style: TextStyle(
                     fontFamily: 'cairo',
                     fontSize: 12.5,
@@ -210,7 +215,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                 ),
                 const Spacer(),
                 Text(
-                  '${s.count} بند',
+                  trf('{0} بند', [s.count]),
                   style: TextStyle(
                     fontFamily: 'cairo',
                     fontSize: 11.5,
@@ -221,7 +226,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
             ),
             const SizedBox(height: 6),
             Text(
-              '${s.total.toStringAsFixed(2)} ر.س',
+              '${s.total.toStringAsFixed(2)} ${tr('ر.س')}',
               style: const TextStyle(
                 fontFamily: 'cairo',
                 fontSize: 26,
@@ -232,8 +237,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
             if (s.nonCashTotal > 0) ...[
               const SizedBox(height: 6),
               Text(
-                'منها نقدي: ${s.cashTotal.toStringAsFixed(2)}  •  '
-                'غير نقدي: ${s.nonCashTotal.toStringAsFixed(2)}',
+                '${tr('منها نقدي:')} ${s.cashTotal.toStringAsFixed(2)}  •  ${tr('غير نقدي:')} ${s.nonCashTotal.toStringAsFixed(2)}',
                 style: TextStyle(
                   fontFamily: 'cairo',
                   fontSize: 11,
@@ -263,8 +267,8 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'التوزيع حسب التصنيف',
+            Text(
+              tr('التوزيع حسب التصنيف'),
               style: TextStyle(
                 fontFamily: 'cairo',
                 fontSize: 13.5,
@@ -284,7 +288,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                       children: [
                         Expanded(
                           child: Text(
-                            e.key,
+                            ExpenseCategory.label(e.key),
                             style: const TextStyle(
                               fontFamily: 'cairo',
                               fontSize: 12,
@@ -293,7 +297,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                           ),
                         ),
                         Text(
-                          '${e.value.toStringAsFixed(2)} ر.س',
+                          '${e.value.toStringAsFixed(2)} ${tr('ر.س')}',
                           style: const TextStyle(
                             fontFamily: 'cairo',
                             fontSize: 12,
@@ -342,8 +346,8 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                 color: AppColors.textMuted.withValues(alpha: 0.6),
               ),
               const SizedBox(height: 10),
-              const Text(
-                'لا توجد مصروفات في هذه الفترة',
+              Text(
+                tr('لا توجد مصروفات في هذه الفترة'),
                 style: TextStyle(
                   fontFamily: 'cairo',
                   fontSize: 13,
@@ -351,8 +355,8 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                 ),
               ),
               const SizedBox(height: 4),
-              const Text(
-                'أضف مصروفًا ليُخصم من صافي الربح',
+              Text(
+                tr('أضف مصروفًا ليُخصم من صافي الربح'),
                 style: TextStyle(
                   fontFamily: 'cairo',
                   fontSize: 11,
@@ -366,10 +370,10 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Padding(
-            padding: EdgeInsets.only(right: 4, bottom: 8),
+          Padding(
+            padding: const EdgeInsets.only(right: 4, bottom: 8),
             child: Text(
-              'البنود',
+              tr('البنود'),
               style: TextStyle(
                 fontFamily: 'cairo',
                 fontSize: 13.5,
@@ -389,7 +393,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
     final dateLabel = date == null
         ? e.date
         : DateFormat('yyyy-MM-dd').format(date);
-    final isCash = e.paymentMethod == 'كاش';
+    final isCash = PaymentMethods.isCash(e.paymentMethod);
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
@@ -422,7 +426,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      e.category,
+                      e.displayCategory,
                       style: const TextStyle(
                         fontFamily: 'cairo',
                         fontSize: 13,
@@ -454,7 +458,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                             borderRadius: BorderRadius.circular(5),
                           ),
                           child: Text(
-                            e.paymentMethod,
+                            PaymentMethods.label(e.paymentMethod),
                             style: TextStyle(
                               fontFamily: 'cairo',
                               fontSize: 9.5,
@@ -467,10 +471,10 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                         ),
                       ],
                     ),
-                    if (e.description.isNotEmpty) ...[
+                    if (e.displayDescription.isNotEmpty) ...[
                       const SizedBox(height: 3),
                       Text(
-                        e.description,
+                        e.displayDescription,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
@@ -497,7 +501,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                     ),
                   ),
                   Text(
-                    'ر.س',
+                    tr('ر.س'),
                     style: TextStyle(
                       fontFamily: 'cairo',
                       fontSize: 9.5,
@@ -520,14 +524,19 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
       text: existing == null ? '' : existing.amount.toString(),
     );
     final descCtrl = TextEditingController(text: existing?.description ?? '');
+    final descEnCtrl = TextEditingController(
+      text: existing?.descriptionEn ?? '',
+    );
     var category = existing?.category ?? ExpenseCategory.materials;
-    var method = existing?.paymentMethod ?? 'كاش';
+    var method = PaymentMethods.keyOf(existing?.paymentMethod) == ''
+        ? PaymentMethod.cash.key
+        : PaymentMethods.keyOf(existing?.paymentMethod);
     var date = DateTime.tryParse(existing?.date ?? '') ?? DateTime.now();
     final isEdit = existing != null;
 
     Get.bottomSheet(
       Directionality(
-        textDirection: TextDirection.rtl,
+        textDirection: L10n.isRtl ? appTextDirection : TextDirection.ltr,
         child: StatefulBuilder(
           builder: (ctx, setSheet) {
             return Container(
@@ -566,7 +575,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                         ),
                         const SizedBox(width: 8),
                         Text(
-                          isEdit ? 'تعديل المصروف' : 'مصروف جديد',
+                          tr(isEdit ? 'تعديل المصروف' : 'مصروف جديد'),
                           style: const TextStyle(
                             fontFamily: 'cairo',
                             fontSize: 15,
@@ -575,32 +584,37 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                           ),
                         ),
                         const Spacer(),
-                        if (isEdit)
+                        // حذف المصروف مفتاح مستقل (`expense.manage`) —
+                        // يُخفي الزر إن لم تُمنح الصلاحية، والخدمة ترفض
+                        // أصلًا فلا يقع المستخدم في «ضغط بلا أثر».
+                        if (isEdit &&
+                            PermissionService.can(
+                                PermissionKeys.expenseManage))
                           IconButton(
-                            tooltip: 'حذف',
+                            tooltip: tr('حذف'),
                             onPressed: () async {
                               Get.back();
                               final ok = await Get.dialog<bool>(
                                     AlertDialog(
-                                      title: const Text(
-                                        'حذف المصروف؟',
+                                      title: Text(
+                                        tr('حذف المصروف؟'),
                                         style: TextStyle(fontFamily: 'cairo'),
                                       ),
-                                      content: const Text(
-                                        'سيُحذف البند نهائيًا ويُعاد حساب الربح.',
+                                      content: Text(
+                                        tr('سيُحذف البند نهائيًا ويُعاد حساب الربح.'),
                                         style: TextStyle(fontFamily: 'cairo'),
                                       ),
                                       actions: [
                                         TextButton(
                                           onPressed: () =>
                                               Get.back(result: false),
-                                          child: const Text('إلغاء'),
+                                          child: Text(tr('إلغاء')),
                                         ),
                                         TextButton(
                                           onPressed: () =>
                                               Get.back(result: true),
-                                          child: const Text(
-                                            'حذف',
+                                          child: Text(
+                                            tr('حذف'),
                                             style: TextStyle(
                                               color: AppColors.danger,
                                             ),
@@ -624,7 +638,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                     const SizedBox(height: 12),
 
                     // التصنيف
-                    const _Label('التصنيف'),
+                    _Label(tr('التصنيف')),
                     Wrap(
                       spacing: 7,
                       runSpacing: 7,
@@ -649,7 +663,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                               ),
                             ),
                             child: Text(
-                              cat,
+                              ExpenseCategory.label(cat),
                               style: TextStyle(
                                 fontFamily: 'cairo',
                                 fontSize: 11.5,
@@ -666,7 +680,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                     const SizedBox(height: 14),
 
                     // المبلغ
-                    const _Label('المبلغ (ر.س)'),
+                    _Label(tr('المبلغ (ر.س)')),
                     TextField(
                       controller: amountCtrl,
                       keyboardType: const TextInputType.numberWithOptions(
@@ -682,11 +696,23 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                     const SizedBox(height: 12),
 
                     // البيان
-                    const _Label('البيان (اختياري)'),
+                    _Label(tr('البيان (اختياري)')),
                     TextField(
                       controller: descCtrl,
                       style: const TextStyle(fontFamily: 'cairo', fontSize: 13),
-                      decoration: _inputDecoration('مثال: فاتورة كهرباء شهر 9'),
+                      decoration: _inputDecoration(
+                        tr('مثال: فاتورة كهرباء شهر 9'),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    _Label(tr('البيان بالإنجليزية (اختياري)')),
+                    TextField(
+                      controller: descEnCtrl,
+                      textDirection: TextDirection.ltr,
+                      style: const TextStyle(fontFamily: 'cairo', fontSize: 13),
+                      decoration: _inputDecoration(
+                        tr('مثال: September electricity bill'),
+                      ),
                     ),
                     const SizedBox(height: 12),
 
@@ -697,7 +723,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const _Label('التاريخ'),
+                              _Label(tr('التاريخ')),
                               InkWell(
                                 onTap: () async {
                                   final picked = await showDatePicker(
@@ -752,7 +778,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const _Label('طريقة الدفع'),
+                              _Label(tr('طريقة الدفع')),
                               Container(
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 10,
@@ -771,22 +797,23 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                                       fontSize: 12.5,
                                       color: AppColors.textPrimary,
                                     ),
-                                    items: const [
+                                    items: [
                                       DropdownMenuItem(
-                                        value: 'كاش',
-                                        child: Text('نقدي (من الدرج)'),
+                                        value: PaymentMethod.cash.key,
+                                        child: Text(tr('نقدي (من الدرج)')),
                                       ),
                                       DropdownMenuItem(
-                                        value: 'شبكة',
-                                        child: Text('شبكة / تحويل'),
+                                        value: PaymentMethod.card.key,
+                                        child: Text(tr('شبكة / تحويل')),
                                       ),
                                       DropdownMenuItem(
-                                        value: 'رصيد',
-                                        child: Text('تسوية دفاتر'),
+                                        value: PaymentMethod.balance.key,
+                                        child: Text(tr('تسوية دفاتر')),
                                       ),
                                     ],
-                                    onChanged: (v) =>
-                                        setSheet(() => method = v ?? 'كاش'),
+                                    onChanged: (v) => setSheet(
+                                      () => method = v ?? PaymentMethod.cash.key,
+                                    ),
                                   ),
                                 ),
                               ),
@@ -796,7 +823,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                       ],
                     ),
                     const SizedBox(height: 8),
-                    if (method != 'كاش')
+                    if (!PaymentMethods.isCash(method))
                       Container(
                         padding: const EdgeInsets.all(9),
                         decoration: BoxDecoration(
@@ -806,17 +833,19 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                             color: AppColors.info.withValues(alpha: 0.25),
                           ),
                         ),
-                        child: const Row(
+                        child: Row(
                           children: [
-                            Icon(
+                            const Icon(
                               Icons.info_outline,
                               size: 14,
                               color: AppColors.info,
                             ),
-                            SizedBox(width: 6),
+                            const SizedBox(width: 6),
                             Expanded(
                               child: Text(
-                                'المصروف غير النقدي يُخصم من الربح ولا يُخصم من درج النقد.',
+                                tr(
+                                  'المصروف غير النقدي يُخصم من الربح ولا يُخصم من درج النقد.',
+                                ),
                                 style: TextStyle(
                                   fontFamily: 'cairo',
                                   fontSize: 10.5,
@@ -844,8 +873,8 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                               double.tryParse(amountCtrl.text.trim()) ?? 0;
                           if (amount <= 0) {
                             Get.snackbar(
-                              'تنبيه',
-                              'أدخل مبلغًا صحيحًا أكبر من صفر',
+                              tr('تنبيه'),
+                              tr('أدخل مبلغًا صحيحًا أكبر من صفر'),
                             );
                             return;
                           }
@@ -856,6 +885,9 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                               category: category,
                               amount: amount,
                               description: descCtrl.text,
+                              descriptionEn: descEnCtrl.text,
+                              categoryEn:
+                                  ExpenseCategory.english[category] ?? '',
                               date: date,
                               paymentMethod: method,
                             );
@@ -864,13 +896,16 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                               category: category,
                               amount: amount,
                               description: descCtrl.text,
+                              descriptionEn: descEnCtrl.text,
+                              categoryEn:
+                                  ExpenseCategory.english[category] ?? '',
                               date: date,
                               paymentMethod: method,
                             );
                           }
                         },
                         child: Text(
-                          isEdit ? 'حفظ التعديل' : 'تسجيل المصروف',
+                          tr(isEdit ? 'حفظ التعديل' : 'تسجيل المصروف'),
                           style: const TextStyle(
                             fontFamily: 'cairo',
                             fontSize: 14,

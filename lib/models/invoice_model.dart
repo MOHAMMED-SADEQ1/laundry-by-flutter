@@ -23,7 +23,7 @@ class InvoiceModel {
     this.customerPhone = '',
     this.totalPrice = 0.0,
     this.paidAmount = 0.0,
-    this.paymentMethod = 'كاش',
+    this.paymentMethod = 'cash',
     this.remainingAmount = 0.0,
     DateTime? invoiceDate,
     this.listData = const [],
@@ -41,7 +41,7 @@ class InvoiceModel {
       customerPhone: map['customer_phone'] ?? '',
       totalPrice: (map['total_price'] ?? 0).toDouble(),
       paidAmount: (map['paid_amount'] ?? 0).toDouble(),
-      paymentMethod: map['payment_method'] ?? 'كاش',
+      paymentMethod: map['payment_method'] ?? 'cash',
       remainingAmount: (map['remaining_amount'] ?? 0).toDouble(),
       invoiceDate: DateTime.parse(map['invoice_date']),
       listData:

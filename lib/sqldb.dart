@@ -10,6 +10,15 @@ import 'package:laundry/services/security/security_service.dart';
 import 'package:laundry/services/security/session_manager.dart';
 // منطق خالص (بلا قاعدة بيانات) ⇒ لا دورة استيراد مع `app_settings_service`.
 import 'package:laundry/services/settings/setting_option.dart';
+// كتالوج الصلاحيات الخالص — مصدر حِزم الأدوار الافتراضية عند الزرع.
+import 'package:laundry/services/permission/permission_catalog.dart';
+// جسر الاتصال (بلا دورة استيراد) + خدمة الفحص لإنفاذ الصلاحيات في القاعدة.
+import 'package:laundry/services/permission/permission_db_handle.dart';
+import 'package:laundry/services/permission/permission_service.dart';
+// طرق الدفع: مفاتيح ثابتة للتخزين + تسميات للعرض (منطق خالص).
+import 'package:laundry/services/payment/payment_method.dart';
+// حالات المصنعية: رموز ثابتة للتخزين + تسميات للعرض (منطق خالص).
+import 'package:laundry/services/invoice/processing_status.dart';
 
 /// نتيجة تنظيف الفواتير القديمة — تُعرَض للمستخدم بدل الحذف الصامت.
 class InvoiceCleanupResult {
@@ -55,6 +64,8 @@ class SqlDB {
     if (gate != null) await gate;
     if (_db != null) return _db;
     _db = await _initDB();
+    // يُحدّث جسر الصلاحيات كي تقرأ الخدمة من القاعدة نفسها بلا دورة استيراد.
+    PermissionDbHandle.set(_db);
     return _db;
   }
 
@@ -95,10 +106,12 @@ class SqlDB {
       CREATE TABLE IF NOT EXISTS "clothing" (
         "clothing_id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
         "clothing_name" TEXT NOT NULL,
+        "clothing_name_en" TEXT,
         "normal_washing_and_ironing_price" REAL DEFAULT 0,
         "urgent_washing_and_ironing_price" REAL DEFAULT 0,
         "normal_ironing_price" REAL DEFAULT 0,
         "urgent_ironing_price" REAL DEFAULT 0,
+        "cost_price" REAL DEFAULT 0,
         "category_id" INTEGER DEFAULT 0,
         "is_active" INTEGER DEFAULT 1
       )
@@ -111,7 +124,9 @@ class SqlDB {
       CREATE TABLE IF NOT EXISTS "categories" (
         "cat_id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
         "name" TEXT NOT NULL,
+        "name_en" TEXT,
         "description" TEXT,
+        "description_en" TEXT,
         "is_active" INTEGER DEFAULT 1
       )
     ''');
@@ -127,12 +142,14 @@ class SqlDB {
         "phone_2" TEXT,
         "email" TEXT,
         "address" TEXT,
+        "address_en" TEXT,
         "loyalty_points" INTEGER DEFAULT 0,
         "total_spent" REAL DEFAULT 0,
         "tier" TEXT DEFAULT 'bronze',
         "join_date" TEXT NOT NULL,
         "is_active" INTEGER DEFAULT 1,
-        "notes" TEXT
+        "notes" TEXT,
+        "notes_en" TEXT
       )
     ''');
 
@@ -151,12 +168,13 @@ class SqlDB {
         "tax_amount" REAL DEFAULT 0,
         "final_amount" REAL DEFAULT 0,
         "paid_amount" REAL DEFAULT 0,
-        "payment_method" TEXT DEFAULT 'كاش',
+        "payment_method" TEXT DEFAULT 'cash',
         "remaining_amount" REAL DEFAULT 0,
         "discount_code" TEXT,
         "invoice_date" TEXT NOT NULL,
         "list_data" TEXT,
         "map_data" TEXT,
+        "status" TEXT DEFAULT 'received',
         "created_by" INTEGER
       )
     ''');
@@ -190,10 +208,12 @@ class SqlDB {
       CREATE TABLE IF NOT EXISTS "expenses" (
         "expense_id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
         "category" TEXT NOT NULL,
+        "category_en" TEXT,
         "description" TEXT,
+        "description_en" TEXT,
         "amount" REAL NOT NULL,
         "date" TEXT NOT NULL,
-        "payment_method" TEXT DEFAULT 'كاش',
+        "payment_method" TEXT DEFAULT 'cash',
         "receipt_path" TEXT,
         "recorded_by" INTEGER,
         "shift_id" INTEGER
@@ -211,6 +231,7 @@ class SqlDB {
       CREATE TABLE IF NOT EXISTS "discounts" (
         "discount_id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
         "name" TEXT NOT NULL,
+        "name_en" TEXT,
         "type" TEXT NOT NULL DEFAULT 'percentage',
         "value" REAL NOT NULL,
         "code" TEXT,
@@ -249,8 +270,27 @@ class SqlDB {
       )
     ''');
 
+    // ──────────────────────────────────────────────
+    // 14. جداول نظام الصلاحيات (roles · role_permissions · permission_overrides)
+    // ──────────────────────────────────────────────
+    //
+    // **لماذا ثلاث جداول لا عمود في `users`؟**
+    //   - `roles`: هوية الدور واسمه المعروض. `users.role` يبقى **TEXT** (اسم
+    //     الدور) ولا يتحوّل لمفتاح أجنبي — تحويله كان سيستلزم ترحيل كل صفوف
+    //     المستخدمين وكسر كل كود يقارن `role == 'admin'` (وهو موضع غير قليل).
+    //     فالربط بالاسم: `roles.name` هو نفس ما في `users.role`.
+    //   - `role_permissions`: ماذا يملك كل دور (المفتاح المركّب يمنع التكرار
+    //     بُنيويًا — لا حاجة لتحقّق برمجي).
+    //   - `permission_overrides`: استثناء فردي لمستخدم معيّن فوق دوره. نسبة
+    //     الحاجة إليه نحو 5% (موظف استثنائي، تغطية مؤقتة) — فبقي الاستثناء
+    //     استثناءً لا قاعدة، وظلّت المراجعة بالدور هي الأصل.
+    await _createPermissionTables(db);
+
     // إنشاء الحسابات الافتراضية (مدير النظام · مدير · محاسب · مستخدم)
     await _seedDefaultUsers(db);
+
+    // زرع الأدوار وحِزم صلاحياتها الافتراضية (غير مُتلِف)
+    await _seedDefaultPermissions(db);
 
     // إدخال الإعدادات الافتراضية
     await _insertDefaultSettings(db);
@@ -294,12 +334,14 @@ class SqlDB {
             "phone_2" TEXT,
             "email" TEXT,
             "address" TEXT,
+            "address_en" TEXT,
             "loyalty_points" INTEGER DEFAULT 0,
             "total_spent" REAL DEFAULT 0,
             "tier" TEXT DEFAULT 'bronze',
             "join_date" TEXT NOT NULL,
             "is_active" INTEGER DEFAULT 1,
-            "notes" TEXT
+            "notes" TEXT,
+            "notes_en" TEXT
           )
         ''');
 
@@ -310,7 +352,7 @@ class SqlDB {
             "description" TEXT,
             "amount" REAL NOT NULL,
             "date" TEXT NOT NULL,
-            "payment_method" TEXT DEFAULT 'كاش',
+            "payment_method" TEXT DEFAULT 'cash',
             "receipt_path" TEXT,
             "recorded_by" INTEGER
           )
@@ -320,9 +362,10 @@ class SqlDB {
 
         await db.execute('''
           CREATE TABLE IF NOT EXISTS "discounts" (
-            "discount_id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-            "name" TEXT NOT NULL,
-            "type" TEXT NOT NULL DEFAULT 'percentage',
+        "discount_id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+        "name" TEXT NOT NULL,
+        "name_en" TEXT,
+        "type" TEXT NOT NULL DEFAULT 'percentage',
             "value" REAL NOT NULL,
             "code" TEXT,
             "start_date" TEXT NOT NULL,
@@ -384,6 +427,10 @@ class SqlDB {
 
         // إنشاء الحسابات الافتراضية (غير مُتلِف — لا يمسّ حسابًا قائمًا)
         await _seedDefaultUsers(db);
+
+        // جداول الصلاحيات + زرع الأدوار (نفس ما في `_onCreate`)
+        await _createPermissionTables(db);
+        await _seedDefaultPermissions(db);
 
         await _insertDefaultSettings(db);
 
@@ -460,6 +507,124 @@ class SqlDB {
     }
   }
 
+  /// ينشئ جداول الصلاحيات الثلاثة (`IF NOT EXISTS` غير مُتلِف).
+  ///
+  /// مُستخرجة في دالة واحدة لأنها تُنادى من **ثلاثة مواضع**: `_onCreate`
+  /// (تثبيت جديد) · `_onUpgrade` (ترقية) · `runPendingMigrations` (كل فتح).
+  /// أي قاعدة أُنشئت قبل وجود هذه الجداول ثم لم تمرّ بفرع الترقية تبقى بلا
+  /// جداول، والفشل صامت تمامًا: كل الأدوار تبدو «بلا صلاحيات» فيبدو النظام
+  /// مغلقًا بلا سبب ظاهر. فنضمنها هنا صراحةً.
+  Future<void> _createPermissionTables(DatabaseExecutor db) async {
+    try {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS "roles" (
+          "role_id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+          "name" TEXT NOT NULL UNIQUE,
+          "label" TEXT NOT NULL,
+          "is_system" INTEGER NOT NULL DEFAULT 0,
+          "created_at" TEXT NOT NULL
+        )
+      ''');
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS "role_permissions" (
+          "role_id" INTEGER NOT NULL,
+          "permission_key" TEXT NOT NULL,
+          PRIMARY KEY ("role_id", "permission_key")
+        )
+      ''');
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS "idx_role_permissions_role" ON "role_permissions" ("role_id")',
+      );
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS "permission_overrides" (
+          "user_id" INTEGER NOT NULL,
+          "permission_key" TEXT NOT NULL,
+          "allow" INTEGER NOT NULL DEFAULT 1,
+          PRIMARY KEY ("user_id", "permission_key")
+        )
+      ''');
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS "idx_permission_overrides_user" ON "permission_overrides" ("user_id")',
+      );
+    } catch (e) {
+      debugPrint('create permission tables skipped: $e');
+    }
+  }
+
+  /// زرع الأدوار الخمسة وحِزم صلاحياتها الافتراضية.
+  ///
+  /// **غير مُتلِف (idempotent):** الدور يُدرَج بـ`ConflictAlgorithm.ignore`
+  /// على `name` الفريد ⇒ الدور القائم لا يُعاد إنشاؤه. وحِزمته تُزرع **فقط
+  /// عند الدور الجديد** — لا نُعيد كتابة صلاحيات دور عدّلها المدير، وإلا
+  /// محا كل تعديل على الصلاحيات في كل فتح للتطبيق.
+  ///
+  /// **الحساب على admin:** حزمته كل الكتالوج، وهي **المرجع الضروري** لوجود
+  /// سلطة عليا دائمة. لا تُحبس هنا على تعديل لاحق لأن شاشة الأدوار تمنع
+  /// تعديله أصلًا (`PermissionCatalog.isRootRole`).
+  Future<void> _seedDefaultPermissions(DatabaseExecutor db) async {
+    final now = DateTime.now().toIso8601String();
+    for (final role in PermissionCatalog.seedRoles) {
+      try {
+        // إدراج الدور — إن كان قائمًا فـ`ignore` لا يفعّل شيئًا.
+        final id = await db.insert(
+          'roles',
+          {
+            'name': role.name,
+            'label': role.label,
+            'is_system': role.isSystem ? 1 : 0,
+            'created_at': now,
+          },
+          conflictAlgorithm: ConflictAlgorithm.ignore,
+        );
+
+        // هل الدور جديد؟ (`insert` ترجع 0 عند الرفض بـ`ignore`).
+        // لو القاعدة تسمح بالإدراج فالمعرّف > 0. وإلا نقرأه.
+        final roleId = id > 0
+            ? id
+            : await _roleIdOf(db, role.name);
+        if (roleId == null) continue;
+
+        // حزمة الدور: تُزرع فقط إن لم يكن له أي إسناد — حتى لا ندهس تعديلًا.
+        if (id > 0 && !await _roleHasPermissions(db, roleId)) {
+          final bundle = PermissionCatalog.defaultBundleOf(role.name);
+          if (bundle == null) continue;
+          for (final key in bundle) {
+            if (!PermissionCatalog.isKnown(key)) continue;
+            await db.insert(
+              'role_permissions',
+              {'role_id': roleId, 'permission_key': key},
+              conflictAlgorithm: ConflictAlgorithm.ignore,
+            );
+          }
+        }
+      } catch (e) {
+        debugPrint('seed permissions for role ${role.name} skipped: $e');
+      }
+    }
+  }
+
+  /// `role_id` لاسم دور، أو `null`.
+  Future<int?> _roleIdOf(DatabaseExecutor db, String name) async {
+    final rows = await db.query(
+      'roles',
+      columns: <String>['role_id'],
+      where: 'name = ?',
+      whereArgs: <Object?>[name],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return (rows.first['role_id'] as num?)?.toInt();
+  }
+
+  /// هل للدور أي صلاحية مُسندة؟
+  Future<bool> _roleHasPermissions(DatabaseExecutor db, int roleId) async {
+    final rows = await db.rawQuery(
+      'SELECT 1 FROM "role_permissions" WHERE role_id = ? LIMIT 1',
+      <Object?>[roleId],
+    );
+    return rows.isNotEmpty;
+  }
+
   /// زرع الإعدادات الافتراضية.
   ///
   /// **التصميم:** معلومات النشاط محصورة هنا، وكل **خيارات النظام** (التي كانت
@@ -493,8 +658,7 @@ class SqlDB {
       {
         'key': 'business_tax_number',
         'value': '',
-        'description': 'الرقم الضريبي (VAT) — يظهر على الفاتورة الضريبية '
-            'ويُرمَّز في QR الهيئة',
+        'description': 'الرقم الضريبي (VAT) — يظهر على الفاتورة الضريبية ويُرمَّز في QR الهيئة',
       },
       {
         'key': 'business_cr_number',
@@ -612,8 +776,7 @@ class SqlDB {
     if (data.containsKey('shift_id')) return data;
     try {
       final rows = await readData(
-        'SELECT shift_id FROM shifts WHERE end_time IS NULL '
-        'ORDER BY shift_id DESC LIMIT 1',
+        'SELECT shift_id FROM shifts WHERE end_time IS NULL ORDER BY shift_id DESC LIMIT 1',
       );
       final id =
           rows.isEmpty ? null : (rows.first['shift_id'] as num?)?.toInt();
@@ -692,6 +855,15 @@ class SqlDB {
   /// 2. لا يحذف فاتورة مرتبطة باشتراك (سجلّ الاستهلاك يجب أن يبقى).
   /// 3. يُعيد [InvoiceCleanupResult] ليُعرَض للمستخدم كمصروف/إشعار.
   Future<InvoiceCleanupResult> deleteOldInvoices() async {
+    // 🛡️ تنظيف البيانات يمحو فواتير نهائيًا — صلاحية حوكمة عليا.
+    //
+    // **ملاحظة:** هذا الحذف **معطَّل افتراضيًا** ويحتاج تفعيلًا صريحًا
+    // (`invoice_auto_delete_enabled`) — فالفحص هنا حرس ثانٍ، لا الحرس الوحيد.
+    if (!PermissionService.can(PermissionKeys.dataDelete)) {
+      debugPrint('deleteOldInvoices مرفوض: لا صلاحية data.delete');
+      return InvoiceCleanupResult.none;
+    }
+
     final Database? mydb = await dbGet;
     if (mydb == null) return InvoiceCleanupResult.none;
 
@@ -741,8 +913,7 @@ class SqlDB {
     List<Map<String, dynamic>> doomed = const [];
     try {
       doomed = await readData(
-        'SELECT COUNT(*) AS c, COALESCE(SUM(final_amount), 0) AS t '
-        'FROM "invoices" WHERE $where',
+        'SELECT COUNT(*) AS c, COALESCE(SUM(final_amount), 0) AS t FROM "invoices" WHERE $where',
         [effectiveDays],
       );
     } catch (e) {
@@ -813,6 +984,8 @@ class SqlDB {
   Future<void> closeDB() async {
     final mydb = _db;
     _db = null;
+    // امسح جسر الصلاحيات — لا يبقى مرجع لاتصال مُغلق فيُخدع أحد بأمر عليه.
+    PermissionDbHandle.clear();
     if (mydb != null) {
       try {
         await mydb.close();
@@ -858,8 +1031,7 @@ class SqlDB {
     await _tryAlter(mydb, 'ALTER TABLE "users" ADD COLUMN "full_name" TEXT');
     try {
       await mydb.rawUpdate(
-        'UPDATE "users" SET full_name = username '
-        'WHERE full_name IS NULL OR TRIM(full_name) = \'\'',
+        'UPDATE "users" SET full_name = username WHERE full_name IS NULL OR TRIM(full_name) = \'\'',
       );
     } catch (e) {
       debugPrint('users full_name backfill skipped: $e');
@@ -874,12 +1046,44 @@ class SqlDB {
     // موضعه بعد `_tryAlter(full_name)` أعلاه حتى يكون العمود موجودًا.
     await _seedDefaultUsers(mydb);
 
+    // ─── جداول الصلاحيات وزرع الأدوار ───
+    // تُضاف هنا أيضًا (لا في `_onCreate`/`_onUpgrade` فقط) لأن قواعد
+    // التثبيتات القائمة لا تمرّ بهما عند إضافة جداول جديدة. والزرع غير
+    // مُتلِف: لا يدهس صلاحيات دور عدّلها المدير (`_roleHasPermissions`).
+    await _createPermissionTables(mydb);
+    await _seedDefaultPermissions(mydb);
+
     // ─── خيارات النظام: ضمان وجود مفاتيحها ───
     // كانت هنا عمليتان منفصلتان (`invoice_retention_days` و
     // `invoice_auto_delete_enabled`) — أُزيلتا وأُسند الزرع إلى
     // `_ensureDefaultSettings` أدناه، الذي يشتق **كل** الخيارات من السجل
     // الواحد `SettingOptions.all` (غير مُتلِف: لا يدهس قيمة عدّلها المستخدم).
     await _ensureDefaultSettings();
+
+    // ─── أعمدة اللغة الثانية (الإنجليزية) ───
+    // تُضاف **هنا** لا في `_onCreate` فقط، لأن كل قاعدة قائمة لن تمرّ بـ
+    // `_onCreate` أبدًا. و`_tryAlter` خامل التكرار فلا ضرر من تكراره كل فتح.
+    // **لا نُعدّل الأعمدة العربية ولا ننسخها**: العمود الجديد يبدأ `NULL`
+    // (أي «غير مترجم») فتُعرض العربية — فلا يتغيّر شكل أي شاشة بعد التحديث.
+    await _ensureBilingualColumns(mydb);
+
+    // ─── ترحيل طرق الدفع: نصّ عربي ⇒ مفتاح ثابت ───
+    // `'كاش'` في القاعدة تجعل **اللغة جزءًا من البيانات**: تبديل الواجهة إلى
+    // الإنجليزية يُبقي «كاش» مطبوعة، وأي إعادة صياغة للتسمية تُفسد كل صفّ.
+    // الترحيل يكتب `cash`/`card`/`credit`/`balance`/`cash_refund` مرة واحدة،
+    // والقراءة تمرّ بـ`PaymentMethods` الذي يقبل الشكلين ⇒ لا يعتمد على نجاحه.
+    await _migratePaymentMethodKeys(mydb);
+
+    // ─── افتراضي الدفع في نقطة البيع: «شبكة» بدل «كاش» (مرة واحدة) ───
+    // كل قاعدة قائمة تحمل `cash` الافتراضية القديمة، وتغيير الافتراضي في
+    // السجل وحده لا يدهسها. النقل هنا مرة واحدة فقط كي يبقى اختيار المستخدم
+    // اللاحق محفوظًا.
+    await _migratePosDefaultPaymentToCard();
+
+    // ─── ترحيل حالات المصنعية: نصّ عربي ⇒ رمز ثابت ───
+    // نفس مبدأ طرق الدفع: `'تم الاستلام'` في القاعدة تجعل اللغة جزءًا من
+    // البيانات. القراءة تقبل الشكلين، فالترحيل لا يُعطّل قاعدة قديمة.
+    await _migrateProcessingStatusKeys(mydb);
 
     // تكلفة القطعة (لحساب هامش الربح)
     await _tryAlter(
@@ -890,7 +1094,7 @@ class SqlDB {
     // مصنعية الفواتير: الحالة، آخر تحديث، العامل المسؤول
     await _tryAlter(
       mydb,
-      'ALTER TABLE "invoices" ADD COLUMN "status" TEXT DEFAULT "تم الاستلام"',
+      "ALTER TABLE \"invoices\" ADD COLUMN \"status\" TEXT DEFAULT 'received'",
     );
     await _tryAlter(
       mydb,
@@ -947,7 +1151,7 @@ class SqlDB {
         "subscription_id" INTEGER,
         "amount" REAL NOT NULL,
         "paid_date" TEXT NOT NULL,
-        "method" TEXT DEFAULT 'كاش',
+        "method" TEXT DEFAULT 'cash',
         "recorded_by" INTEGER,
         "shift_id" INTEGER
       )
@@ -958,10 +1162,8 @@ class SqlDB {
     // كي لا تختلف قاعدة بيانات جديدة عن قاعدة مُرقّاة.
     for (final sql in <String>[
       'ALTER TABLE "subscriptions" ADD COLUMN "paid_until_date" TEXT',
-      'ALTER TABLE "subscriptions" ADD COLUMN "usage_limit_pieces" '
-          'INTEGER DEFAULT 0',
-      'ALTER TABLE "subscriptions" ADD COLUMN "usage_limit_value" '
-          'REAL DEFAULT 0',
+      'ALTER TABLE "subscriptions" ADD COLUMN "usage_limit_pieces" INTEGER DEFAULT 0',
+      'ALTER TABLE "subscriptions" ADD COLUMN "usage_limit_value" REAL DEFAULT 0',
       'ALTER TABLE "subscriptions" ADD COLUMN "cycle_start_date" TEXT',
       'ALTER TABLE "subscriptions" ADD COLUMN "cancelled_at" TEXT',
       'ALTER TABLE "subscriptions" ADD COLUMN "cancel_refund" REAL DEFAULT 0',
@@ -973,30 +1175,24 @@ class SqlDB {
           "TEXT DEFAULT 'manual'",
       'ALTER TABLE "subscription_payments" ADD COLUMN "covers_from" TEXT',
       'ALTER TABLE "subscription_payments" ADD COLUMN "covers_to" TEXT',
-      'ALTER TABLE "invoices" ADD COLUMN "subscription_used_value" '
-          'REAL DEFAULT 0',
-      'ALTER TABLE "invoices" ADD COLUMN "subscription_used_pieces" '
-          'INTEGER DEFAULT 0',
+      'ALTER TABLE "invoices" ADD COLUMN "subscription_used_value" REAL DEFAULT 0',
+      'ALTER TABLE "invoices" ADD COLUMN "subscription_used_pieces" INTEGER DEFAULT 0',
     ]) {
       await _tryAlter(mydb, sql);
     }
 
     // فهارس الاشتراكات — تُنشأ هنا أيضًا لقاعدة جديدة
     await mydb.execute(
-      'CREATE INDEX IF NOT EXISTS "idx_invoices_subscription" '
-      'ON "invoices" ("subscription_id", "invoice_date")',
+      'CREATE INDEX IF NOT EXISTS "idx_invoices_subscription" ON "invoices" ("subscription_id", "invoice_date")',
     );
     await mydb.execute(
-      'CREATE INDEX IF NOT EXISTS "idx_subpay_subscription" '
-      'ON "subscription_payments" ("subscription_id", "paid_date")',
+      'CREATE INDEX IF NOT EXISTS "idx_subpay_subscription" ON "subscription_payments" ("subscription_id", "paid_date")',
     );
     await mydb.execute(
-      'CREATE INDEX IF NOT EXISTS "idx_subscriptions_active" '
-      'ON "subscriptions" ("is_active", "customer_id")',
+      'CREATE INDEX IF NOT EXISTS "idx_subscriptions_active" ON "subscriptions" ("is_active", "customer_id")',
     );
     await mydb.execute(
-      'CREATE INDEX IF NOT EXISTS "idx_subscriptions_due" '
-      'ON "subscriptions" ("paid_until_date") WHERE "is_active" = 1',
+      'CREATE INDEX IF NOT EXISTS "idx_subscriptions_due" ON "subscriptions" ("paid_until_date") WHERE "is_active" = 1',
     );
 
     // ممول حتى — تاريخ انتهاء التغطية المدفوعة للاشتراك (يدعم الدفعات الجزئية)
@@ -1019,16 +1215,14 @@ class SqlDB {
     // 0 = بلا سقف على القطع. يحمي من اشتراك بـ50 ريال يستهلك 300 قطعة.
     await _tryAlter(
       mydb,
-      'ALTER TABLE "subscriptions" ADD COLUMN "usage_limit_pieces" '
-      'INTEGER DEFAULT 0',
+      'ALTER TABLE "subscriptions" ADD COLUMN "usage_limit_pieces" INTEGER DEFAULT 0',
     );
 
     // ─── 2. سقف الاستخدام: القيمة السوقية المغطّاة في كل دورة ───
     // 0 = بلا سقف على القيمة. أيّهما (القطع أو القيمة) يُستهلك أولاً يوقف.
     await _tryAlter(
       mydb,
-      'ALTER TABLE "subscriptions" ADD COLUMN "usage_limit_value" '
-      'REAL DEFAULT 0',
+      'ALTER TABLE "subscriptions" ADD COLUMN "usage_limit_value" REAL DEFAULT 0',
     );
 
     // ─── 3. نهاية آخر دورة مُقفَلة — أساس الترحيل و"التغطية المتاحة" ───
@@ -1078,32 +1272,26 @@ class SqlDB {
     // لا سعر قائمة الأصناف اليوم (قد يتغيّر لاحقًا).
     await _tryAlter(
       mydb,
-      'ALTER TABLE "invoices" ADD COLUMN "subscription_used_value" '
-      'REAL DEFAULT 0',
+      'ALTER TABLE "invoices" ADD COLUMN "subscription_used_value" REAL DEFAULT 0',
     );
     await _tryAlter(
       mydb,
-      'ALTER TABLE "invoices" ADD COLUMN "subscription_used_pieces" '
-      'INTEGER DEFAULT 0',
+      'ALTER TABLE "invoices" ADD COLUMN "subscription_used_pieces" INTEGER DEFAULT 0',
     );
 
     // ─── 8. فهرس الإيراد المؤجَّل: استعلامات الرصيد الدفتري كانت مسحًا كاملًا ───
     await mydb.execute(
-      'CREATE INDEX IF NOT EXISTS "idx_invoices_subscription" '
-      'ON "invoices" ("subscription_id", "invoice_date")',
+      'CREATE INDEX IF NOT EXISTS "idx_invoices_subscription" ON "invoices" ("subscription_id", "invoice_date")',
     );
     await mydb.execute(
-      'CREATE INDEX IF NOT EXISTS "idx_subpay_subscription" '
-      'ON "subscription_payments" ("subscription_id", "paid_date")',
+      'CREATE INDEX IF NOT EXISTS "idx_subpay_subscription" ON "subscription_payments" ("subscription_id", "paid_date")',
     );
     await mydb.execute(
-      'CREATE INDEX IF NOT EXISTS "idx_subscriptions_active" '
-      'ON "subscriptions" ("is_active", "customer_id")',
+      'CREATE INDEX IF NOT EXISTS "idx_subscriptions_active" ON "subscriptions" ("is_active", "customer_id")',
     );
     // فهرس جزئي: الاشتراكات النشطة فقط — هو ما يُقرأ في كل شاشة تقريبًا
     await mydb.execute(
-      'CREATE INDEX IF NOT EXISTS "idx_subscriptions_due" '
-      'ON "subscriptions" ("paid_until_date") WHERE "is_active" = 1',
+      'CREATE INDEX IF NOT EXISTS "idx_subscriptions_due" ON "subscriptions" ("paid_until_date") WHERE "is_active" = 1',
     );
 
     // ─── 9. استبدال التعريف المتناقض لحالة الاشتراك ───
@@ -1130,12 +1318,7 @@ class SqlDB {
     // في الحالتين المرساة الصحيحة هي تاريخ التسجيل.
     try {
       await mydb.rawUpdate(
-        'UPDATE "subscriptions" SET "last_billed_date" = '
-        'COALESCE("start_date", "paid_until_date") '
-        'WHERE ("paid_until_date" IS NOT NULL '
-        '       AND "last_billed_date" = "paid_until_date") '
-        '   OR ("paid_until_date" IS NULL '
-        '       AND "last_billed_date" IS NOT NULL)',
+        'UPDATE "subscriptions" SET "last_billed_date" = COALESCE("start_date", "paid_until_date") WHERE ("paid_until_date" IS NOT NULL        AND "last_billed_date" = "paid_until_date")    OR ("paid_until_date" IS NULL        AND "last_billed_date" IS NOT NULL)',
       );
       debugPrint('subscription last_billed_date normalisation OK');
     } catch (e) {
@@ -1148,9 +1331,7 @@ class SqlDB {
     // كان يجعل بداية الدورة = نهايتها، فيظهر الرصيد الزمني المتاح صفرًا.
     try {
       await mydb.rawUpdate(
-        'UPDATE "subscriptions" SET "cycle_start_date" = '
-        'COALESCE("last_billed_date", "start_date", "paid_until_date") '
-        'WHERE "cycle_start_date" IS NULL',
+        'UPDATE "subscriptions" SET "cycle_start_date" = COALESCE("last_billed_date", "start_date", "paid_until_date") WHERE "cycle_start_date" IS NULL',
       );
       debugPrint('subscription cycle_start_date backfill OK');
     } catch (e) {
@@ -1198,15 +1379,13 @@ class SqlDB {
       )
     ''');
     await mydb.execute(
-      'CREATE INDEX IF NOT EXISTS "idx_coverage_log_sub" '
-      'ON "subscription_coverage_log" ("subscription_id", "created_at")',
+      'CREATE INDEX IF NOT EXISTS "idx_coverage_log_sub" ON "subscription_coverage_log" ("subscription_id", "created_at")',
     );
 
     // ─── مؤشرات الاشتراكات: حالة أولية سليمة لقاعدة جديدة ───
     try {
       await mydb.rawUpdate(
-        'UPDATE "subscriptions" SET "cycle_start_date" = "start_date" '
-        'WHERE "cycle_start_date" IS NULL',
+        'UPDATE "subscriptions" SET "cycle_start_date" = "start_date" WHERE "cycle_start_date" IS NULL',
       );
     } catch (e) {
       debugPrint('fresh subscription cycle backfill skipped: $e');
@@ -1241,8 +1420,7 @@ class SqlDB {
       await mydb.insert('settings', {
         'key': 'business_tax_number',
         'value': '',
-        'description': 'الرقم الضريبي (VAT) — يظهر على الفاتورة الضريبية '
-            'ويُرمَّز في QR الهيئة',
+        'description': 'الرقم الضريبي (VAT) — يظهر على الفاتورة الضريبية ويُرمَّز في QR الهيئة',
       }, conflictAlgorithm: ConflictAlgorithm.ignore);
     } catch (e) {
       debugPrint('business_tax_number setting skipped (already applied): $e');
@@ -1259,7 +1437,7 @@ class SqlDB {
         "payment_id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
         "customer_id" INTEGER NOT NULL,
         "amount" REAL NOT NULL,
-        "payment_method" TEXT DEFAULT 'كاش',
+        "payment_method" TEXT DEFAULT 'cash',
         "payment_date" TEXT NOT NULL,
         "notes" TEXT,
         "recorded_by" INTEGER,
@@ -1289,23 +1467,19 @@ class SqlDB {
 
     // ─── فهارس الأداء: استعلامات كشف الحساب والذمم كانت مسحًا كاملًا ───
     await mydb.execute(
-      'CREATE INDEX IF NOT EXISTS "idx_invoices_customer" '
-      'ON "invoices" ("customer_id", "invoice_date")',
+      'CREATE INDEX IF NOT EXISTS "idx_invoices_customer" ON "invoices" ("customer_id", "invoice_date")',
     );
     await mydb.execute(
-      'CREATE INDEX IF NOT EXISTS "idx_invoices_due" '
-      'ON "invoices" ("remaining_amount") WHERE "remaining_amount" > 0',
+      'CREATE INDEX IF NOT EXISTS "idx_invoices_due" ON "invoices" ("remaining_amount") WHERE "remaining_amount" > 0',
     );
     await mydb.execute(
       'CREATE INDEX IF NOT EXISTS "idx_invoices_date" ON "invoices" ("invoice_date")',
     );
     await mydb.execute(
-      'CREATE INDEX IF NOT EXISTS "idx_customers_active" '
-      'ON "customers" ("is_active", "customer_name")',
+      'CREATE INDEX IF NOT EXISTS "idx_customers_active" ON "customers" ("is_active", "customer_name")',
     );
     await mydb.execute(
-      'CREATE INDEX IF NOT EXISTS "idx_custpay_customer" '
-      'ON "customer_payments" ("customer_id", "payment_date")',
+      'CREATE INDEX IF NOT EXISTS "idx_custpay_customer" ON "customer_payments" ("customer_id", "payment_date")',
     );
 
     // ─── سجل تدقيق الذمم: حركة الرصيد الأخيرة لكل زبون ───
@@ -1322,8 +1496,7 @@ class SqlDB {
       )
     ''');
     await mydb.execute(
-      'CREATE INDEX IF NOT EXISTS "idx_balance_log_customer" '
-      'ON "customer_balance_log" ("customer_id", "created_at")',
+      'CREATE INDEX IF NOT EXISTS "idx_balance_log_customer" ON "customer_balance_log" ("customer_id", "created_at")',
     );
 
     // ─── إصلاح المجموع للفواتير المخزَّنة بصفر (خطأ محاسبي) ───
@@ -1335,9 +1508,7 @@ class SqlDB {
     // المجموع المخزَّن صفر، فلا يمسّ أي فاتورة سليمة.
     try {
       final broken = await mydb.rawQuery(
-        'SELECT invoices_id, paid_amount, subscription_id, list_data '
-        'FROM "invoices" '
-        'WHERE COALESCE(total_price, 0) = 0 AND COALESCE(final_amount, 0) = 0 '
+        'SELECT invoices_id, paid_amount, subscription_id, list_data FROM "invoices" WHERE COALESCE(total_price, 0) = 0 AND COALESCE(final_amount, 0) = 0 '
         "  AND list_data IS NOT NULL AND TRIM(list_data) <> '' "
         "  AND TRIM(list_data) <> '[]'",
       );
@@ -1373,11 +1544,7 @@ class SqlDB {
     // الأرصدة السابقة كانت تُصفَّر عند كل دفعة جزئية، فلا بد من إعادة اشتقاقها.
     try {
       await mydb.rawUpdate(
-        'UPDATE "customers" SET "balance" = ('
-        '  SELECT COALESCE(-SUM(i.remaining_amount), 0) FROM "invoices" i '
-        '  WHERE i.customer_id = customers.customer_id '
-        '    AND i.subscription_id IS NULL AND i.remaining_amount > 0'
-        ') WHERE COALESCE("balance", 0) <= 0',
+        'UPDATE "customers" SET "balance" = (  SELECT COALESCE(-SUM(i.remaining_amount), 0) FROM "invoices" i   WHERE i.customer_id = customers.customer_id     AND i.subscription_id IS NULL AND i.remaining_amount > 0) WHERE COALESCE("balance", 0) <= 0',
       );
       debugPrint('تمت إعادة مزامنة أرصدة الزبائن المدينين من الفواتير');
     } catch (e) {
@@ -1387,10 +1554,7 @@ class SqlDB {
     // ─── إعادة احتساب إجمالي مشتريات الزبائن (العمود كان مهمَلًا تمامًا) ───
     try {
       await mydb.rawUpdate(
-        'UPDATE "customers" SET "total_spent" = ('
-        '  SELECT COALESCE(SUM(i.final_amount), 0) FROM "invoices" i '
-        '  WHERE i.customer_id = customers.customer_id'
-        ')',
+        'UPDATE "customers" SET "total_spent" = (  SELECT COALESCE(SUM(i.final_amount), 0) FROM "invoices" i   WHERE i.customer_id = customers.customer_id)',
       );
       debugPrint('تمت إعادة احتساب إجمالي مشتريات الزبائن');
     } catch (e) {
@@ -1461,23 +1625,18 @@ class SqlDB {
           final table = entry[0];
           final col = entry[1];
           final rows = await readData(
-            'SELECT DISTINCT "$col" AS ts FROM "$table" '
-            'WHERE shift_id IS NULL AND "$col" IS NOT NULL',
+            'SELECT DISTINCT "$col" AS ts FROM "$table" WHERE shift_id IS NULL AND "$col" IS NOT NULL',
           );
           for (final r in rows) {
             final ts = r['ts']?.toString();
             if (ts == null || ts.isEmpty) continue;
             final match = await readData(
-              'SELECT shift_id FROM shifts '
-              'WHERE datetime(start_time) <= datetime(?) '
-              '  AND (end_time IS NULL OR datetime(end_time) >= datetime(?)) '
-              'ORDER BY shift_id ASC LIMIT 1',
+              'SELECT shift_id FROM shifts WHERE datetime(start_time) <= datetime(?)   AND (end_time IS NULL OR datetime(end_time) >= datetime(?)) ORDER BY shift_id ASC LIMIT 1',
               [ts, ts],
             );
             if (match.isEmpty) continue;
             await mydb.rawUpdate(
-              'UPDATE "$table" SET shift_id = ? '
-              'WHERE "$col" = ? AND shift_id IS NULL',
+              'UPDATE "$table" SET shift_id = ? WHERE "$col" = ? AND shift_id IS NULL',
               [match.first['shift_id'], ts],
             );
             linked++;
@@ -1506,6 +1665,7 @@ class SqlDB {
       CREATE TABLE IF NOT EXISTS "discounts" (
         "discount_id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
         "name" TEXT NOT NULL,
+        "name_en" TEXT,
         "type" TEXT NOT NULL DEFAULT 'percentage',
         "value" REAL NOT NULL,
         "code" TEXT,
@@ -1542,27 +1702,27 @@ class SqlDB {
         "invoice_id" INTEGER NOT NULL,
         "clothing_id" INTEGER,
         "item_name" TEXT NOT NULL,
+        "item_name_en" TEXT,
         "content" TEXT,
+        "content_en" TEXT,
         "qty" INTEGER DEFAULT 0,
         "unit_price" REAL DEFAULT 0,
         "unit_cost" REAL DEFAULT 0,
         "total_price" REAL DEFAULT 0,
         "total_cost" REAL DEFAULT 0,
         "note" TEXT,
+        "note_en" TEXT,
         "created_at" TEXT
       )
     ''');
     await mydb.execute(
-      'CREATE INDEX IF NOT EXISTS "idx_invoice_items_invoice" '
-      'ON "invoice_items" ("invoice_id")',
+      'CREATE INDEX IF NOT EXISTS "idx_invoice_items_invoice" ON "invoice_items" ("invoice_id")',
     );
     await mydb.execute(
-      'CREATE INDEX IF NOT EXISTS "idx_invoice_items_clothing" '
-      'ON "invoice_items" ("clothing_id")',
+      'CREATE INDEX IF NOT EXISTS "idx_invoice_items_clothing" ON "invoice_items" ("clothing_id")',
     );
     await mydb.execute(
-      'CREATE INDEX IF NOT EXISTS "idx_invoice_items_name" '
-      'ON "invoice_items" ("item_name")',
+      'CREATE INDEX IF NOT EXISTS "idx_invoice_items_name" ON "invoice_items" ("item_name")',
     );
 
     // ─── لقطة الضريبة: النسبة وقت الإصدار والأساس الخاضع ───
@@ -1621,16 +1781,13 @@ class SqlDB {
 
     // فهارس الأداء المذكورة في الدين التقني (تقارير نطاقات التاريخ والبحث)
     await mydb.execute(
-      'CREATE INDEX IF NOT EXISTS "idx_invoices_date" '
-      'ON "invoices" ("invoice_date")',
+      'CREATE INDEX IF NOT EXISTS "idx_invoices_date" ON "invoices" ("invoice_date")',
     );
     await mydb.execute(
-      'CREATE INDEX IF NOT EXISTS "idx_customers_name" '
-      'ON "customers" ("customer_name")',
+      'CREATE INDEX IF NOT EXISTS "idx_customers_name" ON "customers" ("customer_name")',
     );
     await mydb.execute(
-      'CREATE INDEX IF NOT EXISTS "idx_credit_notes_invoice" '
-      'ON "credit_notes" ("invoice_id")',
+      'CREATE INDEX IF NOT EXISTS "idx_credit_notes_invoice" ON "credit_notes" ("invoice_id")',
     );
 
     // ─── تعبئة اللقطة للفواتير القديمة (مرة واحدة، غير مُتلِفة) ───
@@ -1641,8 +1798,7 @@ class SqlDB {
     try {
       if (await getSetting('invoice_items_backfill_v1') != '1') {
         final clothingRows = await mydb.rawQuery(
-          'SELECT clothing_id, clothing_name, COALESCE(cost_price, 0) AS cost '
-          'FROM "clothing"',
+          'SELECT clothing_id, clothing_name, clothing_name_en, COALESCE(cost_price, 0) AS cost FROM "clothing"',
         );
         final byName = <String, Map<String, dynamic>>{};
         for (final c in clothingRows) {
@@ -1708,16 +1864,25 @@ class SqlDB {
         final total = lineTotal > 0 ? lineTotal : price * qty;
         final c = clothingByName[name];
         final cost = c == null ? 0.0 : _numOf(c['cost']);
+        final nameEn = '${item['vestments_en'] ?? c?['clothing_name_en'] ?? ''}'
+            .trim();
         out.add({
           'clothing_id': c == null ? null : (c['clothing_id'] as num?)?.toInt(),
           'item_name': name,
+          'item_name_en': nameEn.isEmpty ? null : nameEn,
           'content': '${item['content'] ?? ''}',
+          'content_en': '${item['content_en'] ?? ''}'.trim().isEmpty
+              ? null
+              : '${item['content_en']}'.trim(),
           'qty': qty,
           'unit_price': price,
           'unit_cost': cost,
           'total_price': total,
           'total_cost': double.parse((cost * qty).toStringAsFixed(2)),
           'note': '${item['note'] ?? ''}',
+          'note_en': '${item['note_en'] ?? ''}'.trim().isEmpty
+              ? null
+              : '${item['note_en']}'.trim(),
           'created_at': DateTime.now().toIso8601String(),
         });
       }
@@ -1767,6 +1932,162 @@ class SqlDB {
       return double.parse(total.toStringAsFixed(2));
     } catch (_) {
       return 0.0;
+    }
+  }
+
+  /// يضمن أعمدة اللغة الثانية في الجداول التي تحمل نصًّا يُدخله المستخدم.
+  ///
+  /// **القاعدة:** `x_en` فارغ ⇒ تُعرض `x`. لا نسخ ولا تعبئة تلقائية، لأن
+  /// النسخ الآلي يخلق «ترجمات» عربية في عمود إنجليزي فيستحيل تمييز المترجم
+  /// من غير المترجم لاحقًا.
+  ///
+  /// **ما لا يحتاجه عمود:** أسماء الأشخاص (`customers.customer_name`) —
+  /// الأسماء لا تُترجم؛ والملاحظات الحرّة (`subscriptions.notes`) — نصّ
+  /// المستخدم كما كتبه.
+  Future<void> _ensureBilingualColumns(Database db) async {
+    const alters = <String>[
+      // الأصناف — أكثر ما يُترجم (كتالوج ثابت يتكرّر على كل فاتورة)
+      'ALTER TABLE "clothing" ADD COLUMN "clothing_name_en" TEXT',
+      // التصنيفات
+      'ALTER TABLE "categories" ADD COLUMN "name_en" TEXT',
+      'ALTER TABLE "categories" ADD COLUMN "description_en" TEXT',
+      // الخصومات
+      'ALTER TABLE "discounts" ADD COLUMN "name_en" TEXT',
+      // المصروفات — التصنيف والوصف يُدخلهما المستخدم، فلكلٍّ نسخة إنجليزية.
+      'ALTER TABLE "expenses" ADD COLUMN "category_en" TEXT',
+      'ALTER TABLE "expenses" ADD COLUMN "description_en" TEXT',
+      // الزبائن — العنوان والملاحظة نصّان حرّان (الاسم لا يُترجم).
+      'ALTER TABLE "customers" ADD COLUMN "address_en" TEXT',
+      'ALTER TABLE "customers" ADD COLUMN "notes_en" TEXT',
+      // ملاحظات الاشتراك (نصّ حرّ اختياري).
+      'ALTER TABLE "subscriptions" ADD COLUMN "notes_en" TEXT',
+      // 🚨 بنود الفاتورة: **لقطة وقت البيع** لا مرجع. لو لم تُترجم هنا
+      // فإعادة طبع فاتورة قديمة داخل واجهة إنجليزية تُخرج عربيًّا.
+      'ALTER TABLE "invoice_items" ADD COLUMN "item_name_en" TEXT',
+      'ALTER TABLE "invoice_items" ADD COLUMN "content_en" TEXT',
+      'ALTER TABLE "invoice_items" ADD COLUMN "note_en" TEXT',
+      // أدوار الصلاحيات (الدور مبنيّ في الكود ويُعرَض باسمه)
+      'ALTER TABLE "roles" ADD COLUMN "label_en" TEXT',
+      // 🚨 الملاحظات الحرة: يكتبها المستخدم بيده، فلو لم يكن لها عمود ثانٍ
+      // بقيت عربية داخل واجهة إنجليزية. تُضاف في كل الجداول التي تُعرض
+      // ملاحظاتها على الشاشة أو في كشف الحساب.
+      'ALTER TABLE "subscriptions" ADD COLUMN "notes_en" TEXT',
+      'ALTER TABLE "customer_payments" ADD COLUMN "notes_en" TEXT',
+      'ALTER TABLE "subscription_payments" ADD COLUMN "notes_en" TEXT',
+      'ALTER TABLE "shifts" ADD COLUMN "notes_en" TEXT',
+      'ALTER TABLE "shifts" ADD COLUMN "difference_reason_en" TEXT',
+      // أسباب الحركة في الدفاتر — تظهر في سجل الزبون والتدقيق
+      'ALTER TABLE "credit_notes" ADD COLUMN "reason_en" TEXT',
+      'ALTER TABLE "customer_balance_log" ADD COLUMN "reason_en" TEXT',
+    ];
+    for (final sql in alters) {
+      await _tryAlter(db, sql);
+    }
+  }
+
+  /// ترحيل طرق الدفع من نصّ عربي إلى مفتاح ثابت — **مرة واحدة**.
+  ///
+  /// يُعلَّم بإعداد `payment_method_key_v1` فلا يُعاد كل فتح. لكن **القراءة
+  /// لا تعتمد عليه**: `PaymentMethods.tryParse` يقبل العربي والمفتاح معًا،
+  /// فقاعدة لم تُرحَّل (أو نسخة احتياطية قديمة استُعيدت) تُعرض صحيحة.
+  ///
+  /// لا يرمي: كل جدول داخل `try` مستقل — جدول ناقص في قاعدة قديمة يجب ألّا
+  /// يمنع ترحيل البقية ولا فتح التطبيق.
+  Future<void> _migratePaymentMethodKeys(Database db) async {
+    try {
+      if (await getSetting('payment_method_key_v2') == '1') return;
+
+      const targets = <List<String>>[
+        ['invoices', 'payment_method'],
+        ['expenses', 'payment_method'],
+        ['customer_payments', 'payment_method'],
+        ['subscription_payments', 'method'],
+      ];
+
+      var changed = 0;
+      for (final target in targets) {
+        final table = target[0];
+        final column = target[1];
+        try {
+          for (final method in PaymentMethods.all) {
+            // القيمة العربية فقط تُرحَّل؛ المفاتيح تُترك (خاملة التكرار).
+            if (method.arabicLabel == method.key) continue;
+            changed += await db.rawUpdate(
+              'UPDATE "$table" SET "$column" = ? WHERE TRIM("$column") = ?',
+              [method.key, method.arabicLabel],
+            );
+          }
+        } catch (e) {
+          debugPrint('payment method migration skipped ($table): $e');
+        }
+      }
+
+      // الخيار المحفوظ في `settings` كان يحمل العربي أيضًا.
+      final stored = await getSetting(
+        AppConstants.settingPosDefaultPaymentMethod,
+      );
+      if (stored != null && stored.trim().isNotEmpty) {
+        final key = PaymentMethods.keyOf(stored, fallback: stored);
+        if (key != stored) {
+          await updateSetting(
+            AppConstants.settingPosDefaultPaymentMethod,
+            key,
+          );
+          changed++;
+        }
+      }
+
+      await updateSetting('payment_method_key_v2', '1');
+      debugPrint('ترحيل طرق الدفع: $changed قيمة');
+    } catch (e) {
+      debugPrint('payment method migration skipped: $e');
+    }
+  }
+
+  /// يضبط «طريقة الدفع الافتراضية» في نقطة البيع على `card` **مرة واحدة**.
+  ///
+  /// القيمة القديمة `cash` زُرعت في كل قاعدة قبل ربط الخيار بحوار الدفع،
+  /// و`_ensureDefaultSettings` لا يدهس قيمة قائمة. العلامة تمنع إعادة
+  /// الكتابة كل فتح، فيبقى اختيار المستخدم اللاحق (كاش/آجل) محفوظًا.
+  Future<void> _migratePosDefaultPaymentToCard() async {
+    try {
+      if (await getSetting('pos_default_payment_method_card_v1') == '1') {
+        return;
+      }
+      final stored = await getSetting(
+        AppConstants.settingPosDefaultPaymentMethod,
+      );
+      final key = PaymentMethods.keyOf(stored ?? '', fallback: '');
+      // الغائب/الفارغ/الكاش فقط يُحوَّل؛ «آجل» اختيار واعٍ يُترك كما هو.
+      if (key.isEmpty || key == PaymentMethod.cash.key) {
+        await updateSetting(
+          AppConstants.settingPosDefaultPaymentMethod,
+          PaymentMethod.card.key,
+        );
+      }
+      await updateSetting('pos_default_payment_method_card_v1', '1');
+    } catch (e) {
+      debugPrint('pos default payment migration skipped: $e');
+    }
+  }
+
+  /// ترحيل حالات المصنعية من نصّ عربي إلى رمز ثابت — مرة واحدة.
+  ///
+  /// لا يرمي: فشل الترحيل لا يمنع فتح التطبيق، والقراءة تقبل الشكلين.
+  Future<void> _migrateProcessingStatusKeys(Database db) async {
+    try {
+      if (await getSetting('processing_status_key_v1') == '1') return;
+      var changed = 0;
+      for (final status in ProcessingStatuses.all) {
+        changed += await db.rawUpdate(
+          'UPDATE "invoices" SET "status" = ? WHERE TRIM("status") = ?',
+          [status.key, status.arabicLabel],
+        );
+      }
+      await updateSetting('processing_status_key_v1', '1');
+      debugPrint('ترحيل حالات المصنعية: $changed قيمة');
+    } catch (e) {
+      debugPrint('processing status migration skipped: $e');
     }
   }
 

@@ -3,9 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:laundry/controller/showdialogcontroller.dart';
 import 'package:laundry/core/theme/app_colors.dart';
+import 'package:laundry/services/i18n/l10n.dart';
 import 'package:laundry/view/widget/common/animation_wrappers.dart';
 import 'package:laundry/view/widget/common/common_widgets.dart';
 import 'package:laundry/view/widget/customimg.dart';
+import 'package:laundry/services/i18n/ui_direction.dart';
 
 /// حوار اختيار الخدمة والإضافة للفاتورة — تصميم عصري كامل
 void dialog(Map<String, dynamic> data) {
@@ -20,7 +22,8 @@ void dialog(Map<String, dynamic> data) {
       init: ShowDialogController(),
       builder:
           (controller) => Directionality(
-            textDirection: TextDirection.rtl,
+            textDirection:
+                L10n.isRtl ? appTextDirection : TextDirection.ltr,
             child: SizedBox(
               width: 460,
               child: Column(
@@ -54,9 +57,9 @@ void dialog(Map<String, dynamic> data) {
                           ),
                         ),
                         const SizedBox(width: 10),
-                        const Expanded(
+                        Expanded(
                           child: Text(
-                            "اختر الخدمة و الكمية",
+                            tr('اختر الخدمة و الكمية'),
                             style: TextStyle(
                               fontFamily: 'cairo',
                               fontSize: 15,
@@ -68,7 +71,7 @@ void dialog(Map<String, dynamic> data) {
                         IconButton(
                           onPressed: () => Get.back(),
                           icon: const Icon(Icons.close, color: Colors.white),
-                          tooltip: 'إغلاق',
+                          tooltip: tr('إغلاق'),
                         ),
                       ],
                     ),
@@ -77,7 +80,7 @@ void dialog(Map<String, dynamic> data) {
 
                   // ─── اسم الصنف ───
                   Text(
-                    "${data['clothing_name']}",
+                    localized(data, 'clothing_name'),
                     style: TextStyle(
                       fontFamily: 'cairo',
                       fontSize: 18,
@@ -93,7 +96,7 @@ void dialog(Map<String, dynamic> data) {
                       _ServiceCard(
                         controller: controller,
                         type: "normalwashingironing",
-                        label: "غسيل وكوي عادي",
+                        label: tr("غسيل وكوي عادي"),
                         price: data["normal_washing_and_ironing_price"],
                         color: AppColors.success,
                         icon: Icons.local_laundry_service,
@@ -102,7 +105,7 @@ void dialog(Map<String, dynamic> data) {
                       _ServiceCard(
                         controller: controller,
                         type: "urgentwashingironing",
-                        label: "غسيل وكوي مستعجل",
+                        label: tr("غسيل وكوي مستعجل"),
                         price: data["urgent_washing_and_ironing_price"],
                         color: AppColors.warning,
                         icon: Icons.bolt,
@@ -115,7 +118,7 @@ void dialog(Map<String, dynamic> data) {
                       _ServiceCard(
                         controller: controller,
                         type: "normalironing",
-                        label: "كوي عادي",
+                        label: tr("كوي عادي"),
                         price: data["normal_ironing_price"],
                         color: AppColors.info,
                         icon: Icons.checkroom,
@@ -124,7 +127,7 @@ void dialog(Map<String, dynamic> data) {
                       _ServiceCard(
                         controller: controller,
                         type: "urgentironing",
-                        label: "كوي مستعجل",
+                        label: tr("كوي مستعجل"),
                         price: data["urgent_ironing_price"],
                         color: AppColors.violet,
                         icon: Icons.local_fire_department,
@@ -146,7 +149,9 @@ void dialog(Map<String, dynamic> data) {
                               maxLength: 60,
                               decoration: InputDecoration(
                                 hintText:
-                                    'ملاحظة (بقع، تلف، قصّات…) اكتب "بدون" إن أردت',
+                                    tr(
+                                      'ملاحظة (بقع، تلف، قصّات…) اكتب "بدون" إن أردت',
+                                    ),
                                 counterText: '',
                                 prefixIcon: const Icon(
                                   Icons.sticky_note_2_outlined,
@@ -239,8 +244,8 @@ void dialog(Map<String, dynamic> data) {
                                                         .photoPreview
                                                         .value
                                                         .isEmpty
-                                                    ? 'إرفاق صورة البقعة'
-                                                    : 'تم إرفاق الصورة ✓',
+                                                    ? tr('إرفاق صورة البقعة')
+                                                    : tr('تم إرفاق الصورة ✓'),
                                                 maxLines: 1,
                                                 overflow: TextOverflow.ellipsis,
                                                 style: const TextStyle(
@@ -278,7 +283,7 @@ void dialog(Map<String, dynamic> data) {
                                     ),
                                     const SizedBox(width: 8),
                                     IconButton(
-                                      tooltip: 'حذف الصورة',
+                                      tooltip: tr('حذف الصورة'),
                                       onPressed: () {
                                         controller.photoPath = "";
                                         controller.photoPreview.value = '';
@@ -323,7 +328,7 @@ void dialog(Map<String, dynamic> data) {
                                   ),
                                   const SizedBox(width: 6),
                                   Text(
-                                    "اختر نوع الخدمة لإضافته للفاتورة",
+                                    tr('اختر نوع الخدمة لإضافته للفاتورة'),
                                     style: TextStyle(
                                       fontFamily: 'cairo',
                                       fontSize: 12,
@@ -353,13 +358,13 @@ void dialog(Map<String, dynamic> data) {
                                           color: AppColors.danger,
                                         ),
                                         iconSize: 24,
-                                        tooltip: 'تقليل',
+                                        tooltip: tr('تقليل'),
                                       ),
                                       Column(
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
                                           Text(
-                                            "الكمية",
+                                            tr('الكمية'),
                                             style: TextStyle(
                                               fontFamily: 'cairo',
                                               fontSize: 10,
@@ -387,7 +392,7 @@ void dialog(Map<String, dynamic> data) {
                                           color: AppColors.success,
                                         ),
                                         iconSize: 24,
-                                        tooltip: 'زيادة',
+                                        tooltip: tr('زيادة'),
                                       ),
                                     ],
                                   ),
@@ -395,7 +400,7 @@ void dialog(Map<String, dynamic> data) {
                                 const SizedBox(width: 12),
                                 Expanded(
                                   child: GradientButton(
-                                    label: "إضافة للفاتورة",
+                                    label: tr('إضافة للفاتورة'),
                                     icon: Icons.add_shopping_cart,
                                     gradient: AppColors.successGradient,
                                     onPressed: () => controller.addWash(data),
@@ -481,7 +486,7 @@ class _ServiceCard extends StatelessWidget {
               ),
               const SizedBox(height: 7),
               Text(
-                label,
+                tr(label),
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontFamily: 'cairo',
@@ -495,7 +500,7 @@ class _ServiceCard extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    p == 0 ? 'مجاناً' : '$p',
+                    p == 0 ? tr('مجاناً') : '$p',
                     style: TextStyle(
                       fontFamily: 'cairo',
                       fontSize: 12,

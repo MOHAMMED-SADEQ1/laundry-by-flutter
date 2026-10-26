@@ -23,8 +23,7 @@ class ShiftLinkService {
   static Future<int?> activeShiftId() async {
     try {
       final rows = await _db.readData(
-        'SELECT shift_id FROM shifts WHERE end_time IS NULL '
-        'ORDER BY shift_id DESC LIMIT 1',
+        'SELECT shift_id FROM shifts WHERE end_time IS NULL ORDER BY shift_id DESC LIMIT 1',
       );
       if (rows.isEmpty) return null;
       return (rows.first['shift_id'] as num?)?.toInt();
@@ -41,8 +40,7 @@ class ShiftLinkService {
   static Future<String?> activeShiftStart() async {
     try {
       final rows = await _db.readData(
-        'SELECT start_time FROM shifts WHERE end_time IS NULL '
-        'ORDER BY shift_id DESC LIMIT 1',
+        'SELECT start_time FROM shifts WHERE end_time IS NULL ORDER BY shift_id DESC LIMIT 1',
       );
       if (rows.isEmpty) return null;
       return rows.first['start_time']?.toString();

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:laundry/core/theme/app_colors.dart';
+import 'package:laundry/services/i18n/l10n.dart';
+import 'package:laundry/services/i18n/ui_direction.dart';
 
 /// حقل إدخال موحد عصري
 class CustomTextFormField extends StatelessWidget {
@@ -32,12 +34,12 @@ class CustomTextFormField extends StatelessWidget {
         ),
       ),
       textAlign: TextAlign.start,
-      textDirection: TextDirection.rtl,
+      textDirection: appTextDirection,
       validator:
           validator ??
           (value) {
             if (value == null || value.isEmpty) {
-              return 'لا يمكن ترك هذا الحقل فارغا';
+              return tr('لا يمكن ترك هذا الحقل فارغا');
             }
             return null;
           },

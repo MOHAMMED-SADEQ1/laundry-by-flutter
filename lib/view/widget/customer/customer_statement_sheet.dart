@@ -4,6 +4,7 @@ import 'package:laundry/core/services/invoice_share_service.dart';
 import 'package:laundry/core/theme/app_colors.dart';
 import 'package:laundry/controller/customer/customer_statement_controller.dart';
 import 'package:laundry/services/customer/customer_statement_service.dart';
+import 'package:laundry/services/i18n/l10n.dart';
 
 /// كشف حساب الزبون — قائمة إجراءات واحدة تُستدعى من كل الشاشات.
 ///
@@ -36,9 +37,9 @@ Future<void> showCustomerStatementSheet(
           mainAxisSize: MainAxisSize.min,
           children: [
             const SizedBox(height: 12),
-            const Text(
-              'كشف الحساب',
-              style: TextStyle(
+            Text(
+              tr('كشف الحساب'),
+              style: const TextStyle(
                 fontFamily: 'cairo',
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
@@ -62,9 +63,9 @@ Future<void> showCustomerStatementSheet(
             Obx(
               () => ListTile(
                 leading: const Icon(Icons.date_range, color: AppColors.primary),
-                title: const Text(
-                  'الفترة',
-                  style: TextStyle(
+                title: Text(
+                  tr('الفترة'),
+                  style: const TextStyle(
                     fontFamily: 'cairo',
                     fontWeight: FontWeight.bold,
                   ),
@@ -86,13 +87,13 @@ Future<void> showCustomerStatementSheet(
             if (onQuickView != null)
               ListTile(
                 leading: const Icon(Icons.visibility, color: AppColors.warning),
-                title: const Text(
-                  'عرض سريع على الشاشة',
-                  style: TextStyle(fontFamily: 'cairo'),
+                title: Text(
+                  tr('عرض سريع على الشاشة'),
+                  style: const TextStyle(fontFamily: 'cairo'),
                 ),
-                subtitle: const Text(
-                  'ملخّص فوري بلا طباعة',
-                  style: TextStyle(fontFamily: 'cairo', fontSize: 12),
+                subtitle: Text(
+                  tr('ملخّص فوري بلا طباعة'),
+                  style: const TextStyle(fontFamily: 'cairo', fontSize: 12),
                 ),
                 onTap: () {
                   Navigator.pop(ctx);
@@ -101,9 +102,9 @@ Future<void> showCustomerStatementSheet(
               ),
             ListTile(
               leading: const Icon(Icons.print, color: AppColors.primary),
-              title: const Text(
-                'طباعة كشف الحساب',
-                style: TextStyle(fontFamily: 'cairo'),
+              title: Text(
+                tr('طباعة كشف الحساب'),
+                style: const TextStyle(fontFamily: 'cairo'),
               ),
               subtitle: Obx(
                 () => Text(
@@ -118,9 +119,9 @@ Future<void> showCustomerStatementSheet(
             ),
             ListTile(
               leading: const Icon(Icons.share, color: AppColors.success),
-              title: const Text(
-                'إرسال الكشف PDF (واتساب)',
-                style: TextStyle(fontFamily: 'cairo'),
+              title: Text(
+                tr('إرسال الكشف PDF (واتساب)'),
+                style: const TextStyle(fontFamily: 'cairo'),
               ),
               subtitle: Obx(
                 () => Text(
@@ -135,9 +136,9 @@ Future<void> showCustomerStatementSheet(
             ),
             ListTile(
               leading: const Icon(Icons.chat, color: AppColors.info),
-              title: const Text(
-                'إرسال ملخّص نصّي',
-                style: TextStyle(fontFamily: 'cairo'),
+              title: Text(
+                tr('إرسال ملخّص نصّي'),
+                style: const TextStyle(fontFamily: 'cairo'),
               ),
               onTap: () async {
                 Navigator.pop(ctx);
@@ -208,20 +209,20 @@ Future<void> _pickPeriod(
         mainAxisSize: MainAxisSize.min,
         children: [
           const SizedBox(height: 12),
-          const Text(
-            'الفترة',
-            style: TextStyle(
+          Text(
+            tr('الفترة'),
+            style: const TextStyle(
               fontFamily: 'cairo',
               fontSize: 15,
               fontWeight: FontWeight.bold,
             ),
           ),
           const Divider(height: 20),
-          _opt(c, 'all', 'كل الفترة', 'بلا تقييد تاريخي'),
-          _opt(c, 'thisMonth', 'هذا الشهر', 'من أول الشهر إلى اليوم'),
-          _opt(c, 'lastMonth', 'الشهر الماضي', 'الشهر السابق كاملًا'),
-          _opt(c, 'last30', 'آخر ٣٠ يومًا', 'من اليوم رجوعًا'),
-          _opt(c, 'custom', 'من تاريخ إلى تاريخ', 'أحدّد البداية والنهاية'),
+          _opt(c, 'all', tr('كل الفترة'), tr('بلا تقييد تاريخي')),
+          _opt(c, 'thisMonth', tr('هذا الشهر'), tr('من أول الشهر إلى اليوم')),
+          _opt(c, 'lastMonth', tr('الشهر الماضي'), tr('الشهر السابق كاملًا')),
+          _opt(c, 'last30', tr('آخر ٣٠ يومًا'), tr('من اليوم رجوعًا')),
+          _opt(c, 'custom', tr('من تاريخ إلى تاريخ'), tr('أحدّد البداية والنهاية')),
           const SizedBox(height: 8),
         ],
       ),

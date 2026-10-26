@@ -1,6 +1,10 @@
 import 'package:flutter/foundation.dart';
 import 'package:laundry/sqldb.dart';
+import 'package:laundry/services/permission/permission_catalog.dart';
+import 'package:laundry/services/permission/permission_service.dart';
 import 'package:laundry/services/security/session_manager.dart';
+import 'package:laundry/services/payment/payment_method.dart';
+import 'package:laundry/services/i18n/l10n.dart';
 
 /// أصناف المصروفات التشغيلية المعتادة لمغسلة — تُستخدم في القوائم المنسدلة.
 /// التصنيف نصّي حر (يمكن إضافة غيره)، لكن هذه القائمة تُسرّع الإدخال
@@ -15,6 +19,22 @@ class ExpenseCategory {
   static const String marketing = 'دعاية وإعلان';
   static const String government = 'رسوم حكومية';
   static const String other = 'أخرى';
+
+  /// الترجمة الإنجليزية لكل تصنيف — للعرض فقط، والتخزين يبقى عربيًّا.
+  static const Map<String, String> english = {
+    materials: 'Materials and supplies',
+    salaries: 'Salaries and wages',
+    rent: 'Rent',
+    electricity: 'Electricity and water',
+    maintenance: 'Maintenance and repair',
+    transport: 'Transport and delivery',
+    marketing: 'Marketing and advertising',
+    government: 'Government fees',
+    other: 'Other',
+  };
+
+  static String label(String category) =>
+      L10n.pick(category, english[category] ?? '');
 
   static const List<String> all = [
     materials,
@@ -33,7 +53,9 @@ class ExpenseCategory {
 class ExpenseRow {
   final int? expenseId;
   final String category;
+  final String categoryEn;
   final String description;
+  final String descriptionEn;
   final double amount;
   final String date;
   final String paymentMethod;
@@ -51,10 +73,12 @@ class ExpenseRow {
   const ExpenseRow({
     this.expenseId,
     required this.category,
+    this.categoryEn = '',
     this.description = '',
+    this.descriptionEn = '',
     required this.amount,
     required this.date,
-    this.paymentMethod = 'كاش',
+    this.paymentMethod = 'cash',
     this.recordedBy,
     this.taxAmount = 0,
     this.taxBase = 0,
@@ -63,13 +87,21 @@ class ExpenseRow {
 
   bool get hasInputVat => taxAmount > 0.004;
 
+  String get displayCategory => categoryEn.trim().isEmpty
+      ? ExpenseCategory.label(category)
+      : localizedText(category, categoryEn);
+
+  String get displayDescription => localizedText(description, descriptionEn);
+
   factory ExpenseRow.fromMap(Map<String, dynamic> m) => ExpenseRow(
     expenseId: m['expense_id'] as int?,
     category: '${m['category'] ?? ''}',
+    categoryEn: '${m['category_en'] ?? ''}',
     description: '${m['description'] ?? ''}',
+    descriptionEn: '${m['description_en'] ?? ''}',
     amount: (m['amount'] ?? 0).toDouble(),
     date: '${m['date'] ?? ''}',
-    paymentMethod: '${m['payment_method'] ?? 'كاش'}',
+    paymentMethod: '${m['payment_method'] ?? 'cash'}',
     recordedBy: m['recorded_by'] as int?,
     taxAmount: (m['tax_amount'] ?? 0).toDouble(),
     taxBase: (m['tax_base'] ?? 0).toDouble(),
@@ -110,33 +142,40 @@ class ExpenseService {
 
   /// حدود الفترة بصيغة نصية متسقة (yyyy-MM-dd) — تُبنى في Dart بتوقيت محلي.
   static String dayKey(DateTime d) =>
-      '${d.year.toString().padLeft(4, '0')}-'
-      '${d.month.toString().padLeft(2, '0')}-'
-      '${d.day.toString().padLeft(2, '0')}';
+      '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
   /// إضافة مصروف — يرفض المبالغ غير الموجبة.
   Future<bool> add({
     required String category,
     required double amount,
     String description = '',
+    String categoryEn = '',
+    String descriptionEn = '',
     DateTime? date,
-    String paymentMethod = 'كاش',
+    String paymentMethod = 'cash',
     double taxRate = 0,
     double? taxAmount,
     String taxNumber = '',
   }) async {
     if (category.trim().isEmpty) {
-      throw Exception('التصنيف مطلوب');
+      throw Exception(tr('التصنيف مطلوب'));
     }
     if (amount <= 0) {
       throw Exception('المبلغ يجب أن يكون أكبر من صفر');
     }
+    // 🛡️ المصروف خروج نقدي من الدرج ⇒ إنفاذ الصلاحية في الخدمة لا في الشاشة.
+    PermissionService.assertCan(
+      PermissionKeys.expenseManage,
+      action: tr('تسجيل المصروفات'),
+    );
     final when = date ?? DateTime.now();
     // ضريبة المدخلات: تُمرَّر مباشرةً أو تُستخرج من نسبة على مبلغ **شامل**.
     final vat = _resolveVat(amount, taxRate, taxAmount);
     await _db.safeInsert('expenses', {
       'category': category.trim(),
+      'category_en': categoryEn.trim(),
       'description': description.trim(),
+      'description_en': descriptionEn.trim(),
       'amount': amount,
       'date': when.toIso8601String(),
       'payment_method': paymentMethod,
@@ -182,15 +221,23 @@ class ExpenseService {
     required String category,
     required double amount,
     String description = '',
+    String categoryEn = '',
+    String descriptionEn = '',
     DateTime? date,
-    String paymentMethod = 'كاش',
+    String paymentMethod = 'cash',
   }) async {
     if (amount <= 0) throw Exception('المبلغ يجب أن يكون أكبر من صفر');
+    PermissionService.assertCan(
+      PermissionKeys.expenseManage,
+      action: tr('تعديل المصروفات'),
+    );
     final rows = await _db.safeUpdate(
       'expenses',
       {
         'category': category.trim(),
+        'category_en': categoryEn.trim(),
         'description': description.trim(),
+        'description_en': descriptionEn.trim(),
         'amount': amount,
         if (date != null) 'date': date.toIso8601String(),
         'payment_method': paymentMethod,
@@ -202,6 +249,10 @@ class ExpenseService {
   }
 
   Future<bool> delete(int expenseId) async {
+    PermissionService.assertCan(
+      PermissionKeys.expenseManage,
+      action: tr('حذف المصروفات'),
+    );
     final rows = await _db.safeDelete(
       'expenses',
       where: 'expense_id = ?',
@@ -257,7 +308,7 @@ class ExpenseService {
       for (final r in rows) {
         total += r.amount;
         byCat[r.category] = (byCat[r.category] ?? 0) + r.amount;
-        if (r.paymentMethod == 'كاش') cash += r.amount;
+        if (PaymentMethods.isCash(r.paymentMethod)) cash += r.amount;
       }
       final sorted = byCat.entries.toList()
         ..sort((a, b) => b.value.compareTo(a.value));
@@ -290,8 +341,7 @@ class ExpenseService {
   }) async {
     try {
       final rows = await _db.readData(
-        'SELECT COALESCE(SUM(COALESCE(tax_amount, 0)), 0) AS vat '
-        'FROM expenses WHERE DATE(date) >= ? AND DATE(date) <= ?',
+        'SELECT COALESCE(SUM(COALESCE(tax_amount, 0)), 0) AS vat FROM expenses WHERE DATE(date) >= ? AND DATE(date) <= ?',
         [dayKey(from), dayKey(to)],
       );
       return (rows.firstOrNull?['vat'] as num?)?.toDouble() ?? 0;

@@ -3,10 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
 import 'package:laundry/controller/previousinvoicecontroller.dart';
-import 'package:laundry/controller/printInvoicecontroller.dart';
 import 'package:laundry/controller/shift_controller.dart';
 import 'package:laundry/core/theme/app_colors.dart';
-import 'package:laundry/services/business_info_service.dart';
+import 'package:laundry/services/i18n/l10n.dart';
+import 'package:laundry/services/payment/payment_method.dart';
 import 'package:laundry/view/widget/common/animation_wrappers.dart';
 import 'package:laundry/view/widget/common/common_widgets.dart';
 import 'package:laundry/view/widget/common/developer_credit.dart';
@@ -22,18 +22,18 @@ class ShiftsHistoryScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: CustomAppbar(
-        title: "سجل الورديات",
-        subtitle: 'الورديات المغلقة وملخصاتها المالية',
+        title: tr('سجل الورديات'),
+        subtitle: tr('الورديات المغلقة وملخصاتها المالية'),
       ),
       body: Obx(() {
         if (controller.isLoadingShifts.value) {
           return const Center(child: CircularProgressIndicator(strokeWidth: 3));
         }
         if (controller.closedShifts.isEmpty) {
-          return const EmptyState(
+          return EmptyState(
             icon: Icons.history_outlined,
-            title: "لا توجد ورديات سابقة",
-            subtitle: 'ستظهر هنا الورديات بعد إغلاقها من القائمة الجانبية',
+            title: tr('لا توجد ورديات سابقة'),
+            subtitle: tr('ستظهر هنا الورديات بعد إغلاقها من القائمة الجانبية'),
           );
         }
         return ListView.builder(
@@ -90,7 +90,7 @@ class ShiftsHistoryScreen extends StatelessWidget {
                           ),
                           const SizedBox(width: 8),
                           Text(
-                            'وردية رقم ${shift['shift_id']}',
+                            trf('وردية رقم {0}', ['${shift['shift_id']}']),
                             style: const TextStyle(
                               fontFamily: 'cairo',
                               fontSize: 14,
@@ -100,7 +100,7 @@ class ShiftsHistoryScreen extends StatelessWidget {
                           ),
                           const Spacer(),
                           IconButton(
-                            tooltip: 'عرض فواتير الوردية',
+                            tooltip: tr('عرض فواتير الوردية'),
                             onPressed:
                                 () => _showShiftInvoices(controller, shift),
                             icon: const Icon(
@@ -110,7 +110,7 @@ class ShiftsHistoryScreen extends StatelessWidget {
                             ),
                           ),
                           IconButton(
-                            tooltip: 'طباعة الملخص',
+                            tooltip: tr('طباعة الملخص'),
                             onPressed: () => controller.printShift(shift),
                             icon: const Icon(
                               Icons.print_outlined,
@@ -130,14 +130,14 @@ class ShiftsHistoryScreen extends StatelessWidget {
                               Expanded(
                                 child: _timeRow(
                                   Icons.play_arrow,
-                                  'البداية',
+                                  tr('البداية'),
                                   startTime,
                                 ),
                               ),
                               Expanded(
                                 child: _timeRow(
                                   Icons.stop,
-                                  'النهاية',
+                                  tr('النهاية'),
                                   endTime,
                                   invert: true,
                                 ),
@@ -149,7 +149,7 @@ class ShiftsHistoryScreen extends StatelessWidget {
                             children: [
                               Expanded(
                                 child: _moneyBox(
-                                  label: 'كاش',
+                                  label: PaymentMethod.cash.label,
                                   value: cash,
                                   color: AppColors.success,
                                   icon: Icons.payments_outlined,
@@ -158,7 +158,7 @@ class ShiftsHistoryScreen extends StatelessWidget {
                               const SizedBox(width: 10),
                               Expanded(
                                 child: _moneyBox(
-                                  label: 'شبكة',
+                                  label: PaymentMethod.card.label,
                                   value: network,
                                   color: AppColors.info,
                                   icon: Icons.credit_card,
@@ -167,7 +167,7 @@ class ShiftsHistoryScreen extends StatelessWidget {
                               const SizedBox(width: 10),
                               Expanded(
                                 child: _moneyBox(
-                                  label: 'الفواتير',
+                                  label: tr('الفواتير'),
                                   value: count.toDouble(),
                                   color: AppColors.warning,
                                   icon: Icons.receipt_long,
@@ -190,9 +190,9 @@ class ShiftsHistoryScreen extends StatelessWidget {
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                const Text(
-                                  'إجمالي الوردية',
-                                  style: TextStyle(
+                                Text(
+                                  tr('إجمالي الوردية'),
+                                  style: const TextStyle(
                                     fontFamily: 'cairo',
                                     fontSize: 13,
                                     fontWeight: FontWeight.bold,
@@ -200,7 +200,9 @@ class ShiftsHistoryScreen extends StatelessWidget {
                                   ),
                                 ),
                                 Text(
-                                  '${(cash + network).toStringAsFixed(2)} ر.س',
+                                  trf('{0} ر.س', [
+                                    (cash + network).toStringAsFixed(2),
+                                  ]),
                                   style: const TextStyle(
                                     fontFamily: 'cairo',
                                     fontSize: 16,
@@ -293,7 +295,7 @@ class ShiftsHistoryScreen extends StatelessWidget {
             const Icon(Icons.help_outline, size: 16, color: AppColors.warning),
             const SizedBox(width: 8),
             Text(
-              'أُقفلت بلا جرد للدرج',
+              tr('أُقفلت بلا جرد للدرج'),
               style: TextStyle(
                 fontFamily: 'cairo',
                 fontSize: 12,
@@ -312,10 +314,10 @@ class ShiftsHistoryScreen extends StatelessWidget {
         ? AppColors.success
         : (difference > 0 ? AppColors.info : AppColors.danger);
     final diffLabel = balanced
-        ? 'مطابق'
+        ? tr('مطابق')
         : difference > 0
-        ? 'زيادة ${difference.toStringAsFixed(2)}'
-        : 'عجز ${difference.abs().toStringAsFixed(2)}';
+        ? trf('زيادة {0}', [difference.toStringAsFixed(2)])
+        : trf('عجز {0}', [difference.abs().toStringAsFixed(2)]);
 
     return Container(
       width: double.infinity,
@@ -332,8 +334,8 @@ class ShiftsHistoryScreen extends StatelessWidget {
             children: [
               Icon(Icons.calculate_outlined, size: 16, color: color),
               const SizedBox(width: 8),
-              const Text(
-                'جرد الدرج',
+              Text(
+                tr('جرد الدرج'),
                 style: TextStyle(
                   fontFamily: 'cairo',
                   fontSize: 12,
@@ -357,7 +359,7 @@ class ShiftsHistoryScreen extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  'المتوقع: ${expected.toStringAsFixed(2)}',
+                  trf('المتوقع: {0}', [expected.toStringAsFixed(2)]),
                   style: TextStyle(
                     fontFamily: 'cairo',
                     fontSize: 11,
@@ -367,7 +369,7 @@ class ShiftsHistoryScreen extends StatelessWidget {
               ),
               Expanded(
                 child: Text(
-                  'المعدود: ${counted.toStringAsFixed(2)}',
+                  trf('المعدود: {0}', [counted.toStringAsFixed(2)]),
                   textAlign: TextAlign.end,
                   style: TextStyle(
                     fontFamily: 'cairo',
@@ -382,7 +384,7 @@ class ShiftsHistoryScreen extends StatelessWidget {
           if (reason.isNotEmpty) ...[
             const SizedBox(height: 4),
             Text(
-              'السبب: $reason',
+              trf('السبب: {0}', [reason]),
               style: TextStyle(
                 fontFamily: 'cairo',
                 fontSize: 11,
@@ -468,9 +470,9 @@ void _showShiftInvoices(
                         size: 20,
                       ),
                       const SizedBox(width: 8),
-                      const Text(
-                        'فواتير الوردية',
-                        style: TextStyle(
+                      Text(
+                        tr('فواتير الوردية'),
+                        style: const TextStyle(
                           fontFamily: 'cairo',
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
@@ -485,12 +487,12 @@ void _showShiftInvoices(
                           color: Colors.white,
                           size: 20,
                         ),
-                        tooltip: 'إغلاق',
+                        tooltip: tr('إغلاق'),
                       ),
                     ],
                   ),
                   Text(
-                    'الوردية رقم ${shift['shift_id']}',
+                    trf('الوردية رقم {0}', ['${shift['shift_id']}']),
                     style: TextStyle(
                       fontFamily: 'cairo',
                       fontSize: 11.5,
@@ -527,7 +529,7 @@ void _showShiftInvoices(
                             ),
                             SizedBox(height: 8),
                             Text(
-                              'لا توجد فواتير في هذه الوردية',
+                              tr('لا توجد فواتير في هذه الوردية'),
                               style: TextStyle(
                                 fontFamily: 'cairo',
                                 fontSize: 13,
@@ -564,7 +566,8 @@ class _ShiftInvoiceRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final paid = (invoice['paid_amount'] ?? 0).toDouble();
-    final isCash = invoice['payment_method'] == 'كاش';
+    final method = invoice['payment_method']?.toString() ?? PaymentMethod.cash.key;
+    final isCash = PaymentMethods.isCash(method);
     final color = isCash ? AppColors.success : AppColors.info;
 
     Map<String, dynamic>? mapdata;
@@ -612,7 +615,7 @@ class _ShiftInvoiceRow extends StatelessWidget {
                 Text(
                   invoice['customer_name']?.toString().isNotEmpty == true
                       ? invoice['customer_name']
-                      : 'عميل نقدي',
+                      : tr('عميل نقدي'),
                   style: TextStyle(
                     fontFamily: 'cairo',
                     fontSize: 12.5,
@@ -632,8 +635,11 @@ class _ShiftInvoiceRow extends StatelessWidget {
                 if (listdata.isNotEmpty)
                   Text(
                     listdata.length == 1
-                        ? '${listdata.first['vestments']} — ${listdata.first['content']}'
-                        : '${listdata.first['vestments']} و ${listdata.length - 1} أصناف أخرى',
+                        ? '${localized(listdata.first, 'vestments')} — ${localized(listdata.first, 'content')}'
+                        : trf('{0} و {1} أصناف أخرى', [
+                            localized(listdata.first, 'vestments'),
+                            '${listdata.length - 1}',
+                          ]),
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       fontFamily: 'cairo',
@@ -646,13 +652,13 @@ class _ShiftInvoiceRow extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           LabelChip(
-            text: invoice['payment_method']?.toString() ?? 'كاش',
+            text: PaymentMethods.label(method),
             color: color,
             icon: isCash ? Icons.payments : Icons.credit_card,
           ),
           const SizedBox(width: 6),
           Text(
-            '${paid.toStringAsFixed(2)} ر.س',
+            trf('{0} ر.س', [paid.toStringAsFixed(2)]),
             style: TextStyle(
               fontFamily: 'cairo',
               fontSize: 13,
@@ -662,8 +668,8 @@ class _ShiftInvoiceRow extends StatelessWidget {
           ),
           const SizedBox(width: 4),
           IconButton(
-            tooltip: 'إعادة طباعة',
-            onPressed: () => _reprintInvoice(mapdata, listdata),
+            tooltip: tr('إعادة طباعة'),
+            onPressed: _reprintInvoice,
             icon: Icon(Icons.print_outlined, color: AppColors.info, size: 20),
           ),
         ],
@@ -671,32 +677,14 @@ class _ShiftInvoiceRow extends StatelessWidget {
     );
   }
 
-  void _reprintInvoice(
-    Map<String, dynamic>? mapdata,
-    List<Map<String, dynamic>> listdata,
-  ) {
-    if (mapdata == null) {
-      Get.snackbar('خطأ', 'بيانات الفاتورة غير مكتملة');
-      return;
-    }
-    final data = {
-      'payment': mapdata['payment'],
-      'logoImage': PrintInvoiceController.logoImageBytes!,
-      'riyalImage': PrintInvoiceController.riyalImageBytes!,
-      'arabicFont': PrintInvoiceController.arabicFont!,
-      'invoiceItems': listdata,
-      'summation': mapdata['summation'],
-      'invoiceNumber': invoice['invoices_id'],
-      'customername': mapdata['customername'],
-      'date': mapdata['date'],
-      'bizName': BusinessInfoService.instance.name,
-      'bizPhone': BusinessInfoService.instance.phone,
-      'bizAddress': BusinessInfoService.instance.address,
-    };
+  Future<void> _reprintInvoice() async {
+    // الصفّ المخزَّن نفسه يُمرَّر كاملًا، فيُبنى منه كل شيء: المقاس والهاتف
+    // ورمز الاستلام والضريبة ولقطة الأصناف — وورقة المغسلة معه إن كانت
+    // مفعّلة، بدل حمولة عرض ناقصة تُنتج فاتورة بلا تفاصيل.
     final printCtrl =
         Get.isRegistered<PreviousInvoiceController>()
             ? Get.find<PreviousInvoiceController>()
             : Get.put(PreviousInvoiceController());
-    printCtrl.printPDF(data);
+    await printCtrl.printInvoice(invoice);
   }
 }

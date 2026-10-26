@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:laundry/controller/profile_controller.dart';
 import 'package:laundry/core/theme/app_colors.dart';
+import 'package:laundry/services/i18n/l10n.dart';
 import 'package:laundry/view/widget/common/developer_credit.dart';
 import 'package:laundry/view/widget/customappbar.dart';
 
@@ -24,7 +25,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: CustomAppbar(title: 'الملف الشخصي'),
+      appBar: CustomAppbar(title: tr('الملف الشخصي')),
       body: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
@@ -39,9 +40,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
           }
           final user = controller.currentUser.value;
           if (user == null) {
-            return const Center(
-              child: Text('لا توجد بيانات',
-                  style: TextStyle(fontFamily: 'cairo')),
+            return Center(
+              child: Text(tr('لا توجد بيانات'),
+                  style: const TextStyle(fontFamily: 'cairo')),
             );
           }
           return ListView(
@@ -130,9 +131,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           Icon(Icons.lock_outline,
                               color: AppColors.primary, size: 22),
                           const SizedBox(width: 8),
-                          const Text(
-                            'تغيير كلمة المرور',
-                            style: TextStyle(
+                          Text(
+                            tr('تغيير كلمة المرور'),
+                            style: const TextStyle(
                               fontFamily: 'cairo',
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
@@ -143,17 +144,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                       const SizedBox(height: 16),
                       _PasswordField(
-                        label: 'كلمة المرور الحالية',
+                        label: tr('كلمة المرور الحالية'),
                         icon: Icons.lock,
                       ),
                       const SizedBox(height: 12),
                       _PasswordField(
-                        label: 'كلمة المرور الجديدة',
+                        label: tr('كلمة المرور الجديدة'),
                         icon: Icons.lock_reset,
                       ),
                       const SizedBox(height: 12),
                       _PasswordField(
-                        label: 'تأكيد كلمة المرور الجديدة',
+                        label: tr('تأكيد كلمة المرور الجديدة'),
                         icon: Icons.lock_reset,
                       ),
                       const SizedBox(height: 16),
@@ -162,9 +163,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         child: ElevatedButton.icon(
                           onPressed: () => _changePassword(context),
                           icon: const Icon(Icons.save, color: Colors.white),
-                          label: const Text(
-                            'حفظ كلمة المرور',
-                            style: TextStyle(
+                          label: Text(
+                            tr('حفظ كلمة المرور'),
+                            style: const TextStyle(
                               fontFamily: 'cairo',
                               color: Colors.white,
                               fontWeight: FontWeight.bold,
@@ -203,13 +204,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (currentCtrl.text.isEmpty ||
         newCtrl.text.isEmpty ||
         confirmCtrl.text.isEmpty) {
-      Get.snackbar('خطأ', 'أدخل جميع كلمات المرور',
+      Get.snackbar(tr('خطأ'), tr('أدخل جميع كلمات المرور'),
           snackPosition: SnackPosition.BOTTOM);
       return;
     }
 
     if (newCtrl.text != confirmCtrl.text) {
-      Get.snackbar('خطأ', 'كلمة المرور الجديدة غير متطابقة',
+      Get.snackbar(tr('خطأ'), tr('كلمة المرور الجديدة غير متطابقة'),
           snackPosition: SnackPosition.BOTTOM);
       return;
     }
@@ -259,7 +260,7 @@ class _PasswordFieldState extends State<_PasswordField> {
       controller: _getController(context),
       obscureText: _obscure,
       decoration: InputDecoration(
-        labelText: widget.label,
+        labelText: tr(widget.label),
         labelStyle: const TextStyle(fontFamily: 'cairo'),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
         prefixIcon: Icon(widget.icon),

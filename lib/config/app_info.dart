@@ -3,17 +3,32 @@
 /// كان رقم الإصدار مكتوبًا يدويًا في الواجهة (`1.2.0`) ومختلفًا عن
 /// `pubspec.yaml` (`1.1.2+1`) — فأصبح المستخدم يرى رقمًا لا يطابق النسخة
 /// المبنية فعلًا. الآن يُقرأ الرقم من [PackageInfo] مرة واحدة عند بدء التطبيق.
+library;
+
+import 'package:laundry/services/i18n/l10n.dart';
+
 class AppInfo {
   AppInfo._();
 
   static const String fallbackVersion = '1.2.0';
 
   // ─── حقوق المطوّر (مصدر وحيد يُستعمل في كل شاشات النظام والطباعة) ───
-  /// الاسم كما يُعرَض في نافذة «مطوّر النظام»
-  static const String developerName = 'مطوّر النظام — المهندس محمد صادق';
+  //
+  // 🚨 **النصّان يمرّان من `tr`**: كانا ثابتين عربيَّين (`const`) فلا
+  // يترجمان أبدًا — فتبقى جملة الحقوق عربية في الواجهة الإنجليزية وحدها
+  // بين كل النصوص. والثابت العربي هو **مفتاح** القاموس لا نصّ العرض.
 
-  /// جملة حقوق المطوّر التي تُعرض في شاشات النظام والفواتير
-  static const String developerCredit = 'برمجة وتطوير المهندس محمد صادق';
+  /// مفتاح القاموس: الاسم كما يُعرَض في نافذة «مطوّر النظام».
+  static const String developerNameKey = 'مطوّر النظام — المهندس محمد صادق';
+
+  /// مفتاح القاموس: جملة حقوق المطوّر التي تُعرض في الشاشات والفواتير.
+  static const String developerCreditKey = 'برمجة وتطوير المهندس محمد صادق';
+
+  /// الاسم بلغة الواجهة.
+  static String get developerName => tr(developerNameKey);
+
+  /// جملة الحقوق بلغة الواجهة.
+  static String get developerCredit => tr(developerCreditKey);
 
   static const String developerEmail = 'mohammadsadekaljafri@gmail.com';
   static const String developerPhone = '0537498756';

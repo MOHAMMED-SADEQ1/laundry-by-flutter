@@ -4,6 +4,9 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:laundry/config/constants.dart';
 import 'package:laundry/services/database/backup_naming.dart';
+import 'package:laundry/services/i18n/l10n.dart';
+import 'package:laundry/services/permission/permission_catalog.dart';
+import 'package:laundry/services/permission/permission_service.dart';
 import 'package:laundry/services/security/session_manager.dart';
 import 'package:laundry/sqldb.dart';
 import 'package:path_provider/path_provider.dart';
@@ -178,7 +181,7 @@ class BackupService {
       try {
         if (await f.exists()) await f.delete();
       } catch (e) {
-        debugPrint('تعذّر حذف $suffix: $e');
+        debugPrint(trf('تعذّر حذف {0}: {1}', [suffix, e]));
       }
     }
   }
@@ -202,7 +205,9 @@ class BackupService {
         await db.execute('VACUUM INTO ?', [destination]);
         if (await out.exists()) return;
       } catch (e) {
-        debugPrint('VACUUM INTO غير مدعوم على هذا الجهاز، نسخ مباشر: $e');
+        debugPrint(
+          trf('VACUUM INTO غير مدعوم على هذا الجهاز، نسخ مباشر: {0}', [e]),
+        );
       }
       try {
         await db.rawQuery('PRAGMA wal_checkpoint(FULL)');
@@ -229,14 +234,19 @@ class BackupService {
   static Future<BackupFileInfo> inspectBackupFile(String path) async {
     final file = File(path);
     if (!await file.exists()) {
-      return BackupFileInfo.rejected('ملف النسخة الاحتياطية غير موجود');
+      return BackupFileInfo.rejected(
+        tr('ملف النسخة الاحتياطية غير موجود'),
+      );
     }
 
     final stat = await file.stat();
     final size = stat.size;
     if (size < 512) {
       return BackupFileInfo.rejected(
-        'الملف فارغ أو أصغر من أن يكون قاعدة بيانات (${BackupNaming.formatSize(size)})',
+        trf(
+          'الملف فارغ أو أصغر من أن يكون قاعدة بيانات ({0})',
+          [BackupNaming.formatSize(size)],
+        ),
         sizeBytes: size,
       );
     }
@@ -248,12 +258,17 @@ class BackupService {
       final head = await raf.read(100);
       if (!BackupNaming.validateBackupHeader(head)) {
         return BackupFileInfo.rejected(
-          'هذا ليس ملف قاعدة بيانات SQLite — تأكد أنك اخترت ملف نسخة احتياطية (‎.db‎)',
+          tr(
+            'هذا ليس ملف قاعدة بيانات SQLite — تأكد أنك اخترت ملف نسخة احتياطية (‎.db‎)',
+          ),
           sizeBytes: size,
         );
       }
     } catch (e) {
-      return BackupFileInfo.rejected('تعذّر قراءة الملف: $e', sizeBytes: size);
+      return BackupFileInfo.rejected(
+        trf('تعذّر قراءة الملف: {0}', [e]),
+        sizeBytes: size,
+      );
     } finally {
       try {
         await raf?.close();
@@ -271,7 +286,9 @@ class BackupService {
           : '${integrity.first.values.first}'.toLowerCase();
       if (verdict != 'ok') {
         return BackupFileInfo.rejected(
-          'الملف تالف — فحص السلامة أفاد: ${verdict.isEmpty ? 'بلا نتيجة' : verdict}',
+          trf('الملف تالف — فحص السلامة أفاد: {0}', [
+            verdict.isEmpty ? tr('بلا نتيجة') : verdict,
+          ]),
           sizeBytes: size,
         );
       }
@@ -285,8 +302,10 @@ class BackupService {
           .toList();
       if (missing.isNotEmpty) {
         return BackupFileInfo.rejected(
-          'الملف لا يحوي جداول هذا النظام (المفقود: ${missing.join('، ')}) '
-          '— قد يكون قاعدة بيانات نظام آخر',
+          trf(
+            'الملف لا يحوي جداول هذا النظام (المفقود: {0}) — قد يكون قاعدة بيانات نظام آخر',
+            [missing.join(tr('، '))],
+          ),
           sizeBytes: size,
         );
       }
@@ -298,8 +317,10 @@ class BackupService {
           : ((versionRows.first.values.first ?? 0) as num).toInt();
       if (schemaVersion > AppConstants.dbVersion) {
         return BackupFileInfo.rejected(
-          'هذه النسخة من إصدار أحدث من النظام (بنية $schemaVersion مقابل '
-          '$AppConstants.dbVersion) — حدّث التطبيق أولًا ثم أعد المحاولة',
+          trf(
+            'هذه النسخة من إصدار أحدث من النظام (بنية {0} مقابل {1}) — حدّث التطبيق أولًا ثم أعد المحاولة',
+            [schemaVersion, AppConstants.dbVersion],
+          ),
           sizeBytes: size,
         );
       }
@@ -325,7 +346,7 @@ class BackupService {
       );
     } catch (e) {
       return BackupFileInfo.rejected(
-        'تعذّر فتح الملف كقاعدة بيانات: $e',
+        trf('تعذّر فتح الملف كقاعدة بيانات: {0}', [e]),
         sizeBytes: size,
       );
     } finally {
@@ -359,12 +380,20 @@ class BackupService {
     String? directoryPath,
     bool askDestination = true,
   }) async {
+    // 🛡️ إنفاذ الصلاحية في الخدمة — الخروج بالنسخة يسرّب بيانات المنشأة
+    // كاملةً في ملف واحد قابل للنقل، فهو عمل حوكمة لا عمل تشغيلي.
+    if (!PermissionService.can(PermissionKeys.backupPerform)) {
+      return BackupResult.failure(
+        tr('لا تملك صلاحية النسخ الاحتياطي، راجع مدير النظام.'),
+      );
+    }
+
     Directory? tempDir;
     try {
       final db = SqlDB();
       final dbPath = await db.getDatabasePath();
       if (!await File(dbPath).exists()) {
-        return BackupResult.failure('قاعدة البيانات غير موجودة');
+        return BackupResult.failure(tr('قاعدة البيانات غير موجودة'));
       }
 
       // 1) لقطة متّسقة في مجلد مؤقت
@@ -375,7 +404,9 @@ class BackupService {
       final snapInfo = await inspectBackupFile(snapshot);
       if (!snapInfo.valid) {
         return BackupResult.failure(
-          'تعذّر إنشاء نسخة سليمة: ${snapInfo.reason ?? 'سبب غير معروف'}',
+          trf('تعذّر إنشاء نسخة سليمة: {0}', [
+            snapInfo.reason ?? tr('سبب غير معروف'),
+          ]),
         );
       }
       final size = snapInfo.sizeBytes;
@@ -442,7 +473,9 @@ class BackupService {
         sizeBytes: size,
       );
     } catch (e) {
-      return BackupResult.failure('فشل في إنشاء النسخة الاحتياطية: $e');
+      return BackupResult.failure(
+        trf('فشل في إنشاء النسخة الاحتياطية: {0}', [e]),
+      );
     } finally {
       // المجلد المؤقت يُنظَّف دائمًا حتى عند الفشل.
       try {
@@ -466,13 +499,15 @@ class BackupService {
       final size = await File(snapshot).length();
       if (size > _mobilePickerLimit) {
         throw Exception(
-          'حجم النسخة (${BackupNaming.formatSize(size)}) أكبر من أن تُحفظ '
-          'عبر منتقي الملفات على الجوال؛ احفظها داخل التطبيق ثم انسخها.',
+          trf(
+            'حجم النسخة ({0}) أكبر من أن تُحفظ عبر منتقي الملفات على الجوال؛ احفظها داخل التطبيق ثم انسخها.',
+            [BackupNaming.formatSize(size)],
+          ),
         );
       }
       final bytes = await File(snapshot).readAsBytes();
       final path = await FilePicker.platform.saveFile(
-        dialogTitle: 'حفظ النسخة الاحتياطية',
+        dialogTitle: tr('حفظ النسخة الاحتياطية'),
         fileName: suggestedName,
         bytes: bytes,
       );
@@ -486,7 +521,7 @@ class BackupService {
     }
 
     final path = await FilePicker.platform.saveFile(
-      dialogTitle: 'حفظ النسخة الاحتياطية',
+      dialogTitle: tr('حفظ النسخة الاحتياطية'),
       fileName: suggestedName,
       type: FileType.custom,
       allowedExtensions: [BackupNaming.extension],
@@ -526,6 +561,21 @@ class BackupService {
   /// الخطوة 4 هي التي تحوّل أخطر عملية في النظام من «لا رجعة» إلى محمية،
   /// والبوابة في الخطوة 3 هي التي تمنع «تعطّل النظام بعد الاستعادة».
   static Future<RestoreResult> restoreBackup(String backupPath) async {
+    // 🛡️ البوابة الأمنية: أخطر عملية في النظام (تمحو القاعدة كاملةً).
+    //
+    // **لماذا في الخدمة لا في الشاشة فقط؟** كانت الشاشة هي الحرس الوحيد،
+    // فأي مسار برمجي آخر (`Get.toNamed` مباشر، أو زر أُضيف لاحقًا بلا فحص)
+    // يمحو بيانات المنشأة. الفحص هنا يجعل التسرّب **مستحيلًا** لا مُغفَلًا.
+    //
+    // و`isLoaded` تحرس مسار الإقلاع: لو نُوديت الاستعادة قبل تحميل
+    // الصلاحيات (لا مستخدم بعد) فالمنع — لأن الاستعادة بلا هوية فاعلة
+    // لا يجوز أن تمرّ.
+    if (!PermissionService.can(PermissionKeys.backupPerform)) {
+      return RestoreResult.failure(
+        tr('لا تملك صلاحية استعادة النسخ الاحتياطية، راجع مدير النظام.'),
+      );
+    }
+
     final db = SqlDB();
 
     try {
@@ -533,7 +583,7 @@ class BackupService {
 
       if (BackupNaming.isSamePath(backupPath, dbPath)) {
         return RestoreResult.failure(
-          'هذا ملف قاعدة البيانات الحيّة نفسه، وليس نسخة احتياطية',
+          tr('هذا ملف قاعدة البيانات الحيّة نفسه، وليس نسخة احتياطية'),
         );
       }
 
@@ -541,7 +591,7 @@ class BackupService {
       final source = await inspectBackupFile(backupPath);
       if (!source.valid) {
         return RestoreResult.failure(
-          source.reason ?? 'ملف النسخة الاحتياطية غير صالح',
+          source.reason ?? tr('ملف النسخة الاحتياطية غير صالح'),
         );
       }
 
@@ -563,8 +613,10 @@ class BackupService {
             await File(candidate).delete();
           } catch (_) {}
           return RestoreResult.failure(
-            'تعذّر أخذ نسخة أمان سليمة من بياناتك الحالية، فأُوقفت الاستعادة '
-            'لحمايتها (${safetyInfo.reason ?? 'سبب غير معروف'})',
+            trf(
+              'تعذّر أخذ نسخة أمان سليمة من بياناتك الحالية، فأُوقفت الاستعادة لحمايتها ({0})',
+              [safetyInfo.reason ?? tr('سبب غير معروف')],
+            ),
           );
         }
         safetyPath = candidate;
@@ -591,12 +643,16 @@ class BackupService {
               await File(safetyPath).copy(dbPath);
               rolledBack = (await inspectBackupFile(dbPath)).valid;
             } catch (e) {
-              debugPrint('فشل الرجوع التلقائي: $e');
+              debugPrint(trf('فشل الرجوع التلقائي: {0}', [e]));
             }
           }
           return RestoreResult.failure(
-            'فشل فحص البيانات بعد الاستعادة (${after.reason ?? 'سبب غير معروف'})'
-            '${rolledBack ? ' — وأُعيدت بياناتك السابقة كما كانت' : ' — تعذّر الرجوع؛ استعد نسخة الأمان يدويًا'}',
+            trf('فشل فحص البيانات بعد الاستعادة ({0})', [
+              after.reason ?? tr('سبب غير معروف'),
+            ]) +
+                (rolledBack
+                    ? tr(' — وأُعيدت بياناتك السابقة كما كانت')
+                    : tr(' — تعذّر الرجوع؛ استعد نسخة الأمان يدويًا')),
             rolledBack: rolledBack,
           );
         }
@@ -615,8 +671,7 @@ class BackupService {
       await _log(
         action: 'backup_restore',
         newValues:
-            '{"from":"$backupPath","invoices":${after.invoiceCount},'
-            '"safety":"$safetyForLog"}',
+            '{"from":"$backupPath","invoices":${after.invoiceCount},"safety":"$safetyForLog"}',
       );
 
       return RestoreResult(
@@ -625,7 +680,9 @@ class BackupService {
         restoredFrom: after,
       );
     } catch (e) {
-      return RestoreResult.failure('فشل في استعادة النسخة الاحتياطية: $e');
+      return RestoreResult.failure(
+        trf('فشل في استعادة النسخة الاحتياطية: {0}', [e]),
+      );
     }
   }
 
@@ -684,14 +741,16 @@ class BackupService {
       final all = await listBackups();
       final safety = all.where((b) => b['is_safety'] == true).toList();
       if (safety.isNotEmpty && safety.first['path'] == path) {
-        return 'لا يمكن حذف أحدث نسخة أمان — هي مسار الرجوع بعد أي استعادة خاطئة';
+        return tr(
+          'لا يمكن حذف أحدث نسخة أمان — هي مسار الرجوع بعد أي استعادة خاطئة',
+        );
       }
 
       final file = File(path);
       if (await file.exists()) await file.delete();
       return null;
     } catch (e) {
-      return 'تعذّر حذف الملف: $e';
+      return trf('تعذّر حذف الملف: {0}', [e]);
     }
   }
 
@@ -714,7 +773,7 @@ class BackupService {
     // والحارس الحقيقي هو محتوى الملف (`inspectBackupFile`)، لا اسمه — فهو
     // يرفض أي ملف ليس قاعدة سليمة من هذا النظام برسالة عربية واضحة.
     final result = await FilePicker.platform.pickFiles(
-      dialogTitle: 'اختر ملف النسخة الاحتياطية',
+      dialogTitle: tr('اختر ملف النسخة الاحتياطية'),
       type: FileType.any,
       allowMultiple: false,
     );

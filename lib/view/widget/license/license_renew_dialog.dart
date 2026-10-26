@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:laundry/core/theme/app_colors.dart';
+import 'package:laundry/services/i18n/l10n.dart';
 import 'package:laundry/services/license/system_license_service.dart';
+import 'package:laundry/services/i18n/ui_direction.dart';
 
 /// يفتح حوار تجديد الترخيص. يُعيد `true` إن تم التجديد فعلًا.
 ///
@@ -58,7 +60,7 @@ class _LicenseRenewDialogState extends State<_LicenseRenewDialog> {
     setState(() {
       _busy = false;
       _verified = ok;
-      if (!ok) _error = 'بيانات مدير النظام غير صحيحة';
+      if (!ok) _error = tr('بيانات مدير النظام غير صحيحة');
     });
   }
 
@@ -68,7 +70,7 @@ class _LicenseRenewDialogState extends State<_LicenseRenewDialog> {
       initialDate: _newDate,
       firstDate: DateTime.now(),
       lastDate: DateTime(DateTime.now().year + 30),
-      helpText: 'اختر تاريخ انتهاء الاشتراك',
+      helpText: tr('اختر تاريخ انتهاء الاشتراك'),
     );
     if (picked != null && mounted) {
       setState(() => _newDate = SystemLicenseController.plainDate(picked));
@@ -81,9 +83,10 @@ class _LicenseRenewDialogState extends State<_LicenseRenewDialog> {
     if (!mounted) return;
     Get.back(result: true);
     Get.snackbar(
-      'تم التجديد',
-      'أصبح اشتراك النظام سارٍ حتى '
-          '${SystemLicenseController.formatDate(_newDate)}',
+      tr('تم التجديد'),
+      trf('أصبح اشتراك النظام سارٍ حتى {0}', [
+        SystemLicenseController.formatDate(_newDate),
+      ]),
       backgroundColor: AppColors.success,
       colorText: Colors.white,
     );
@@ -92,16 +95,16 @@ class _LicenseRenewDialogState extends State<_LicenseRenewDialog> {
   @override
   Widget build(BuildContext context) {
     return Directionality(
-      textDirection: TextDirection.rtl,
+      textDirection: L10n.isRtl ? appTextDirection : TextDirection.ltr,
       child: AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-        title: const Row(
+        title: Row(
           children: [
-            Icon(Icons.key_outlined, color: AppColors.violet),
-            SizedBox(width: 8),
+            const Icon(Icons.key_outlined, color: AppColors.violet),
+            const SizedBox(width: 8),
             Text(
-              'تجديد اشتراك النظام',
-              style: TextStyle(
+              tr('تجديد اشتراك النظام'),
+              style: const TextStyle(
                 fontFamily: 'cairo',
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
@@ -116,8 +119,8 @@ class _LicenseRenewDialogState extends State<_LicenseRenewDialog> {
             children: [
               Text(
                 _verified
-                    ? 'اختر تاريخ انتهاء الاشتراك الجديد.'
-                    : 'أدخل بيانات مدير النظام (admin) للتجديد.',
+                    ? tr('اختر تاريخ انتهاء الاشتراك الجديد.')
+                    : tr('أدخل بيانات مدير النظام (admin) للتجديد.'),
                 style: TextStyle(
                   fontFamily: 'cairo',
                   fontSize: 13,
@@ -130,9 +133,9 @@ class _LicenseRenewDialogState extends State<_LicenseRenewDialog> {
                   controller: _usernameCtrl,
                   enabled: !_busy,
                   textInputAction: TextInputAction.next,
-                  decoration: const InputDecoration(
-                    labelText: 'اسم المستخدم',
-                    prefixIcon: Icon(Icons.person_outline),
+                  decoration: InputDecoration(
+                    labelText: tr('اسم المستخدم'),
+                    prefixIcon: const Icon(Icons.person_outline),
                   ),
                 ),
                 const SizedBox(height: 10),
@@ -141,9 +144,9 @@ class _LicenseRenewDialogState extends State<_LicenseRenewDialog> {
                   enabled: !_busy,
                   obscureText: true,
                   onSubmitted: (_) => _busy ? null : _verify(),
-                  decoration: const InputDecoration(
-                    labelText: 'كلمة المرور',
-                    prefixIcon: Icon(Icons.lock_outline),
+                  decoration: InputDecoration(
+                    labelText: tr('كلمة المرور'),
+                    prefixIcon: const Icon(Icons.lock_outline),
                   ),
                 ),
                 if (_error != null) ...[
@@ -181,8 +184,9 @@ class _LicenseRenewDialogState extends State<_LicenseRenewDialog> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          'ينتهي في '
-                          '${SystemLicenseController.formatDate(_newDate)}',
+                          trf('ينتهي في {0}', [
+                            SystemLicenseController.formatDate(_newDate),
+                          ]),
                           style: const TextStyle(
                             fontFamily: 'cairo',
                             fontSize: 13.5,
@@ -193,9 +197,9 @@ class _LicenseRenewDialogState extends State<_LicenseRenewDialog> {
                       ),
                       TextButton(
                         onPressed: _busy ? null : _pickDate,
-                        child: const Text(
-                          'تغيير',
-                          style: TextStyle(fontFamily: 'cairo'),
+                        child: Text(
+                          tr('تغيير'),
+                          style: const TextStyle(fontFamily: 'cairo'),
                         ),
                       ),
                     ],
@@ -208,9 +212,9 @@ class _LicenseRenewDialogState extends State<_LicenseRenewDialog> {
         actions: [
           TextButton(
             onPressed: _busy ? null : () => Get.back(result: false),
-            child: const Text(
-              'إلغاء',
-              style: TextStyle(fontFamily: 'cairo'),
+            child: Text(
+              tr('إلغاء'),
+              style: const TextStyle(fontFamily: 'cairo'),
             ),
           ),
           ElevatedButton.icon(
@@ -226,7 +230,7 @@ class _LicenseRenewDialogState extends State<_LicenseRenewDialog> {
                   )
                 : Icon(_verified ? Icons.check_circle_outline : Icons.lock_open),
             label: Text(
-              _verified ? 'تجديد وتفعيل' : 'تحقق من الهوية',
+              _verified ? tr('تجديد وتفعيل') : tr('تحقق من الهوية'),
               style: const TextStyle(fontFamily: 'cairo'),
             ),
           ),

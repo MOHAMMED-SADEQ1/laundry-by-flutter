@@ -11,6 +11,8 @@
 library;
 
 import 'package:laundry/config/constants.dart';
+import 'package:laundry/services/catalog/clothing_sort.dart';
+import 'package:laundry/services/i18n/l10n.dart';
 
 /// نوع قيمة الخيار — يحدّد عنصر التحكم في الإعدادات وصيغة التخزين.
 ///
@@ -25,6 +27,7 @@ class SettingGroups {
   static const String invoicing = 'invoicing';
   static const String invoiceDisplay = 'invoice_display';
   static const String printing = 'printing';
+  static const String invoiceOutput = 'invoice_output';
   static const String tax = 'tax';
   static const String expensesVat = 'expenses_vat';
   static const String receivables = 'receivables';
@@ -42,6 +45,7 @@ class SettingGroups {
     invoicing,
     invoiceDisplay,
     printing,
+    invoiceOutput,
     tax,
     expensesVat,
     receivables,
@@ -119,7 +123,16 @@ class SettingOption {
   bool get hasParent => enabledBy != null;
 
   /// اسم العرض لقيمة انتقائية (وإن غاب فالقيمة نفسها).
-  String labelOfChoice(String value) => choiceLabels?[value] ?? value;
+  ///
+  /// 🚨 يُترجَم هنا لا في الكتالوج: القيمة المخزَّنة مفتاح (`cash` · `a4`)،
+  /// والتسمية العربية مفتاح قاموس، والعرض يختار بحسب اللغة.
+  String labelOfChoice(String value) => tr(choiceLabels?[value] ?? value);
+
+  /// الاسم بلغة الواجهة — [label] يبقى **مفتاح القاموس** العربي.
+  String get displayLabel => tr(label);
+
+  /// الشرح بلغة الواجهة.
+  String get displayDescription => tr(description);
 }
 
 /// السجل الواحد لكل خيارات النظام.
@@ -143,7 +156,8 @@ class SettingOptions {
   static const SettingOption invoiceNumberPrefix = SettingOption(
     key: AppConstants.settingInvoiceNumberPrefix,
     label: 'بادئة رقم الفاتورة',
-    description: 'نصّ يُسبق رقم الفاتورة المعروض (مثال: INV-). اتركه فارغًا لِلا بادئة.',
+    description:
+        'نصّ يُسبق رقم الفاتورة المعروض (مثال: INV-). اتركه فارغًا لِلا بادئة.',
     kind: SettingKind.text,
     defaultValue: '',
     group: SettingGroups.invoicing,
@@ -175,8 +189,7 @@ class SettingOptions {
     key: AppConstants.settingCurrency,
     label: 'العملة',
     description:
-        'رمز العملة المحفوظ للنظام (مثال: ر.س). الشاشات الحالية تكتب الرمز '
-        'ثابتًا حتى ربطها بهذا الخيار.',
+        'رمز العملة المعروض في الواجهات والفواتير (مثال: ر.س). يُترجم الافتراضي إلى SAR في الوضع الإنجليزي، وأي رمز آخر يبقى كما تكتبه.',
     kind: SettingKind.text,
     defaultValue: 'ر.س',
     group: SettingGroups.invoicing,
@@ -186,8 +199,7 @@ class SettingOptions {
     key: AppConstants.settingInvoiceRequireCustomer,
     label: 'إلزام اختيار زبون',
     description:
-        'عند التفعيل لا تُصدر الفاتورة بلا زبون مُسجَّل — يفيد لمتابعة الذمم '
-        'وإشعارات الجاهزية.',
+        'عند التفعيل لا تُصدر الفاتورة بلا زبون مُسجَّل — يفيد لمتابعة الذمم وإشعارات الجاهزية.',
     kind: SettingKind.boolean,
     defaultValue: '0',
     group: SettingGroups.invoicing,
@@ -230,6 +242,19 @@ class SettingOptions {
     kind: SettingKind.boolean,
     defaultValue: '1',
     group: SettingGroups.invoiceDisplay,
+  );
+
+  static const SettingOption invoiceLogoSize = SettingOption(
+    key: AppConstants.settingInvoiceLogoSize,
+    label: 'حجم شعار الفاتورة (مم)',
+    description:
+        'عرض الشعار المربّع أعلى الفاتورة بالمليمتر (53 = الحجم الافتراضي ≈ 5.3 سم).',
+    kind: SettingKind.integer,
+    defaultValue: '${AppConstants.invoiceLogoSizeDefaultMm}',
+    min: AppConstants.invoiceLogoSizeMinMm,
+    max: AppConstants.invoiceLogoSizeMaxMm,
+    group: SettingGroups.invoiceDisplay,
+    enabledBy: AppConstants.settingInvoiceShowLogo,
   );
 
   static const SettingOption invoiceShowTaxNumber = SettingOption(
@@ -346,8 +371,7 @@ class SettingOptions {
     key: AppConstants.settingInvoiceShowQr,
     label: 'إظهار رمز QR',
     description:
-        'طبع رمز الاستجابة السريعة. لا يُطبع فعلًا إلا عند تفعيل الضريبة '
-        'ووجود رقم ضريبي للنشاط.',
+        'طبع رمز الاستجابة السريعة. لا يُطبع فعلًا إلا عند تفعيل الضريبة ووجود رقم ضريبي للنشاط.',
     kind: SettingKind.boolean,
     defaultValue: '1',
     group: SettingGroups.invoiceDisplay,
@@ -381,6 +405,47 @@ class SettingOptions {
 
   // ─── الطباعة بكل المقاسات ──
 
+  /// **خطّ الطباعة** — يحكم كل مستند مطبوع (فاتورة · كشف · وردية).
+  ///
+  /// القيم هنا **مطابقة** لمفاتيح `PrintFonts.all` (حرس `verify_print_font`).
+  /// تُعرض في الواجهة كبطاقات معاينة لا كقائمة منسدلة (انظر
+  /// `print_font_picker.dart`) لأن المستخدم يحتاج أن **يرى** الخطّ.
+  static const SettingOption printFont = SettingOption(
+    key: AppConstants.settingPrintFont,
+    label: 'خطّ الطباعة',
+    description:
+        'الخطّ المستخدم في طباعة كل المستندات. للحراري اختر خطًّا خفيفًا (IBM Plex خفيف · المراعي خفيف · المهنّد).',
+    kind: SettingKind.choice,
+    defaultValue: AppConstants.printFontDefault,
+    group: SettingGroups.printing,
+    choices: <String>[
+      'al_mohanad',
+      'ibm_plex_light',
+      'almarai_light',
+      'ibm_plex',
+      'noto_sans',
+      'noto_naskh',
+      'tajawal',
+      'almarai',
+      'cairo',
+      'noto_kufi',
+      'amiri',
+    ],
+    choiceLabels: <String, String>{
+      'al_mohanad': 'المهنّد (الافتراضي)',
+      'ibm_plex_light': 'IBM Plex — خفيف',
+      'almarai_light': 'المراعي — خفيف',
+      'ibm_plex': 'IBM Plex',
+      'noto_sans': 'نوتو سانس',
+      'noto_naskh': 'نسخ نوتو',
+      'tajawal': 'تجوال',
+      'almarai': 'المراعي',
+      'cairo': 'القاهرة',
+      'noto_kufi': 'كوفي نوتو',
+      'amiri': 'أميري',
+    },
+  );
+
   static const SettingOption invoicePaperSize = SettingOption(
     key: AppConstants.settingInvoicePaperSize,
     label: 'مقاس الفاتورة',
@@ -389,13 +454,7 @@ class SettingOptions {
     kind: SettingKind.choice,
     defaultValue: AppConstants.invoicePaperSizeDefault,
     group: SettingGroups.printing,
-    choices: <String>[
-      'a4',
-      'a5',
-      'a6',
-      'receipt_80mm',
-      'receipt_58mm',
-    ],
+    choices: <String>['a4', 'a5', 'a6', 'receipt_80mm', 'receipt_58mm'],
     choiceLabels: <String, String>{
       'a4': 'A4',
       'a5': 'A5',
@@ -451,8 +510,7 @@ class SettingOptions {
     key: AppConstants.settingPrintAskSizeEachTime,
     label: 'اسأل عن المقاس عند الطباعة',
     description:
-        'عند التفعيل يُفتح حوار لاختيار المقاس (وكل المقاسات المسموحة) قبل '
-        'كل طباعة بدل الالتزام بالمقاس الافتراضي.',
+        'عند التفعيل يُفتح حوار لاختيار المقاس (وكل المقاسات المسموحة) قبل كل طباعة بدل الالتزام بالمقاس الافتراضي.',
     kind: SettingKind.boolean,
     defaultValue: '0',
     group: SettingGroups.printing,
@@ -505,15 +563,75 @@ class SettingOptions {
     group: SettingGroups.printing,
   );
 
+  static const SettingOption printUseDefaultPrinter = SettingOption(
+    key: AppConstants.settingPrintUseDefaultPrinter,
+    label: 'الطباعة على الطابعة المختارة تلقائيًا',
+    description:
+        'عند التفعيل تُطبَع الفاتورة مباشرةً على الطابعة المختارة في قسم «الطابعة الافتراضية» بلا أي حوار طباعة. عند التعطيل يظهر حوار طباعة النظام في كل مرة.',
+    kind: SettingKind.boolean,
+    defaultValue: '0',
+    group: SettingGroups.printing,
+  );
+
+  // ── إخراج الفاتورة (طباعة / PDF) ──
+
+  /// مفتاح الطباعة — **افتراضيّه «مُفعَّل»** حفاظًا على السلوك القائم (كل
+  /// فاتورة تُطبَع عند البيع). تعطيله مقصود لنقطة بيع بلا ورق.
+  static const SettingOption invoicePrintOnSale = SettingOption(
+    key: AppConstants.settingInvoicePrintOnSale,
+    label: 'طباعة الفاتورة على الطابعة عند البيع',
+    description:
+        'عند التعطيل لا تُطبَع الفاتورة عند إتمام البيع إطلاقًا (نقطة بيع بلا ورق). أما الطباعة اليدوية من شاشات الفواتير والورديات فتبقى تعمل.',
+    kind: SettingKind.boolean,
+    defaultValue: '1',
+    group: SettingGroups.invoiceOutput,
+  );
+
+  /// ورقة المغسلة — **بلا مقاس مستقلّ** عن قصد.
+  ///
+  /// تتبع مقاس فاتورة العميل (`invoice_paper_size`) حرفيًّا: A4 · A5 · A6 ·
+  /// حراري 80/58 مم. فلو غيّر المستخدم مقاس الفاتورة تغيّرت معها الورقة، ولا
+  /// يمكن أن تخرج فاتورة 80 مم وورقة مغسلة A4 بسبب إعدادين متعارضين.
+  static const SettingOption invoicePrintLaundrySlip = SettingOption(
+    key: AppConstants.settingInvoicePrintLaundrySlip,
+    label: 'طباعة ورقة المغسلة مع الفاتورة',
+    description:
+        'تُطبع بعد فاتورة العميل ورقة داخلية للمحل بنفس مقاس الورق المختار، بلا أسعار أو ضريبة، وتحتوي رقم الفاتورة والأصناف والكميات ورمز الاستلام. تُطبع كمهمة مستقلة ليقطعها القاطع التلقائي وحدها.',
+    kind: SettingKind.boolean,
+    defaultValue: '1',
+    group: SettingGroups.invoiceOutput,
+  );
+
+  static const SettingOption invoicePdfExport = SettingOption(
+    key: AppConstants.settingInvoicePdfExport,
+    label: 'حفظ نسخة PDF عند إصدار الفاتورة',
+    description:
+        'تُحفَظ نسخة PDF من الفاتورة فور إتمام البيع في المجلد المحدَّد بالأسفل. مستقلّ عن الطباعة: يمكن الجمع بينهما أو تشغيل أحدهما.',
+    kind: SettingKind.boolean,
+    defaultValue: '0',
+    group: SettingGroups.invoiceOutput,
+  );
+
+  /// مسار المجلد نصًّا. يُكتب هنا يدويًا (مفيد لمسار شبكة مثل
+  /// `\\server\share`)، ويُملأ تلقائيًا من زرّ اختيار المجلد في البطاقة
+  /// التالية. تركه فارغًا يعني استخدام المجلد الافتراضي `<المستندات>/فواتير`.
+  static const SettingOption invoicePdfDirectory = SettingOption(
+    key: AppConstants.settingInvoicePdfDirectory,
+    label: 'مجلد حفظ الفواتير',
+    description:
+        'المسار الكامل لمجلد الحفظ. يمكن كتابته هنا أو اختياره بالزر أدناه. فارغ = المجلد الافتراضي داخل «المستندات».',
+    kind: SettingKind.text,
+    defaultValue: '',
+    group: SettingGroups.invoiceOutput,
+  );
+
   // ── الضريبة ──
 
   static const SettingOption taxEnabled = SettingOption(
     key: AppConstants.settingTaxEnabled,
     label: 'تفعيل الضريبة',
     description:
-        'المفتاح الأكبر: عند التفعيل تُحتسب الضريبة على كل فاتورة وتُخزَّن '
-        'وتُطبع وتُخصم من الربح لأنها التزام لا إيراد. وعند التعطيل تُصفَّر '
-        'في كل الوحدات ولا يُطبع QR ولا يُبنى أي إرسال للهيئة.',
+        'المفتاح الأكبر: عند التفعيل تُحتسب الضريبة على كل فاتورة وتُخزَّن وتُطبع وتُخصم من الربح لأنها التزام لا إيراد. وعند التعطيل تُصفَّر في كل الوحدات ولا يُطبع QR ولا يُبنى أي إرسال للهيئة.',
     kind: SettingKind.boolean,
     defaultValue: '0',
     group: SettingGroups.tax,
@@ -523,9 +641,7 @@ class SettingOptions {
     key: AppConstants.settingTaxRate,
     label: 'نسبة الضريبة',
     description:
-        'كنسبة عشرية: 0.15 = 15%. القيمة محصورة بين 0 و1. '
-        'تُجمَّد النسبة في كل فاتورة عند إصدارها، فلا يُعيد تغييرها لاحقًا '
-        'كتابة ضريبة فاتورة قديمة.',
+        'كنسبة عشرية: 0.15 = 15%. القيمة محصورة بين 0 و1. تُجمَّد النسبة في كل فاتورة عند إصدارها، فلا يُعيد تغييرها لاحقًا كتابة ضريبة فاتورة قديمة.',
     kind: SettingKind.decimal,
     defaultValue: '0.15',
     min: 0,
@@ -538,8 +654,7 @@ class SettingOptions {
     key: AppConstants.settingTaxPricesInclude,
     label: 'الأسعار شاملة الضريبة',
     description:
-        'التفعيل يعني أن السعر المعروض للزبون يحتوي الضريبة (تُستخرج منه). '
-        'والتعطيل يعني أن الضريبة تُضاف فوق السعر عند الدفع.',
+        'التفعيل يعني أن السعر المعروض للزبون يحتوي الضريبة (تُستخرج منه). والتعطيل يعني أن الضريبة تُضاف فوق السعر عند الدفع.',
     kind: SettingKind.boolean,
     defaultValue: '1',
     group: SettingGroups.tax,
@@ -550,8 +665,7 @@ class SettingOptions {
     key: AppConstants.settingTaxApplyToSubscriptions,
     label: 'إخضاع الاشتراكات للضريبة',
     description:
-        'عند التعطيل تبقى فواتير الاشتراكات معفاة (لا ضريبة على مبلغ '
-        'مُحصَّل سابقًا)، وعند التفعيل تُحتسب عليها ضريبة.',
+        'عند التعطيل تبقى فواتير الاشتراكات معفاة (لا ضريبة على مبلغ مُحصَّل سابقًا)، وعند التفعيل تُحتسب عليها ضريبة.',
     kind: SettingKind.boolean,
     defaultValue: '0',
     group: SettingGroups.tax,
@@ -572,8 +686,7 @@ class SettingOptions {
     key: AppConstants.settingTaxExemptCategories,
     label: 'تصنيفات معفاة من الضريبة',
     description:
-        'أرقام تصنيفات مفصولة بفواصل (نسبة صفرية). اتركه فارغًا إن كان كل '
-        'النشاط خاضعًا.',
+        'أرقام تصنيفات مفصولة بفواصل (نسبة صفرية). اتركه فارغًا إن كان كل النشاط خاضعًا.',
     kind: SettingKind.text,
     defaultValue: '',
     group: SettingGroups.tax,
@@ -594,8 +707,7 @@ class SettingOptions {
     key: AppConstants.settingTaxShowInCashReport,
     label: 'إظهار الضريبة في تقرير الصندوق',
     description:
-        'سطر «ضريبة محصّلة (التزام غير نقدي)» في تقرير الصندوق. لا تُحسب ضمن '
-        'النقدية الداخلة.',
+        'سطر «ضريبة محصّلة (التزام غير نقدي)» في تقرير الصندوق. لا تُحسب ضمن النقدية الداخلة.',
     kind: SettingKind.boolean,
     defaultValue: '1',
     group: SettingGroups.tax,
@@ -606,8 +718,7 @@ class SettingOptions {
     key: AppConstants.settingTaxRegistered,
     label: 'النشاط مسجَّل لدى الهيئة',
     description:
-        'المفتاح الذي يسمح بطباعة QR والتكامل الضريبي. لا يعني تفعيل الضريبة '
-        'نفسه — بل جاهزية النشاط للربط بالهيئة.',
+        'المفتاح الذي يسمح بطباعة QR والتكامل الضريبي. لا يعني تفعيل الضريبة نفسه — بل جاهزية النشاط للربط بالهيئة.',
     kind: SettingKind.boolean,
     defaultValue: '0',
     group: SettingGroups.tax,
@@ -617,8 +728,7 @@ class SettingOptions {
     key: AppConstants.settingZatcaQrPhase1,
     label: 'رمز QR (المرحلة الأولى)',
     description:
-        'ترميز حقول الهيئة الخمسة في QR. لا يُطبع إلا عند وجود رقم ضريبي '
-        'وتفعيل الضريبة.',
+        'ترميز حقول الهيئة الخمسة في QR. لا يُطبع إلا عند وجود رقم ضريبي وتفعيل الضريبة.',
     kind: SettingKind.boolean,
     defaultValue: '1',
     group: SettingGroups.tax,
@@ -629,8 +739,7 @@ class SettingOptions {
     key: AppConstants.settingZatcaPhase2Prepared,
     label: 'تجهيز المرحلة الثانية',
     description:
-        'بناء بنية UBL والتوقيع وحالة الفاتورة استعدادًا للربط الفعلي. '
-        'التشغيل لا يفتح أي اتصال شبكة بحد ذاته.',
+        'بناء بنية UBL والتوقيع وحالة الفاتورة استعدادًا للربط الفعلي. التشغيل لا يفتح أي اتصال شبكة بحد ذاته.',
     kind: SettingKind.boolean,
     defaultValue: '0',
     group: SettingGroups.tax,
@@ -641,16 +750,12 @@ class SettingOptions {
     key: AppConstants.settingVatReturnBasis,
     label: 'أساس الإقرار الضريبي',
     description:
-        'نقدي (حسب التحصيل) أو استحقاق (حسب الإصدار). يحدّد نطاق تجميع '
-        'ضريبة المخرجات في تقرير الإقرار.',
+        'نقدي (حسب التحصيل) أو استحقاق (حسب الإصدار). يحدّد نطاق تجميع ضريبة المخرجات في تقرير الإقرار.',
     kind: SettingKind.choice,
     defaultValue: 'accrual',
     group: SettingGroups.tax,
     choices: <String>['accrual', 'cash'],
-    choiceLabels: <String, String>{
-      'accrual': 'استحقاق',
-      'cash': 'نقدي',
-    },
+    choiceLabels: <String, String>{'accrual': 'استحقاق', 'cash': 'نقدي'},
     enabledBy: AppConstants.settingTaxEnabled,
   );
 
@@ -703,7 +808,8 @@ class SettingOptions {
   static const SettingOption debtProvisionRate = SettingOption(
     key: AppConstants.settingDebtProvisionRate,
     label: 'نسبة مخصّص الديون المشكوكة',
-    description: 'نسبة تُحمَّل على الديون المتجاوزة 90 يومًا في تقارير الأعمار.',
+    description:
+        'نسبة تُحمَّل على الديون المتجاوزة 90 يومًا في تقارير الأعمار.',
     kind: SettingKind.decimal,
     defaultValue: '0.25',
     min: 0,
@@ -715,8 +821,7 @@ class SettingOptions {
     key: AppConstants.settingCreditBlockOnExceed,
     label: 'منع البيع عند تجاوز حدّ الائتمان',
     description:
-        'عند التفعيل يُمنع البيع الآجل عند بلوغ الحدّ إلا بتجاوز مدير، وعند '
-        'التعطيل يُكتفى بالتنبيه.',
+        'عند التفعيل يُمنع البيع الآجل عند بلوغ الحدّ إلا بتجاوز مدير، وعند التعطيل يُكتفى بالتنبيه.',
     kind: SettingKind.boolean,
     defaultValue: '0',
     group: SettingGroups.receivables,
@@ -766,7 +871,8 @@ class SettingOptions {
   static const SettingOption subGraceDays = SettingOption(
     key: AppConstants.settingSubGraceDays,
     label: 'مهلة السماح بعد انتهاء التغطية (أيام)',
-    description: 'أيام تبقى فيها التغطية نافذة بعد انتهائها قبل اعتبارها منتهية.',
+    description:
+        'أيام تبقى فيها التغطية نافذة بعد انتهائها قبل اعتبارها منتهية.',
     kind: SettingKind.integer,
     defaultValue: '0',
     min: 0,
@@ -777,7 +883,8 @@ class SettingOptions {
   static const SettingOption subAutoRenew = SettingOption(
     key: AppConstants.settingSubAutoRenew,
     label: 'تجديد الاشتراك تلقائيًا',
-    description: 'عند التفعيل يُولَّد استحقاق الدورة الجديدة تلقائيًا عند الإغلاق.',
+    description:
+        'عند التفعيل يُولَّد استحقاق الدورة الجديدة تلقائيًا عند الإغلاق.',
     kind: SettingKind.boolean,
     defaultValue: '0',
     group: SettingGroups.subscriptions,
@@ -970,11 +1077,14 @@ class SettingOptions {
     kind: SettingKind.choice,
     defaultValue: AppConstants.posDefaultPaymentMethodDefault,
     group: SettingGroups.pos,
-    choices: <String>['كاش', 'شبكة', 'آجل'],
+    // 🚨 `choices` **مفاتيح تخزين** لا نصوص عرض: القيمة تُكتب في `settings`
+    // وتبقى ثابتة مهما تغيّرت اللغة أو الصياغة. التسمية العربية في
+    // `choiceLabels` وهي وحدها ما يُترجَم عند العرض.
+    choices: <String>['cash', 'card', 'credit'],
     choiceLabels: <String, String>{
-      'كاش': 'كاش',
-      'شبكة': 'شبكة',
-      'آجل': 'آجل',
+      'cash': 'كاش',
+      'card': 'شبكة',
+      'credit': 'آجل',
     },
   );
 
@@ -985,6 +1095,36 @@ class SettingOptions {
     kind: SettingKind.boolean,
     defaultValue: '0',
     group: SettingGroups.pos,
+  );
+
+  /// ترتيب بطاقات الأصناف في شاشة البيع — الفرز **في القاعدة** لا في الواجهة.
+  static const SettingOption clothingSort = SettingOption(
+    key: AppConstants.settingClothingSort,
+    label: 'ترتيب الأصناف في شاشة البيع',
+    description: 'الطريقة التي تُعرض بها بطاقات الأصناف عند البيع.',
+    kind: SettingKind.choice,
+    defaultValue: ClothingSort.defaultKey,
+    group: SettingGroups.pos,
+    choices: <String>[
+      'name_asc',
+      'name_desc',
+      'unsorted',
+      'price_asc',
+      'price_desc',
+      'best_selling',
+      'newest',
+      'oldest',
+    ],
+    choiceLabels: <String, String>{
+      'name_asc': 'الاسم: أ ← ي',
+      'name_desc': 'الاسم: ي ← أ',
+      'unsorted': 'بدون فرز',
+      'price_asc': 'السعر: الأقل أولًا',
+      'price_desc': 'السعر: الأعلى أولًا',
+      'best_selling': 'الأكثر مبيعًا',
+      'newest': 'الأحدث إضافة',
+      'oldest': 'الأقدم',
+    },
   );
 
   // ─── الزبائن ───
@@ -1055,9 +1195,7 @@ class SettingOptions {
     key: AppConstants.settingInvoiceAutoDeleteEnabled,
     label: 'حذف الفواتير القديمة تلقائيًا',
     description:
-        'عند التعطيل لا يُحذف أي سجل محاسبي تلقائيًا. وعند التفعيل تُحذف '
-        'الفواتير الأقدم من مدة الاحتفاظ، ولا تُمسّ فواتير الديون '
-        'والاشتراكات ولا فواتير السنة الجارية.',
+        'عند التعطيل لا يُحذف أي سجل محاسبي تلقائيًا. وعند التفعيل تُحذف الفواتير الأقدم من مدة الاحتفاظ، ولا تُمسّ فواتير الديون والاشتراكات ولا فواتير السنة الجارية.',
     kind: SettingKind.boolean,
     defaultValue: '0',
     group: SettingGroups.retention,
@@ -1067,8 +1205,7 @@ class SettingOptions {
     key: AppConstants.settingInvoiceRetentionDays,
     label: 'مدة الاحتفاظ (أيام)',
     description:
-        'أقل مدة مسموحة 400 يومًا: أي فاتورة من السنة الجارية لا تُحذف '
-        'مهما كان عمرها، حمايةً للتقارير السنوية والشهرية.',
+        'أقل مدة مسموحة 400 يومًا: أي فاتورة من السنة الجارية لا تُحذف مهما كان عمرها، حمايةً للتقارير السنوية والشهرية.',
     kind: SettingKind.integer,
     defaultValue: '400',
     min: AppConstants.invoiceRetentionMinDays,
@@ -1094,8 +1231,7 @@ class SettingOptions {
     key: AppConstants.settingLicenseCheckHours,
     label: 'فاصل فحص الترخيص (ساعات)',
     description:
-        'كل هذه المدة يُعاد فحص صلاحية النظام أثناء العمل (مع الفحص عند '
-        'الإقلاع وعند العودة من الخلفية).',
+        'كل هذه المدة يُعاد فحص صلاحية النظام أثناء العمل (مع الفحص عند الإقلاع وعند العودة من الخلفية).',
     kind: SettingKind.integer,
     defaultValue: '1',
     min: 1,
@@ -1117,6 +1253,7 @@ class SettingOptions {
     // ما يظهر على الفاتورة
     invoiceTitleText,
     invoiceShowLogo,
+    invoiceLogoSize,
     invoiceShowTaxNumber,
     invoiceShowCrNumber,
     invoiceShowShortAddress,
@@ -1133,6 +1270,7 @@ class SettingOptions {
     invoiceFooterNote,
     invoiceRounding,
     // الطباعة
+    printFont,
     invoicePaperSize,
     shiftPaperSize,
     statementPaperSize,
@@ -1142,6 +1280,12 @@ class SettingOptions {
     printAutoPaperSize,
     invoiceCopies,
     receiptFooterNote,
+    printUseDefaultPrinter,
+    // إخراج الفاتورة (طباعة / PDF)
+    invoicePrintOnSale,
+    invoicePrintLaundrySlip,
+    invoicePdfExport,
+    invoicePdfDirectory,
     // الضريبة
     taxEnabled,
     taxRate,
@@ -1191,6 +1335,7 @@ class SettingOptions {
     posConfirmBeforePay,
     posDefaultPaymentMethod,
     posSoundOnSale,
+    clothingSort,
     // الزبائن
     customerRequirePhone,
     customerDefaultTier,

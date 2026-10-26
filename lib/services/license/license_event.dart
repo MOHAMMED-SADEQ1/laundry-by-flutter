@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:laundry/services/i18n/l10n.dart';
+
 /// حدث واحد على ترخيص النظام، مستخرج من `audit_log`.
 ///
 /// **دلالة الاسم:** `action` قيمتان فقط:
@@ -53,7 +55,11 @@ class LicenseEvent {
   /// هل انتهى الحدث إلى «غير محدود» (تاريخ فارغ)؟
   bool get clearedToUnlimited => isManual && newExpiry.isEmpty;
 
-  String get actionLabel {
+  /// عنوان الحدث بلغة الواجهة — العربي مفتاح في القاموس.
+  String get actionLabel => tr(rawActionLabel);
+
+  /// العنوان العربي الخام — **مفتاح القاموس**.
+  String get rawActionLabel {
     if (isSeed) return 'تطبيق تاريخ الكود';
     if (isManual) {
       return clearedToUnlimited ? 'إلغاء التاريخ (غير محدود)' : 'تجديد / تعديل يدوي';

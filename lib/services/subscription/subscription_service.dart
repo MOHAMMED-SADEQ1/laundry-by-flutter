@@ -3,7 +3,10 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 import 'package:laundry/services/customer/customer_ledger_service.dart';
+import 'package:laundry/services/i18n/l10n.dart';
 import 'package:laundry/services/invoice/invoice_items_service.dart';
+import 'package:laundry/services/permission/permission_catalog.dart';
+import 'package:laundry/services/permission/permission_service.dart';
 import 'package:laundry/services/security/session_manager.dart';
 import 'package:laundry/services/shift/shift_link_service.dart';
 import 'package:laundry/sqldb.dart';
@@ -330,12 +333,7 @@ class SubscriptionService {
       final from = _dayFmt.format(cycleStart(sub));
       final to = _dayFmt.format(cycleEnd(sub).add(const Duration(days: 1)));
       final rows = await _db.readData(
-        'SELECT '
-        '  COALESCE(SUM(COALESCE(i.subscription_used_pieces, 0)), 0) AS p, '
-        '  COALESCE(SUM(COALESCE(i.subscription_used_value, 0)), 0) AS v '
-        'FROM invoices i '
-        'WHERE i.subscription_id = ? '
-        '  AND DATE(i.invoice_date) >= ? AND DATE(i.invoice_date) < ?',
+        'SELECT   COALESCE(SUM(COALESCE(i.subscription_used_pieces, 0)), 0) AS p,   COALESCE(SUM(COALESCE(i.subscription_used_value, 0)), 0) AS v FROM invoices i WHERE i.subscription_id = ?   AND DATE(i.invoice_date) >= ? AND DATE(i.invoice_date) < ?',
         [subId, from, to],
       );
       if (rows.isEmpty) return (0, 0.0);
@@ -358,14 +356,7 @@ class SubscriptionService {
   ) async {
     try {
       final rows = await _db.readData(
-        'SELECT '
-        '  COALESCE(SUM(CAST(json_extract(j.value, \'\$.count\') '
-        '    AS INTEGER)), 0) AS p, '
-        '  COALESCE(SUM(CAST(json_extract(j.value, \'\$.total_price\') '
-        '    AS REAL)), 0) AS v '
-        'FROM invoices i, json_each(i.list_data) j '
-        'WHERE i.subscription_id = ? '
-        '  AND DATE(i.invoice_date) >= ? AND DATE(i.invoice_date) < ?',
+        'SELECT   COALESCE(SUM(CAST(json_extract(j.value, \'\$.count\')     AS INTEGER)), 0) AS p,   COALESCE(SUM(CAST(json_extract(j.value, \'\$.total_price\')     AS REAL)), 0) AS v FROM invoices i, json_each(i.list_data) j WHERE i.subscription_id = ?   AND DATE(i.invoice_date) >= ? AND DATE(i.invoice_date) < ?',
         [subId, from, to],
       );
       if (rows.isEmpty) return (0, 0.0);
@@ -431,10 +422,13 @@ class SubscriptionService {
         piecesIsBinding: false,
         usageRatio: 0,
         message: st == SubStatus.pending
-            ? 'لا توجد دفعة مسجّلة لهذا الاشتراك — لا تغطية بعد. '
-                  'سجّل دفعة أولًا من شاشة الاشتراكات.'
-            : 'انتهت تغطية الاشتراك (${DateFormat('yyyy-MM-dd').format(paidUntil(sub))}) '
-                  '— جدّد الاشتراك أو اختر طريقة دفع أخرى.',
+            ? tr(
+                'لا توجد دفعة مسجّلة لهذا الاشتراك — لا تغطية بعد. سجّل دفعة أولًا من شاشة الاشتراكات.',
+              )
+            : trf(
+                'انتهت تغطية الاشتراك ({0}) — جدّد الاشتراك أو اختر طريقة دفع أخرى.',
+                [DateFormat('yyyy-MM-dd').format(paidUntil(sub))],
+              ),
       );
     }
 
@@ -484,10 +478,18 @@ class SubscriptionService {
 
     final canOverride = SessionManager.isManager;
     final parts = <String>[];
-    if (overP > 0) parts.add('$overP قطعة');
+    if (overP > 0) parts.add(trf('{0} قطعة', [overP]));
     if (overV > 0) {
-      parts.add('${CustomerLedgerService.fromCents(overV).toStringAsFixed(2)} ر.س');
+      parts.add(
+        trf('{0} ر.س', [
+          CustomerLedgerService.fromCents(overV).toStringAsFixed(2),
+        ]),
+      );
     }
+    final overText = parts.join(' + ');
+    final piecesText = '$usedP${lp > 0 ? '/$lp' : ''}';
+    final valueText =
+        '${usedV.toStringAsFixed(2)}${lv > 0 ? '/${lv.toStringAsFixed(2)}' : ''}';
 
     return UsageCheckResult(
       allowed: canOverride,
@@ -504,16 +506,14 @@ class SubscriptionService {
       usageRatio: ratio,
       requiresManagerOverride: !canOverride,
       message: canOverride
-          ? 'تجاوز سقف الاشتراك بـ${parts.join(' و')} '
-                '(القطع: $usedP${lp > 0 ? '/$lp' : ''} — '
-                'القيمة: ${usedV.toStringAsFixed(2)}'
-                '${lv > 0 ? '/${lv.toStringAsFixed(2)}' : ''}). '
-                'صلاحيتك تسمح بالتجاوز — سيُسجَّل في التدقيق.'
-          : 'هذه الفاتورة تتجاوز سقف الاشتراك بـ${parts.join(' و')} '
-                '(القطع: $usedP${lp > 0 ? '/$lp' : ''} — '
-                'القيمة: ${usedV.toStringAsFixed(2)}'
-                '${lv > 0 ? '/${lv.toStringAsFixed(2)}' : ''}). '
-                'الزبون يحتاج تجديدًا أو ترقية، ولا يملك صلاحية التجاوز إلا مدير.',
+          ? trf(
+              'تجاوز سقف الاشتراك بـ{0} (القطع: {1} — القيمة: {2}). صلاحيتك تسمح بالتجاوز — سيُسجَّل في التدقيق.',
+              [overText, piecesText, valueText],
+            )
+          : trf(
+              'هذه الفاتورة تتجاوز سقف الاشتراك بـ{0} (القطع: {1} — القيمة: {2}). الزبون يحتاج تجديدًا أو ترقية، ولا يملك صلاحية التجاوز إلا مدير.',
+              [overText, piecesText, valueText],
+            ),
     );
   }
 
@@ -535,12 +535,14 @@ class SubscriptionService {
     String? notes,
     String source = 'manual',
   }) async {
-    if (amount <= 0) throw Exception('المبلغ يجب أن يكون أكبر من صفر');
+    if (amount <= 0) throw Exception(tr('المبلغ يجب أن يكون أكبر من صفر'));
     final svc = SubscriptionService.instance;
     final db = svc._db;
 
     final Database? raw = await db.dbGet;
-    if (raw == null) throw Exception('تعذّر الوصول إلى قاعدة البيانات');
+    if (raw == null) {
+      throw Exception(tr('تعذّر الوصول إلى قاعدة البيانات'));
+    }
 
     // 🔗 الربط بالوردية («الوردية هي الصندوق»). يُحلَّل **قبل** بدء المعاملة
     // لأن استخدام اتصال القاعدة داخل معاملة قائمة قد يُوقف التنفيذ (deadlock)
@@ -557,7 +559,7 @@ class SubscriptionService {
         whereArgs: [subscriptionId],
         limit: 1,
       );
-      if (current.isEmpty) throw Exception('الاشتراك غير موجود');
+      if (current.isEmpty) throw Exception(tr('الاشتراك غير موجود'));
       final row = current.first;
 
       final price = ((row['amount'] ?? 0) as num).toDouble();
@@ -569,15 +571,16 @@ class SubscriptionService {
       //    والدفعة تُسجَّل نقدًا فقط (تُعالَج يدويًا من الإدارة).
       if (price <= 0) {
         throw Exception(
-          'سعر الاشتراك صفر — لا يمكن احتساب أيام تغطية. '
-          'حدِّث سعر الاشتراك أولًا.',
+          tr('سعر الاشتراك صفر — لا يمكن احتساب أيام تغطية. حدِّث سعر الاشتراك أولًا.'),
         );
       }
       final coveredDays = ((amount / price) * days).round();
       if (coveredDays <= 0) {
         throw Exception(
-          'المبلغ أقل من أن يغطي يومًا واحدًا '
-          '(أقل دفعة مقبولة: ${(price / days).toStringAsFixed(2)} ر.س).',
+          trf(
+            'المبلغ أقل من أن يغطي يومًا واحدًا (أقل دفعة مقبولة: {0} ر.س).',
+            [(price / days).toStringAsFixed(2)],
+          ),
         );
       }
 
@@ -611,14 +614,12 @@ class SubscriptionService {
           'status': 'active',
         },
         where:
-            'subscription_id = ? AND '
-            'COALESCE(paid_until_date, \'\') = COALESCE(?, \'\')',
+            'subscription_id = ? AND COALESCE(paid_until_date, \'\') = COALESCE(?, \'\')',
         whereArgs: [subscriptionId, rawUntil],
       );
       if (updated == 0) {
         throw Exception(
-          'تغيّرت تغطية الاشتراك أثناء تسجيل الدفعة '
-          '(دفعة أخرى سُجّلت simultaneous). أعد المحاولة.',
+          tr('تغيّرت تغطية الاشتراك أثناء تسجيل الدفعة (دفعة أخرى سُجّلت simultaneous). أعد المحاولة.'),
         );
       }
 
@@ -658,8 +659,7 @@ class SubscriptionService {
       tableName: 'subscriptions',
       recordId: subscriptionId,
       newValues:
-          '{"amount":$amount,"method":"$method","paid_until":'
-          '"${newUntil.toIso8601String()}"}',
+          '{"amount":$amount,"method":"$method","paid_until":"${newUntil.toIso8601String()}"}',
     );
     return newUntil;
   }
@@ -680,6 +680,14 @@ class SubscriptionService {
     bool refundAsCredit = true,
     String? reason,
   }) async {
+    // 🛡️ الإلغاء **تصحيح** لا إدارة: يُرجع مالًا ويُكتب حركة
+    // `cancel_refund` تخفض ذمة الزبون. فُصلت عن `subscription.manage`
+    // عمدًا — فمن يُسجّل الاشتراكات روتينيًا لا يجوز أن يُلغيه بضغطة.
+    PermissionService.assertCan(
+      PermissionKeys.subscriptionCancel,
+      action: tr('إلغاء اشتراك وتسويته'),
+    );
+
     final svc = SubscriptionService.instance;
     final db = svc._db;
 
@@ -689,7 +697,7 @@ class SubscriptionService {
       whereArgs: [subscriptionId],
       limit: 1,
     );
-    if (rows.isEmpty) throw Exception('الاشتراك غير موجود');
+    if (rows.isEmpty) throw Exception(tr('الاشتراك غير موجود'));
     final sub = rows.first;
 
     // 1. الأيام المتبقّية من التغطية المدفوعة
@@ -791,8 +799,7 @@ class SubscriptionService {
     //  (2) ولا يتجاوز قيمة ما قُبض نقدًا. (نطبّق الأول، وهو الأشدّ.)
     if (collectedCents > 0 && refundCents > collectedCents) {
       debugPrint(
-        'subscription refund capped: ${CustomerLedgerService.fromCents(refundCents)} '
-        '-> ${CustomerLedgerService.fromCents(collectedCents)} (collected ceiling)',
+        'subscription refund capped: ${CustomerLedgerService.fromCents(refundCents)} -> ${CustomerLedgerService.fromCents(collectedCents)} (collected ceiling)',
       );
       refundCents = collectedCents;
     }
@@ -851,7 +858,7 @@ class SubscriptionService {
             'amount': CustomerLedgerService.fromCents(appliedToDebt),
             'payment_method': 'رصيد',
             'payment_date': DateTime.now().toIso8601String(),
-            'notes': 'استرداد إلغاء اشتراك #$subscriptionId',
+            'notes': trf('استرداد إلغاء اشتراك #{0}', [subscriptionId]),
             'recorded_by': SessionManager.currentUserId,
             'source': 'cancel_refund',
           });
@@ -887,12 +894,17 @@ class SubscriptionService {
           'created_by': SessionManager.currentUserId,
         });
       } else {
-        // استرداد نقدي: يُسجَّل كمصروف حتى يظهر في إقفال الوردية والصندوق
+        // استرداد نقدي: يُسجَّل كمصروف حتى يظهر في إقفال الوردية والصندوق.
+        // الاسم في متغيّر مستقلّ حتى يبقى النصّ literal واحدًا سليمًا (الاقتباس
+        // المتداخل داخل `${sub['...']}` يقطع استخراج نصوص الترجمة).
+        final custName = '${sub['customer_name'] ?? ''}';
         await db.safeInsert('expenses', {
           'category': 'استرداد اشتراك',
+          'category_en': 'Subscription refund',
           'description':
-              'استرداد قيمة أيام غير مُقدَّمة — ${sub['customer_name']} '
-              '(اشتراك #$subscriptionId، $remaining يوم)',
+              'استرداد قيمة أيام غير مُقدَّمة — $custName (اشتراك #$subscriptionId، $remaining يوم)',
+          'description_en':
+              'Refund for unserved days — $custName (subscription #$subscriptionId, $remaining days)',
           'amount': refund,
           'date': DateTime.now().toIso8601String(),
           'recorded_by': SessionManager.currentUserId,
@@ -909,7 +921,7 @@ class SubscriptionService {
         'paid_date': now,
         'method': refundAsCredit ? 'رصيد' : 'استرداد نقدي',
         'recorded_by': SessionManager.currentUserId,
-        'notes': 'استرداد عند الإلغاء — $remaining يوم غير مُقدَّم',
+        'notes': trf('استرداد عند الإلغاء — {0} يوم غير مُقدَّم', [remaining]),
         'source': 'cancel_refund',
         'covers_from': null,
         'covers_to': null,
@@ -942,8 +954,8 @@ class SubscriptionService {
           'coverage_from': null,
           'coverage_to': sub['paid_until_date'],
           'notes': reason?.trim().isNotEmpty == true
-              ? '$reason — $remainingDays يوم غير مُقدَّم'
-              : '$remainingDays يوم غير مُقدَّم',
+              ? trf('{0} — {1} يوم غير مُقدَّم', [reason, remainingDays])
+              : trf('{0} يوم غير مُقدَّم', [remainingDays]),
           'created_at': DateTime.now().toIso8601String(),
           'created_by': SessionManager.currentUserId,
         },
@@ -983,12 +995,7 @@ class SubscriptionService {
       // 3. الإيراد المُعترف به: قيمة الغسيل المُستهلك هذا الشهر
       //    (لا المحصَّل — الفرق بينهما هو الالتزام المتبقّي)
       final recognizedRows = await _db.readData(
-        'SELECT '
-        '  COALESCE(SUM(COALESCE(i.subscription_used_value, 0)), 0) AS v, '
-        '  COALESCE(SUM(COALESCE(i.subscription_used_pieces, 0)), 0) AS p '
-        'FROM invoices i '
-        'WHERE i.subscription_id IS NOT NULL '
-        '  AND DATE(i.invoice_date) >= ? AND DATE(i.invoice_date) < ?',
+        'SELECT   COALESCE(SUM(COALESCE(i.subscription_used_value, 0)), 0) AS v,   COALESCE(SUM(COALESCE(i.subscription_used_pieces, 0)), 0) AS p FROM invoices i WHERE i.subscription_id IS NOT NULL   AND DATE(i.invoice_date) >= ? AND DATE(i.invoice_date) < ?',
         [monthStart, nextMonth],
       );
       final recognized =
@@ -1055,9 +1062,7 @@ class SubscriptionService {
   Future<double> mrr() async {
     try {
       final rows = await _db.readData(
-        'SELECT amount, period_days, paid_until_date, is_active, '
-        '  usage_limit_pieces, usage_limit_value '
-        'FROM subscriptions WHERE is_active = 1',
+        'SELECT amount, period_days, paid_until_date, is_active,   usage_limit_pieces, usage_limit_value FROM subscriptions WHERE is_active = 1',
       );
       double total = 0;
       for (final r in rows) {
@@ -1092,20 +1097,14 @@ class SubscriptionService {
 
     try {
       final rows = await _db.readData(
-        'SELECT '
-        '  COALESCE(SUM(COALESCE(i.subscription_used_value, 0)), 0) AS v, '
-        '  COALESCE(SUM(COALESCE(i.subscription_used_pieces, 0)), 0) AS p '
-        'FROM invoices i '
-        'WHERE i.subscription_id = ? '
-        '  AND DATE(i.invoice_date) >= ? AND DATE(i.invoice_date) < ?',
+        'SELECT   COALESCE(SUM(COALESCE(i.subscription_used_value, 0)), 0) AS v,   COALESCE(SUM(COALESCE(i.subscription_used_pieces, 0)), 0) AS p FROM invoices i WHERE i.subscription_id = ?   AND DATE(i.invoice_date) >= ? AND DATE(i.invoice_date) < ?',
         [subId, fromStr, toStr],
       );
       // التكلفة من **لقطة البنود** — الربط بالاسم مع `clothing` كان يصفّر
       // التكلفة عند إعادة تسمية صنف فيظهر الاشتراك رابحًا وهو خاسر.
       final cost = await InvoiceItemsService.instance.costFor(
         where:
-            'i.subscription_id = ? AND DATE(i.invoice_date) >= ? '
-            'AND DATE(i.invoice_date) < ?',
+            'i.subscription_id = ? AND DATE(i.invoice_date) >= ? AND DATE(i.invoice_date) < ?',
         args: [subId, fromStr, toStr],
       );
       final value = (rows.firstOrNull?['v'] as num?)?.toDouble() ?? 0;
@@ -1245,7 +1244,7 @@ class SubscriptionService {
     );
     if (rows.isEmpty) {
       return UsageGate(
-        result: const UsageCheckResult(
+        result: UsageCheckResult(
           allowed: false,
           willExceed: false,
           limitPieces: 0,
@@ -1258,7 +1257,7 @@ class SubscriptionService {
           exceededValue: 0,
           piecesIsBinding: false,
           usageRatio: 0,
-          message: 'الاشتراك غير موجود في قاعدة البيانات',
+          message: tr('الاشتراك غير موجود في قاعدة البيانات'),
         ),
         sub: const {},
       );
@@ -1376,13 +1375,7 @@ class SubscriptionService {
       if (ids.isEmpty) return 0;
       final placeholders = List.filled(ids.length, '?').join(',');
       final usageRows = await db.readData(
-        'SELECT subscription_id, '
-        '  COALESCE(subscription_used_pieces, 0) AS p, '
-        '  COALESCE(subscription_used_value, 0) AS v, '
-        '  invoice_date, list_data '
-        'FROM invoices '
-        'WHERE subscription_id IN ($placeholders) '
-        '  AND COALESCE(is_active, 1) = 1',
+        'SELECT subscription_id,   COALESCE(subscription_used_pieces, 0) AS p,   COALESCE(subscription_used_value, 0) AS v,   invoice_date, list_data FROM invoices WHERE subscription_id IN ($placeholders)   AND COALESCE(is_active, 1) = 1',
         ids,
       );
 
@@ -1458,8 +1451,7 @@ class SubscriptionService {
       );
       final inWindow = await db.countRows(
         'invoices',
-        where: 'subscription_id = ? AND DATE(invoice_date) >= ? '
-            'AND DATE(invoice_date) < ?',
+        where: 'subscription_id = ? AND DATE(invoice_date) >= ? AND DATE(invoice_date) < ?',
         whereArgs: [
           subId,
           _dayFmt.format(cycleStart(sub)),

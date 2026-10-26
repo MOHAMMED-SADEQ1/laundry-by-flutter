@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 import 'package:laundry/config/app_info.dart';
 import 'package:laundry/core/theme/app_colors.dart';
 import 'package:laundry/services/business_info_service.dart';
+import 'package:laundry/services/i18n/l10n.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 /// حقوق المطوّر — عرض موحّد لجملة [AppInfo.developerCredit].
@@ -99,10 +100,10 @@ void showDeveloperDialog() {
       children: [
         const Icon(Icons.code, size: 40, color: AppColors.primary),
         const SizedBox(height: 10),
-        const Text(
+        Text(
           AppInfo.developerCredit,
           textAlign: TextAlign.center,
-          style: TextStyle(
+          style: const TextStyle(
             fontFamily: 'cairo',
             fontSize: 14,
             fontWeight: FontWeight.bold,
@@ -110,10 +111,10 @@ void showDeveloperDialog() {
           ),
         ),
         const SizedBox(height: 8),
-        const Text(
-          'للشكاوى والاستفسار تواصل معنا عبر:',
+        Text(
+          tr('للشكاوى والاستفسار تواصل معنا عبر:'),
           textAlign: TextAlign.center,
-          style: TextStyle(
+          style: const TextStyle(
             fontFamily: 'cairo',
             fontSize: 13,
             color: AppColors.textSecondary,
@@ -126,7 +127,7 @@ void showDeveloperDialog() {
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
           IconButton(
-            tooltip: 'البريد الإلكتروني',
+            tooltip: tr('البريد الإلكتروني'),
             onPressed: _openDeveloperMail,
             icon: const Icon(
               Icons.mail_outline,
@@ -135,7 +136,7 @@ void showDeveloperDialog() {
             ),
           ),
           IconButton(
-            tooltip: 'واتساب',
+            tooltip: tr('واتساب'),
             onPressed: _openDeveloperWhatsapp,
             icon: const Icon(
               Icons.chat_outlined,
@@ -156,10 +157,10 @@ void showAboutAppDialog() {
   final String bizName =
       BusinessInfoService.instance.name.isNotEmpty
           ? BusinessInfoService.instance.name
-          : 'نظام إدارة المغاسل';
+          : tr('نظام إدارة المغاسل');
 
   Get.defaultDialog(
-    title: 'عن النظام',
+    title: tr('عن النظام'),
     titleStyle: const TextStyle(
       fontFamily: 'cairo',
       fontSize: 16,
@@ -197,7 +198,7 @@ void showAboutAppDialog() {
         ),
         const SizedBox(height: 4),
         Text(
-          'نظام إدارة المغاسل الذكي — الإصدار ${AppInfo.version}',
+          trf('نظام إدارة المغاسل الذكي — الإصدار {0}', [AppInfo.version]),
           textAlign: TextAlign.center,
           style: const TextStyle(
             fontFamily: 'cairo',
@@ -211,8 +212,8 @@ void showAboutAppDialog() {
         const DeveloperCredit(fontSize: 12, tappable: false, showIcon: false),
       ],
     ),
-    textConfirm: 'معلومات التواصل',
-    textCancel: 'إغلاق',
+    textConfirm: tr('معلومات التواصل'),
+    textCancel: tr('إغلاق'),
     confirmTextColor: Colors.white,
     buttonColor: AppColors.primary,
     cancelTextColor: AppColors.textSecondary,
@@ -234,7 +235,7 @@ Future<void> _openDeveloperMail() async {
     }
   } catch (_) {}
   Get.snackbar(
-    'البريد الإلكتروني',
+    tr('البريد الإلكتروني'),
     AppInfo.developerEmail,
     snackPosition: SnackPosition.BOTTOM,
     duration: const Duration(seconds: 5),
@@ -256,7 +257,7 @@ Future<void> _openDeveloperWhatsapp() async {
     }
   } catch (_) {}
   Get.snackbar(
-    'واتساب',
+    tr('واتساب'),
     AppInfo.developerPhone,
     snackPosition: SnackPosition.BOTTOM,
     duration: const Duration(seconds: 5),

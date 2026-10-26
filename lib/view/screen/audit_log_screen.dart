@@ -6,7 +6,9 @@ import 'package:intl/intl.dart' hide TextDirection;
 import 'package:laundry/controller/audit/audit_controller.dart';
 import 'package:laundry/core/theme/app_colors.dart';
 import 'package:laundry/services/audit/audit_service.dart';
+import 'package:laundry/services/i18n/l10n.dart';
 import 'package:laundry/view/widget/customappbar.dart';
+import 'package:laundry/services/i18n/ui_direction.dart';
 
 /// شاشة سجل التدقيق.
 ///
@@ -32,7 +34,7 @@ class _AuditLogScreenState extends State<AuditLogScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: CustomAppbar(title: 'سجل التدقيق'),
+      appBar: CustomAppbar(title: tr('سجل التدقيق')),
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
@@ -158,7 +160,7 @@ class _AuditLogScreenState extends State<AuditLogScreen> {
                           ),
                           const SizedBox(width: 5),
                           Text(
-                            'الحساسة فقط',
+                            tr('الحساسة فقط'),
                             style: TextStyle(
                               fontFamily: 'cairo',
                               fontSize: 11.5,
@@ -187,9 +189,9 @@ class _AuditLogScreenState extends State<AuditLogScreen> {
                         value: c.actionFilter.value.isEmpty
                             ? null
                             : c.actionFilter.value,
-                        hint: const Text(
-                          'كل الأحداث',
-                          style: TextStyle(
+                        hint: Text(
+                          tr('كل الأحداث'),
+                          style: const TextStyle(
                             fontFamily: 'cairo',
                             fontSize: 11.5,
                             color: AppColors.textSecondary,
@@ -202,9 +204,9 @@ class _AuditLogScreenState extends State<AuditLogScreen> {
                           color: AppColors.textPrimary,
                         ),
                         items: [
-                          const DropdownMenuItem(
+                          DropdownMenuItem(
                             value: '',
-                            child: Text('كل الأحداث'),
+                            child: Text(tr('كل الأحداث')),
                           ),
                           ...c.availableActions.map(
                             (a) => DropdownMenuItem(
@@ -240,9 +242,9 @@ class _AuditLogScreenState extends State<AuditLogScreen> {
             color: AppColors.textMuted.withValues(alpha: 0.6),
           ),
           const SizedBox(height: 10),
-          const Text(
-            'لا توجد أحداث في هذه الفترة',
-            style: TextStyle(
+          Text(
+            tr('لا توجد أحداث في هذه الفترة'),
+            style: const TextStyle(
               fontFamily: 'cairo',
               fontSize: 13,
               color: AppColors.textSecondary,
@@ -337,7 +339,7 @@ class _AuditLogScreenState extends State<AuditLogScreen> {
                         const SizedBox(width: 6),
                         Expanded(
                           child: Text(
-                            e.userName.isEmpty ? 'غير معروف' : e.userName,
+                            e.userName.isEmpty ? tr('غير معروف') : e.userName,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
                               fontFamily: 'cairo',
@@ -377,7 +379,7 @@ class _AuditLogScreenState extends State<AuditLogScreen> {
   void _showDetail(AuditEntry e) {
     Get.bottomSheet(
       Directionality(
-        textDirection: TextDirection.rtl,
+        textDirection: appTextDirection,
         child: Container(
           decoration: const BoxDecoration(
             color: AppColors.surface,
@@ -410,19 +412,22 @@ class _AuditLogScreenState extends State<AuditLogScreen> {
                   ),
                 ),
                 const SizedBox(height: 10),
-                _kv('الحدث', e.action),
-                _kv('الجدول', e.tableLabel),
-                if (e.recordId != null) _kv('السجل', '#${e.recordId}'),
-                _kv('المستخدم', e.userName.isEmpty ? 'غير معروف' : e.userName),
+                _kv(tr('الحدث'), e.action),
+                _kv(tr('الجدول'), e.tableLabel),
+                if (e.recordId != null) _kv(tr('السجل'), '#${e.recordId}'),
+                _kv(
+                  tr('المستخدم'),
+                  e.userName.isEmpty ? tr('غير معروف') : e.userName,
+                ),
                 if (e.timestamp != null)
                   _kv(
-                    'التاريخ',
+                    tr('التاريخ'),
                     DateFormat('yyyy-MM-dd  HH:mm:ss').format(e.timestamp!),
                   ),
                 if (e.oldValues != null && e.oldValues!.trim().isNotEmpty)
-                  _jsonBlock('القيم السابقة', e.oldValues!),
+                  _jsonBlock(tr('القيم السابقة'), e.oldValues!),
                 if (e.newValues != null && e.newValues!.trim().isNotEmpty)
-                  _jsonBlock('القيم الجديدة', e.newValues!),
+                  _jsonBlock(tr('القيم الجديدة'), e.newValues!),
               ],
             ),
           ),

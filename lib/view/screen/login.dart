@@ -4,8 +4,10 @@ import 'package:laundry/controller/auth/auth_controller.dart';
 import 'package:laundry/config/app_info.dart';
 import 'package:laundry/core/theme/app_colors.dart';
 import 'package:laundry/services/business_info_service.dart';
+import 'package:laundry/services/i18n/l10n.dart';
 import 'package:laundry/view/widget/common/animation_wrappers.dart';
 import 'package:laundry/view/widget/common/developer_credit.dart';
+import 'package:laundry/services/i18n/ui_direction.dart';
 
 class LoginScreen extends StatelessWidget {
   LoginScreen({super.key});
@@ -89,7 +91,7 @@ class LoginScreen extends StatelessWidget {
                           Text(
                             BusinessInfoService.instance.name.isNotEmpty
                                 ? BusinessInfoService.instance.name
-                                : 'نظام إدارة المغاسل',
+                                : tr('نظام إدارة المغاسل'),
                             style: TextStyle(
                               fontSize: 26,
                               fontFamily: 'DTHULUTH',
@@ -99,7 +101,7 @@ class LoginScreen extends StatelessWidget {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            "تسجيل الدخول إلى النظام",
+                            tr('تسجيل الدخول إلى النظام'),
                             style: TextStyle(
                               fontSize: 13,
                               fontFamily: 'cairo',
@@ -110,12 +112,12 @@ class LoginScreen extends StatelessWidget {
 
                           // اسم المستخدم
                           TextFormField(
-                            decoration: const InputDecoration(
-                              labelText: 'اسم المستخدم',
-                              hintText: 'أدخل اسم المستخدم',
-                              prefixIcon: Icon(Icons.person_outline),
+                            decoration: InputDecoration(
+                              labelText: tr('اسم المستخدم'),
+                              hintText: tr('أدخل اسم المستخدم'),
+                              prefixIcon: const Icon(Icons.person_outline),
                             ),
-                            textDirection: TextDirection.rtl,
+                            textDirection: appTextDirection,
                             onChanged:
                                 (value) => controller.username.value = value,
                           ),
@@ -126,8 +128,8 @@ class LoginScreen extends StatelessWidget {
                             () => TextFormField(
                               obscureText: !controller.showPassword.value,
                               decoration: InputDecoration(
-                                labelText: 'كلمة المرور',
-                                hintText: 'أدخل كلمة المرور',
+                                labelText: tr('كلمة المرور'),
+                                hintText: tr('أدخل كلمة المرور'),
                                 prefixIcon: const Icon(Icons.lock_outline),
                                 suffixIcon: IconButton(
                                   icon: Icon(
@@ -139,7 +141,7 @@ class LoginScreen extends StatelessWidget {
                                       controller.togglePasswordVisibility,
                                 ),
                               ),
-                              textDirection: TextDirection.rtl,
+                              textDirection: appTextDirection,
                               onChanged:
                                   (value) => controller.password.value = value,
                             ),
@@ -178,13 +180,15 @@ class LoginScreen extends StatelessWidget {
                                             color: Colors.white,
                                           ),
                                         )
-                                        : const Text("تسجيل الدخول"),
+                                        : Text(tr('تسجيل الدخول')),
                               ),
                             ),
                           ),
                           const SizedBox(height: 14),
                           Text(
-                            "نظام إدارة المغاسل — الإصدار ${AppInfo.version}",
+                            trf('نظام إدارة المغاسل — الإصدار {0}', [
+                              AppInfo.version,
+                            ]),
                             style: TextStyle(
                               fontSize: 11,
                               fontFamily: 'cairo',

@@ -4,6 +4,8 @@ import 'package:intl/intl.dart';
 import 'package:laundry/controller/customer_account_controller.dart';
 import 'package:laundry/core/theme/app_colors.dart';
 import 'package:laundry/services/customer/credit_guard.dart';
+import 'package:laundry/services/i18n/l10n.dart';
+import 'package:laundry/services/payment/payment_method.dart';
 import 'package:laundry/services/security/session_manager.dart';
 import 'package:laundry/view/widget/customappbar.dart';
 import 'package:laundry/view/widget/customer/customer_statement_sheet.dart';
@@ -28,11 +30,11 @@ class _CustomerAccountScreenState extends State<CustomerAccountScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: CustomAppbar(
-        title: 'حساب الزبون',
+        title: tr('حساب الزبون'),
         actions: Obx(() {
           if (controller.customer.value == null) return const SizedBox();
           return IconButton(
-            tooltip: 'كشف الحساب',
+            tooltip: tr('كشف الحساب'),
             onPressed: () => _showStatementSheet(context),
             icon: const Icon(Icons.receipt_long, color: Colors.white),
           );
@@ -43,9 +45,9 @@ class _CustomerAccountScreenState extends State<CustomerAccountScreen> {
         return FloatingActionButton.extended(
           onPressed: () => _showPaymentDialog(context),
           icon: const Icon(Icons.payment, color: Colors.white),
-          label: const Text(
-            'تسجيل دفعة',
-            style: TextStyle(fontFamily: 'cairo', color: Colors.white),
+          label: Text(
+            tr('تسجيل دفعة'),
+            style: const TextStyle(fontFamily: 'cairo', color: Colors.white),
           ),
           backgroundColor: AppColors.success,
         );
@@ -64,8 +66,11 @@ class _CustomerAccountScreenState extends State<CustomerAccountScreen> {
           }
           final cust = controller.customer.value;
           if (cust == null) {
-            return const Center(
-              child: Text('لا توجد بيانات', style: TextStyle(fontFamily: 'cairo')),
+            return Center(
+              child: Text(
+                tr('لا توجد بيانات'),
+                style: const TextStyle(fontFamily: 'cairo'),
+              ),
             );
           }
           return ListView(
@@ -108,11 +113,11 @@ class _CustomerAccountScreenState extends State<CustomerAccountScreen> {
 
   void _showPaymentDialog(BuildContext context) {
     final amountCtrl = TextEditingController();
-    String method = 'كاش';
+    String method = PaymentMethod.cash.key;
     final notesCtrl = TextEditingController();
 
     Get.defaultDialog(
-      title: 'تسجيل دفعة',
+      title: tr('تسجيل دفعة'),
       titleStyle: const TextStyle(
         fontFamily: 'cairo',
         fontWeight: FontWeight.bold,
@@ -127,7 +132,9 @@ class _CustomerAccountScreenState extends State<CustomerAccountScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  'المتبقي: ${remaining.toStringAsFixed(2)} ريال',
+                  trf('المتبقي: {0} ريال', [
+                    remaining.toStringAsFixed(2),
+                  ]),
                   style: TextStyle(
                     fontFamily: 'cairo',
                     fontSize: 14,
@@ -140,11 +147,11 @@ class _CustomerAccountScreenState extends State<CustomerAccountScreen> {
                   controller: amountCtrl,
                   keyboardType: TextInputType.number,
                   decoration: InputDecoration(
-                    labelText: 'المبلغ',
+                    labelText: tr('المبلغ'),
                     labelStyle: const TextStyle(fontFamily: 'cairo'),
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                     prefixIcon: const Icon(Icons.attach_money),
-                    suffixText: 'ريال',
+                    suffixText: tr('ريال'),
                   ),
                   style: const TextStyle(fontFamily: 'cairo'),
                 ),
@@ -153,21 +160,26 @@ class _CustomerAccountScreenState extends State<CustomerAccountScreen> {
                   children: [
                     Expanded(
                       child: _PaymentMethodChip(
-                        label: 'كاش',
+                        label: PaymentMethods.label(PaymentMethod.cash.key),
                         icon: Icons.money,
-                        selected: method == 'كاش',
+                        selected:
+                            PaymentMethods.isCash(method),
                         color: AppColors.success,
-                        onTap: () => setState(() => method = 'كاش'),
+                        onTap: () =>
+                            setState(() => method = PaymentMethod.cash.key),
                       ),
                     ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: _PaymentMethodChip(
-                        label: 'شبكة',
+                        label: PaymentMethods.label(PaymentMethod.card.key),
                         icon: Icons.credit_card,
-                        selected: method == 'شبكة',
+                        selected:
+                            PaymentMethods.tryParse(method) ==
+                            PaymentMethod.card,
                         color: AppColors.info,
-                        onTap: () => setState(() => method = 'شبكة'),
+                        onTap: () =>
+                            setState(() => method = PaymentMethod.card.key),
                       ),
                     ),
                   ],
@@ -176,7 +188,7 @@ class _CustomerAccountScreenState extends State<CustomerAccountScreen> {
                 TextField(
                   controller: notesCtrl,
                   decoration: InputDecoration(
-                    labelText: 'ملاحظات (اختياري)',
+                    labelText: tr('ملاحظات (اختياري)'),
                     labelStyle: const TextStyle(fontFamily: 'cairo'),
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                     prefixIcon: const Icon(Icons.notes),
@@ -188,14 +200,14 @@ class _CustomerAccountScreenState extends State<CustomerAccountScreen> {
           );
         },
       ),
-      textConfirm: 'تسجيل',
-      textCancel: 'إلغاء',
+      textConfirm: tr('تسجيل'),
+      textCancel: tr('إلغاء'),
       confirmTextColor: Colors.white,
       buttonColor: AppColors.success,
       onConfirm: () async {
         final amount = double.tryParse(amountCtrl.text.trim()) ?? 0;
         if (amount <= 0) {
-          Get.snackbar('خطأ', 'أدخل مبلغ صحيح',
+          Get.snackbar(tr('خطأ'), tr('أدخل مبلغ صحيح'),
               snackPosition: SnackPosition.BOTTOM);
           return;
         }
@@ -234,10 +246,10 @@ class _CustomerHeader extends StatelessWidget {
     final isDebtor = balance < 0;
     final isCreditor = balance > 0;
     final balanceLabel = isDebtor
-        ? 'عليه دين'
+        ? tr('عليه دين')
         : isCreditor
-        ? 'له رصيد (سلفة)'
-        : 'الرصيد';
+        ? tr('له رصيد (سلفة)')
+        : tr('الرصيد');
     final balanceValue = balance.abs();
     final limit = controller.creditLimit;
     final overLimit = controller.isOverLimit;
@@ -295,8 +307,12 @@ class _CustomerHeader extends StatelessWidget {
                           padding: const EdgeInsets.only(top: 3),
                           child: Text(
                             overLimit
-                                ? 'تجاوز حدّ الدين (${limit.toStringAsFixed(0)} ر.س)'
-                                : 'حدّ الدين: ${limit.toStringAsFixed(0)} ر.س',
+                                ? trf('تجاوز حدّ الدين ({0} ر.س)', [
+                                    limit.toStringAsFixed(0),
+                                  ])
+                                : trf('حدّ الدين: {0} ر.س', [
+                                    limit.toStringAsFixed(0),
+                                  ]),
                             style: TextStyle(
                               fontFamily: 'cairo',
                               fontSize: 11,
@@ -312,7 +328,7 @@ class _CustomerHeader extends StatelessWidget {
                   ),
                 ),
                 IconButton(
-                  tooltip: 'تعديل حدّ الدين',
+                  tooltip: tr('تعديل حدّ الدين'),
                   onPressed: () => _showCreditLimitDialog(context),
                   icon: const Icon(
                     Icons.tune,
@@ -326,13 +342,13 @@ class _CustomerHeader extends StatelessWidget {
             Row(
               children: [
                 _BalanceItem(
-                  label: 'الذمة الحالية',
+                  label: tr('الذمة الحالية'),
                   value: controller.totalRemaining.toStringAsFixed(2),
                   color: Colors.white,
                 ),
                 const SizedBox(width: 12),
                 _BalanceItem(
-                  label: 'المدفوع',
+                  label: tr('المدفوع'),
                   value: controller.totalPaid.toStringAsFixed(2),
                   color: Colors.white.withValues(alpha: 0.8),
                 ),
@@ -369,8 +385,9 @@ class _CustomerHeader extends StatelessWidget {
                     ),
                     const SizedBox(width: 7),
                     Text(
-                      'إجمالي المشتريات: '
-                      '${controller.totalSpent.toStringAsFixed(2)} ر.س',
+                      trf('إجمالي المشتريات: {0} ر.س', [
+                        controller.totalSpent.toStringAsFixed(2),
+                      ]),
                       style: const TextStyle(
                         fontFamily: 'cairo',
                         fontSize: 12,
@@ -379,7 +396,7 @@ class _CustomerHeader extends StatelessWidget {
                     ),
                     const Spacer(),
                     Text(
-                      '${controller.loyaltyPoints} نقطة',
+                      trf('{0} نقطة', ['${controller.loyaltyPoints}']),
                       style: const TextStyle(
                         fontFamily: 'cairo',
                         fontSize: 12,
@@ -406,7 +423,9 @@ class _CustomerHeader extends StatelessWidget {
                   ),
                   icon: const Icon(Icons.savings, size: 17),
                   label: Text(
-                    'استخدم الرصيد (${controller.availableCredit.toStringAsFixed(2)}) لسداد الذمم',
+                    trf('استخدم الرصيد ({0}) لسداد الذمم', [
+                      controller.availableCredit.toStringAsFixed(2),
+                    ]),
                     style: const TextStyle(
                       fontFamily: 'cairo',
                       fontSize: 12,
@@ -430,7 +449,7 @@ class _CustomerHeader extends StatelessWidget {
           : '',
     );
     Get.defaultDialog(
-      title: 'حدّ الدين الآجل',
+      title: tr('حدّ الدين الآجل'),
       titleStyle: const TextStyle(
         fontFamily: 'cairo',
         fontWeight: FontWeight.bold,
@@ -441,9 +460,9 @@ class _CustomerHeader extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text(
-              'اتركه فارغًا أو صفرًا لإلغاء الحدّ',
-              style: TextStyle(
+            Text(
+              tr('اتركه فارغًا أو صفرًا لإلغاء الحدّ'),
+              style: const TextStyle(
                 fontFamily: 'cairo',
                 fontSize: 12,
                 color: AppColors.textSecondary,
@@ -455,9 +474,9 @@ class _CustomerHeader extends StatelessWidget {
               keyboardType: TextInputType.number,
               textAlign: TextAlign.center,
               decoration: InputDecoration(
-                labelText: 'الحدّ الأقصى للدين',
+                labelText: tr('الحدّ الأقصى للدين'),
                 labelStyle: const TextStyle(fontFamily: 'cairo'),
-                suffixText: 'ريال',
+                suffixText: tr('ريال'),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(10),
                 ),
@@ -471,8 +490,8 @@ class _CustomerHeader extends StatelessWidget {
           ],
         ),
       ),
-      textConfirm: 'حفظ',
-      textCancel: 'إلغاء',
+      textConfirm: tr('حفظ'),
+      textCancel: tr('إلغاء'),
       confirmTextColor: Colors.white,
       buttonColor: AppColors.primary,
       onConfirm: () async {
@@ -490,10 +509,12 @@ class _CustomerHeader extends StatelessWidget {
             customer['customer_id'] as int,
           );
           Get.snackbar(
-            'تم الحفظ',
+            tr('تم الحفظ'),
             value > 0
-                ? 'حُدّد سقف الدين الآجل بمبلغ ${value.toStringAsFixed(2)} ر.س'
-                : 'أُلغي سقف الدين الآجل لهذا الزبون',
+                ? trf('حُدّد سقف الدين الآجل بمبلغ {0} ر.س', [
+                    value.toStringAsFixed(2),
+                  ])
+                : tr('أُلغي سقف الدين الآجل لهذا الزبون'),
             snackPosition: SnackPosition.BOTTOM,
             backgroundColor: AppColors.success,
             colorText: Colors.white,
@@ -502,8 +523,8 @@ class _CustomerHeader extends StatelessWidget {
           );
         } else {
           Get.snackbar(
-            'فشل',
-            'تعذر حفظ حدّ الائتمان — أعد المحاولة',
+            tr('فشل'),
+            tr('تعذر حفظ حدّ الائتمان — أعد المحاولة'),
             snackPosition: SnackPosition.BOTTOM,
             backgroundColor: AppColors.danger,
             colorText: Colors.white,
@@ -542,7 +563,7 @@ class _BalanceItem extends StatelessWidget {
           ),
           const SizedBox(height: 2),
           Text(
-            '$value ريال',
+            trf('{0} ريال', [value]),
             style: TextStyle(
               fontFamily: 'cairo',
               fontSize: bold ? 16 : 13,
@@ -580,7 +601,7 @@ class _DebtInvoices extends StatelessWidget {
                 Icon(Icons.receipt_long, color: AppColors.danger, size: 20),
                 const SizedBox(width: 8),
                 Text(
-                  'الفواتير الآجلة (${invoices.length})',
+                  trf('الفواتير الآجلة ({0})', ['${invoices.length}']),
                   style: TextStyle(
                     fontFamily: 'cairo',
                     fontSize: 14,
@@ -592,11 +613,16 @@ class _DebtInvoices extends StatelessWidget {
             ),
           ),
           if (invoices.isEmpty)
-            const Padding(
-              padding: EdgeInsets.all(20),
+            Padding(
+              padding: const EdgeInsets.all(20),
               child: Center(
-                child: Text('لا توجد فواتير آجلة',
-                    style: TextStyle(fontFamily: 'cairo', color: Colors.grey)),
+                child: Text(
+                  tr('لا توجد فواتير آجلة'),
+                  style: const TextStyle(
+                    fontFamily: 'cairo',
+                    color: Colors.grey,
+                  ),
+                ),
               ),
             )
           else
@@ -651,7 +677,7 @@ class _InvoiceRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'الإجمالي: ${total.toStringAsFixed(2)}',
+                  trf('الإجمالي: {0}', [total.toStringAsFixed(2)]),
                   style: const TextStyle(
                     fontFamily: 'cairo',
                     fontSize: 13,
@@ -660,7 +686,10 @@ class _InvoiceRow extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  'مدفوع: ${paid.toStringAsFixed(2)}  ·  متبقي: ${remaining.toStringAsFixed(2)}',
+                  trf('مدفوع: {0}  ·  متبقي: {1}', [
+                    paid.toStringAsFixed(2),
+                    remaining.toStringAsFixed(2),
+                  ]),
                   style: TextStyle(
                     fontFamily: 'cairo',
                     fontSize: 11,
@@ -708,7 +737,7 @@ class _PaymentHistory extends StatelessWidget {
                 Icon(Icons.payments, color: AppColors.success, size: 20),
                 const SizedBox(width: 8),
                 Text(
-                  'سجل الدفعات (${payments.length})',
+                  trf('سجل الدفعات ({0})', ['${payments.length}']),
                   style: TextStyle(
                     fontFamily: 'cairo',
                     fontSize: 14,
@@ -720,11 +749,16 @@ class _PaymentHistory extends StatelessWidget {
             ),
           ),
           if (payments.isEmpty)
-            const Padding(
-              padding: EdgeInsets.all(20),
+            Padding(
+              padding: const EdgeInsets.all(20),
               child: Center(
-                child: Text('لا توجد دفعات مسجلة',
-                    style: TextStyle(fontFamily: 'cairo', color: Colors.grey)),
+                child: Text(
+                  tr('لا توجد دفعات مسجلة'),
+                  style: const TextStyle(
+                    fontFamily: 'cairo',
+                    color: Colors.grey,
+                  ),
+                ),
               ),
             )
           else
@@ -742,7 +776,8 @@ class _PaymentRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final amount = ((payment['amount'] ?? 0) as num).toDouble();
-    final method = payment['payment_method']?.toString() ?? 'كاش';
+    final method =
+        payment['payment_method']?.toString() ?? PaymentMethod.cash.key;
     final user = payment['user_name']?.toString() ?? '';
     final date = _formatDate(payment['payment_date']?.toString());
 
@@ -761,7 +796,9 @@ class _PaymentRow extends StatelessWidget {
               borderRadius: BorderRadius.circular(8),
             ),
             child: Icon(
-              method == 'كاش' ? Icons.money : Icons.credit_card,
+              PaymentMethods.isCash(method)
+                  ? Icons.money
+                  : Icons.credit_card,
               size: 18,
               color: AppColors.success,
             ),
@@ -772,7 +809,7 @@ class _PaymentRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '+${amount.toStringAsFixed(2)} ريال',
+                  trf('+{0} ريال', [amount.toStringAsFixed(2)]),
                   style: TextStyle(
                     fontFamily: 'cairo',
                     fontSize: 14,
@@ -784,7 +821,7 @@ class _PaymentRow extends StatelessWidget {
                 Row(
                   children: [
                     Text(
-                      method,
+                      PaymentMethods.label(method),
                       style: TextStyle(
                         fontFamily: 'cairo',
                         fontSize: 11,
@@ -890,8 +927,8 @@ class _ItemsTaken extends StatelessWidget {
       return _Panel(
         icon: Icons.checkroom,
         color: AppColors.indigo,
-        title: 'الأصناف التي أخذها',
-        trailing: '$totalPieces قطعة',
+        title: tr('الأصناف التي أخذها'),
+        trailing: trf('{0} قطعة', ['$totalPieces']),
         child: Column(
           children: [
             for (final it in items)
@@ -901,7 +938,7 @@ class _ItemsTaken extends StatelessWidget {
                   children: [
                     Expanded(
                       child: Text(
-                        it.name,
+                        localizedText(it.name, it.nameEn),
                         style: const TextStyle(
                           fontFamily: 'cairo',
                           fontSize: 13,
@@ -921,7 +958,7 @@ class _ItemsTaken extends StatelessWidget {
                     SizedBox(
                       width: 86,
                       child: Text(
-                        '${it.value.toStringAsFixed(2)} ر.س',
+                        trf('{0} ر.س', [it.value.toStringAsFixed(2)]),
                         textAlign: TextAlign.left,
                         style: const TextStyle(
                           fontFamily: 'cairo',
@@ -954,10 +991,11 @@ class _SubscriptionUsage extends StatelessWidget {
       return _Panel(
         icon: Icons.local_laundry_service,
         color: AppColors.violet,
-        title: 'سجل الاشتراك الشهري',
-        trailing:
-            '${st.totalSubscriptionPieces} قطعة · '
-            '${st.totalSubscriptionValue.toStringAsFixed(2)} ر.س',
+        title: tr('سجل الاشتراك الشهري'),
+        trailing: trf('{0} قطعة · {1} ر.س', [
+          '${st.totalSubscriptionPieces}',
+          st.totalSubscriptionValue.toStringAsFixed(2),
+        ]),
         child: Column(
           children: [
             for (final u in st.usages)
@@ -967,8 +1005,13 @@ class _SubscriptionUsage extends StatelessWidget {
                   children: [
                     Expanded(
                       child: Text(
-                        '${_formatDate(u.date)}  ·  اشتراك #${u.subscriptionId}'
-                        '${u.invoiceId == null ? '' : '  ·  فاتورة #${u.invoiceId}'}',
+                        trf('{0}  ·  اشتراك #{1}{2}', [
+                          _formatDate(u.date),
+                          '${u.subscriptionId}',
+                          u.invoiceId == null
+                              ? ''
+                              : trf('  ·  فاتورة #{0}', ['${u.invoiceId}']),
+                        ]),
                         style: const TextStyle(
                           fontFamily: 'cairo',
                           fontSize: 12,
@@ -976,7 +1019,7 @@ class _SubscriptionUsage extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      '${u.pieces} قطعة',
+                      trf('{0} قطعة', ['${u.pieces}']),
                       style: const TextStyle(
                         fontFamily: 'cairo',
                         fontSize: 13,
@@ -988,7 +1031,7 @@ class _SubscriptionUsage extends StatelessWidget {
                     SizedBox(
                       width: 86,
                       child: Text(
-                        '${u.value.toStringAsFixed(2)} ر.س',
+                        trf('{0} ر.س', [u.value.toStringAsFixed(2)]),
                         textAlign: TextAlign.left,
                         style: const TextStyle(
                           fontFamily: 'cairo',
@@ -1002,7 +1045,9 @@ class _SubscriptionUsage extends StatelessWidget {
               ),
             const Divider(),
             Text(
-              'الاشتراك يُخصم من السقف عند كل غسلة — القطع أعلاه هي المُستهلكة فعلًا.',
+              tr(
+                tr('الاشتراك يُخصم من السقف عند كل غسلة — القطع أعلاه هي المُستهلكة فعلًا.'),
+              ),
               style: TextStyle(
                 fontFamily: 'cairo',
                 fontSize: 11,

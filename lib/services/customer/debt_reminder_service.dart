@@ -6,7 +6,9 @@ import 'package:laundry/core/services/invoice_share_service.dart';
 import 'package:laundry/core/theme/app_colors.dart';
 import 'package:laundry/services/business_info_service.dart';
 import 'package:laundry/services/customer/debt_report_service.dart';
+import 'package:laundry/services/i18n/l10n.dart';
 import 'package:laundry/sqldb.dart';
+import 'package:laundry/services/i18n/ui_direction.dart';
 
 /// مطالبة ذمة عبر واتساب.
 ///
@@ -50,74 +52,88 @@ class DebtReminderService {
     // رأس الرسالة حسب النبرة
     switch (tone) {
       case 'soft':
-        lines.writeln('🧺 *تنبيه ودّي من $bizName*');
+        lines.writeln(trf('🧺 *تنبيه ودّي من {0}*', [bizName]));
         break;
       case 'normal':
-        lines.writeln('🧺 *تذكير بذمة قائمة — $bizName*');
+        lines.writeln(trf('🧺 *تذكير بذمة قائمة — {0}*', [bizName]));
         break;
       case 'firm':
-        lines.writeln('⚠️ *مطالبة بذمة متأخرة — $bizName*');
+        lines.writeln(trf('⚠️ *مطالبة بذمة متأخرة — {0}*', [bizName]));
         break;
       default:
-        lines.writeln('📋 *مطالبة رسمية بذمة متأخرة — $bizName*');
+        lines.writeln(trf('📋 *مطالبة رسمية بذمة متأخرة — {0}*', [bizName]));
     }
 
     lines.writeln('─────────────────');
-    lines.writeln('عزيزنا ${row.customerName}،');
+    lines.writeln(trf('عزيزنا {0}،', [row.customerName]));
 
     // مفتتح بحسب النبرة
     final days = row.oldestDays ?? 0;
     switch (tone) {
       case 'soft':
         lines.writeln(
-          'نأمل أن تكون بخير. لديك مبلغ متبقٍ لم يُسدَّد بعد، '
-          'ونودّ تذكيرك به ودّيًا:',
+          tr(
+            'نأمل أن تكون بخير. لديك مبلغ متبقٍ لم يُسدَّد بعد، ونودّ تذكيرك به ودّيًا:',
+          ),
         );
         break;
       case 'normal':
         lines.writeln(
-          'نود تذكيرك بأن لديك ذمة قائمة منذ $days يومًا، '
-          'ونأمل تسويتها في أقرب وقت:',
+          trf(
+            'نود تذكيرك بأن لديك ذمة قائمة منذ {0} يومًا، ونأمل تسويتها في أقرب وقت:',
+            [days],
+          ),
         );
         break;
       case 'firm':
         lines.writeln(
-          'لديك ذمة متأخرة عن السداد منذ $days يومًا. '
-          'نرجو المبادرة بتسويتها وتجنّب أي إجراء لاحق:',
+          trf(
+            'لديك ذمة متأخرة عن السداد منذ {0} يومًا. نرجو المبادرة بتسويتها وتجنّب أي إجراء لاحق:',
+            [days],
+          ),
         );
         break;
       default:
         lines.writeln(
-          'ذمتك القائمة لدينا تجاوزت $days يومًا دون سداد، '
-          'وهي مدة تتجاوز المدى المعتاد بشكل واضح. '
-          'نطلب تسويتها فورًا أو التواصل معنا لترتيب السداد:',
+          trf(
+            'ذمتك القائمة لدينا تجاوزت {0} يومًا دون سداد، وهي مدة تتجاوز المدى المعتاد بشكل واضح. نطلب تسويتها فورًا أو التواصل معنا لترتيب السداد:',
+            [days],
+          ),
         );
     }
 
     lines.writeln('─────────────────');
-    lines.writeln('💰 *إجمالي الذمة: ${money.format(row.totalDebt)} ر.س*');
-    lines.writeln('📄 عدد الفواتير: ${row.openInvoices}');
+    lines.writeln(
+      trf('💰 *إجمالي الذمة: {0} ر.س*', [money.format(row.totalDebt)]),
+    );
+    lines.writeln(trf('📄 عدد الفواتير: {0}', [row.openInvoices]));
 
     // تفصيل الفواتير المتأخرة (الأقدم أولًا)
     if (includeInvoices) {
       final invoices = await _openInvoicesOf(row.customerId);
       if (invoices.isNotEmpty) {
         lines.writeln('─────────────────');
-        lines.writeln('*تفصيل المبالغ:*');
+        lines.writeln(tr('*تفصيل المبالغ:*'));
         for (final inv in invoices.take(8)) {
           final id = inv['invoices_id'];
           final due = ((inv['remaining_amount'] ?? 0) as num).toDouble();
           final date = _parse(inv['invoice_date']);
           final invoiceDays = date == null ? 0 : _daysSince(date);
           final ageLabel = invoiceDays >= 91
-              ? 'متأخرة $invoiceDays يومًا'
-              : 'منذ $invoiceDays يوم';
+              ? trf('متأخرة {0} يومًا', [invoiceDays])
+              : trf('منذ {0} يوم', [invoiceDays]);
           lines.writeln(
-            '• فاتورة #$id — ${money.format(due)} ر.س ($ageLabel)',
+            trf('• فاتورة #{0} — {1} ر.س ({2})', [
+              id,
+              money.format(due),
+              ageLabel,
+            ]),
           );
         }
         if (invoices.length > 8) {
-          lines.writeln('... و${invoices.length - 8} فاتورة أخرى');
+          lines.writeln(
+            trf('... و{0} فاتورة أخرى', [invoices.length - 8]),
+          );
         }
       }
     }
@@ -125,9 +141,9 @@ class DebtReminderService {
     lines.writeln('─────────────────');
     final bizPhone = BusinessInfoService.instance.phone;
     if (bizPhone.isNotEmpty) {
-      lines.writeln('📞 للتواصل: $bizPhone');
+      lines.writeln(trf('📞 للتواصل: {0}', [bizPhone]));
     }
-    lines.writeln('شكرًا لتعاونك — $bizName 💙');
+    lines.writeln(trf('شكرًا لتعاونك — {0} 💙', [bizName]));
 
     return lines.toString();
   }
@@ -138,11 +154,7 @@ class DebtReminderService {
   ) async {
     try {
       return await _db.readData(
-        'SELECT invoices_id, remaining_amount, invoice_date '
-        'FROM invoices '
-        'WHERE customer_id = ? AND subscription_id IS NULL '
-        '  AND COALESCE(remaining_amount, 0) > 0.004 '
-        'ORDER BY invoice_date ASC',
+        'SELECT invoices_id, remaining_amount, invoice_date FROM invoices WHERE customer_id = ? AND subscription_id IS NULL   AND COALESCE(remaining_amount, 0) > 0.004 ORDER BY invoice_date ASC',
         [customerId],
       );
     } catch (e) {
@@ -158,7 +170,7 @@ class DebtReminderService {
   /// حتى يتّسق السلوك في التطبيق كله.
   static Future<void> sendReminder(CustomerAgingRow row) async {
     if (row.totalDebt <= 0) {
-      _info('لا ذمة على هذا الزبون');
+      _info(tr('لا ذمة على هذا الزبون'));
       return;
     }
 
@@ -185,7 +197,7 @@ class DebtReminderService {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       Directionality(
-        textDirection: TextDirection.rtl,
+        textDirection: L10n.isRtl ? appTextDirection : TextDirection.ltr,
         child: Container(
           height: MediaQuery.of(Get.context!).size.height * 0.78,
           decoration: const BoxDecoration(
@@ -222,7 +234,7 @@ class DebtReminderService {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'مطالبة ${row.customerName}',
+                            trf('مطالبة {0}', [row.customerName]),
                             style: const TextStyle(
                               fontFamily: 'cairo',
                               fontSize: 14.5,
@@ -231,8 +243,7 @@ class DebtReminderService {
                             ),
                           ),
                           Text(
-                            '${_toneLabel(_toneOf(row.oldestDays))} · '
-                            'الرقم: $phone',
+                            '${_toneLabel(_toneOf(row.oldestDays))} · ${trf('الرقم: {0}', [phone])}',
                             style: const TextStyle(
                               fontFamily: 'cairo',
                               fontSize: 11,
@@ -250,11 +261,11 @@ class DebtReminderService {
                   ],
                 ),
               ),
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 16),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Text(
-                  'راجع الرسالة قبل الإرسال — يمكنك تعديل أي كلمة.',
-                  style: TextStyle(
+                  tr('راجع الرسالة قبل الإرسال — يمكنك تعديل أي كلمة.'),
+                  style: const TextStyle(
                     fontFamily: 'cairo',
                     fontSize: 10.5,
                     color: AppColors.textMuted,
@@ -297,12 +308,14 @@ class DebtReminderService {
                           Clipboard.setData(
                             ClipboardData(text: ctrl.text),
                           );
-                          _info('نُسخت الرسالة — يمكنك لصقها في أي تطبيق');
+                          _info(
+                            tr('نُسخت الرسالة — يمكنك لصقها في أي تطبيق'),
+                          );
                         },
                         icon: const Icon(Icons.copy, size: 16),
-                        label: const Text(
-                          'نسخ',
-                          style: TextStyle(
+                        label: Text(
+                          tr('نسخ'),
+                          style: const TextStyle(
                             fontFamily: 'cairo',
                             fontSize: 12.5,
                           ),
@@ -326,9 +339,9 @@ class DebtReminderService {
                         },
                         icon: const Icon(Icons.send,
                             size: 17, color: Colors.white),
-                        label: const Text(
-                          'إرسال عبر واتساب',
-                          style: TextStyle(
+                        label: Text(
+                          tr('إرسال عبر واتساب'),
+                          style: const TextStyle(
                             fontFamily: 'cairo',
                             fontSize: 13,
                             fontWeight: FontWeight.bold,
@@ -355,17 +368,18 @@ class DebtReminderService {
     final ctrl = TextEditingController();
     final confirmed = await Get.dialog<bool>(
       Directionality(
-        textDirection: TextDirection.rtl,
+        textDirection: L10n.isRtl ? appTextDirection : TextDirection.ltr,
         child: AlertDialog(
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-          title: const Row(
+          title: Row(
             children: [
-              Icon(Icons.phone_disabled, color: AppColors.warning, size: 20),
-              SizedBox(width: 8),
+              const Icon(Icons.phone_disabled,
+                  color: AppColors.warning, size: 20),
+              const SizedBox(width: 8),
               Text(
-                'لا يوجد رقم لهذا الزبون',
-                style: TextStyle(
+                tr('لا يوجد رقم لهذا الزبون'),
+                style: const TextStyle(
                   fontFamily: 'cairo',
                   fontSize: 14,
                   fontWeight: FontWeight.bold,
@@ -378,8 +392,10 @@ class DebtReminderService {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'الزبون «${row.customerName}» غير مسجّل برقم جوال. '
-                'أدخل الرقم ليُحفظ في سجله وتُرسل المطالبة.',
+                trf(
+                  'الزبون «{0}» غير مسجّل برقم جوال. أدخل الرقم ليُحفظ في سجله وتُرسل المطالبة.',
+                  [row.customerName],
+                ),
                 style: const TextStyle(
                   fontFamily: 'cairo',
                   fontSize: 12,
@@ -412,9 +428,9 @@ class DebtReminderService {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(Get.context!, false),
-              child: const Text(
-                'إلغاء',
-                style: TextStyle(fontFamily: 'cairo', fontSize: 13),
+              child: Text(
+                tr('إلغاء'),
+                style: const TextStyle(fontFamily: 'cairo', fontSize: 13),
               ),
             ),
             ElevatedButton(
@@ -422,9 +438,9 @@ class DebtReminderService {
                 backgroundColor: AppColors.success,
               ),
               onPressed: () => Navigator.pop(Get.context!, true),
-              child: const Text(
-                'حفظ وإرسال',
-                style: TextStyle(
+              child: Text(
+                tr('حفظ وإرسال'),
+                style: const TextStyle(
                   fontFamily: 'cairo',
                   fontSize: 13,
                   fontWeight: FontWeight.bold,
@@ -445,7 +461,7 @@ class DebtReminderService {
     final phone = ctrl.text.trim();
     ctrl.dispose();
     if (phone.isEmpty) {
-      _info('لم يُدخَل رقم — أُلغي الإرسال');
+      _info(tr('لم يُدخَل رقم — أُلغي الإرسال'));
       return;
     }
 
@@ -470,13 +486,13 @@ class DebtReminderService {
   static String _toneLabel(String tone) {
     switch (tone) {
       case 'soft':
-        return 'تنبيه ودّي';
+        return tr('تنبيه ودّي');
       case 'normal':
-        return 'تذكير';
+        return tr('تذكير');
       case 'firm':
-        return 'مطالبة';
+        return tr('مطالبة');
       default:
-        return 'مطالبة رسمية';
+        return tr('مطالبة رسمية');
     }
   }
 
@@ -497,7 +513,7 @@ class DebtReminderService {
 
   static void _info(String message) {
     Get.snackbar(
-      'ملاحظة',
+      tr('ملاحظة'),
       message,
       snackPosition: SnackPosition.BOTTOM,
       backgroundColor: AppColors.info,

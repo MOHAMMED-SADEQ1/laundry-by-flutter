@@ -3,8 +3,10 @@ import 'package:get/get.dart';
 import 'package:laundry/config/app_info.dart';
 import 'package:laundry/core/theme/app_colors.dart';
 import 'package:laundry/services/business_info_service.dart';
+import 'package:laundry/services/i18n/l10n.dart';
 import 'package:laundry/services/license/system_license_service.dart';
 import 'package:laundry/view/widget/license/license_renew_dialog.dart';
+import 'package:laundry/services/i18n/ui_direction.dart';
 
 /// شاشة القفل الكاملة عند انتهاء اشتراك النظام.
 ///
@@ -20,7 +22,7 @@ class LicenseLockScreen extends StatelessWidget {
     final bizName = BusinessInfoService.instance.name;
 
     return Directionality(
-      textDirection: TextDirection.rtl,
+      textDirection: appTextDirection,
       child: Scaffold(
         body: Container(
           decoration: const BoxDecoration(gradient: AppColors.darkGradient),
@@ -53,7 +55,9 @@ class LicenseLockScreen extends StatelessWidget {
                       ),
                       const SizedBox(height: 18),
                       Text(
-                        bizName.isNotEmpty ? bizName : 'نظام إدارة المغاسل',
+                        bizName.isNotEmpty
+                            ? bizName
+                            : tr('نظام إدارة المغاسل'),
                         style: const TextStyle(
                           fontFamily: 'cairo',
                           fontSize: 18,
@@ -64,8 +68,8 @@ class LicenseLockScreen extends StatelessWidget {
                       const SizedBox(height: 10),
                       Text(
                         tampered
-                            ? 'تعذّر التحقق من صحة تاريخ الجهاز'
-                            : 'انتهى اشتراك النظام',
+                            ? tr('تعذّر التحقق من صحة تاريخ الجهاز')
+                            : tr('انتهى اشتراك النظام'),
                         textAlign: TextAlign.center,
                         style: const TextStyle(
                           fontFamily: 'cairo',
@@ -77,10 +81,12 @@ class LicenseLockScreen extends StatelessWidget {
                       const SizedBox(height: 8),
                       Text(
                         tampered
-                            ? 'تاريخ الجهاز يسبق آخر تشغيل مسجّل للنظام. '
-                                  'اضبط تاريخ الجهاز بشكل صحيح، أو جدّد الاشتراك '
-                                  'كمدير النظام لإعادة ضبط التحقق.'
-                            : 'للاستمرار في استخدام النظام، يلزم تجديد الاشتراك.',
+                            ? tr(
+                                'تاريخ الجهاز يسبق آخر تشغيل مسجّل للنظام. اضبط تاريخ الجهاز بشكل صحيح، أو جدّد الاشتراك كمدير النظام لإعادة ضبط التحقق.',
+                              )
+                            : tr(
+                                'للاستمرار في استخدام النظام، يلزم تجديد الاشتراك.',
+                              ),
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           fontFamily: 'cairo',
@@ -113,8 +119,9 @@ class LicenseLockScreen extends StatelessWidget {
                               ),
                               const SizedBox(width: 8),
                               Text(
-                                'تاريخ الانتهاء: '
-                                '${SystemLicenseController.formatDate(expiry)}',
+                                trf('تاريخ الانتهاء: {0}', [
+                                  SystemLicenseController.formatDate(expiry),
+                                ]),
                                 style: const TextStyle(
                                   fontFamily: 'cairo',
                                   fontSize: 13,
@@ -140,9 +147,9 @@ class LicenseLockScreen extends StatelessWidget {
                             ),
                           ),
                           icon: const Icon(Icons.key_outlined),
-                          label: const Text(
-                            'تجديد الاشتراك',
-                            style: TextStyle(
+                          label: Text(
+                            tr('تجديد الاشتراك'),
+                            style: const TextStyle(
                               fontFamily: 'cairo',
                               fontSize: 15,
                               fontWeight: FontWeight.bold,

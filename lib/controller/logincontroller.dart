@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
 import 'package:laundry/core/constant/routes.dart';
+import 'package:laundry/services/i18n/l10n.dart';
 import 'package:laundry/sqldb.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -73,8 +74,8 @@ class LoginController extends GetxController {
       Get.offNamed(AppRoute.homepage);
     } else {
       Get.snackbar(
-        "خطأ",
-        "اسم المستخدم أو كلمة المرور غير صحيحة",
+        tr('خطأ'),
+        tr('اسم المستخدم أو كلمة المرور غير صحيحة'),
         snackPosition: SnackPosition.BOTTOM,
       );
     }

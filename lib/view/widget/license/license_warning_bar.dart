@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:laundry/core/theme/app_colors.dart';
+import 'package:laundry/services/i18n/l10n.dart';
 import 'package:laundry/services/license/system_license_service.dart';
 import 'package:laundry/view/widget/license/license_renew_dialog.dart';
 
@@ -14,6 +15,14 @@ class LicenseWarningBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final license = Get.find<SystemLicenseController>();
+    final expiry = license.expiryDate;
+    final text =
+        expiry == null
+            ? trf('اشتراك النظام: {0}', [license.statusLabel])
+            : trf('اشتراك النظام: {0} (حتى {1})', [
+              license.statusLabel,
+              SystemLicenseController.formatDate(expiry),
+            ]);
     return Material(
       color: AppColors.warning,
       child: SafeArea(
@@ -30,8 +39,7 @@ class LicenseWarningBar extends StatelessWidget {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'اشتراك النظام: ${license.statusLabel}'
-                  '${license.expiryDate == null ? '' : ' (حتى ${SystemLicenseController.formatDate(license.expiryDate!)})'}',
+                  text,
                   style: const TextStyle(
                     fontFamily: 'cairo',
                     fontSize: 12,
@@ -48,9 +56,9 @@ class LicenseWarningBar extends StatelessWidget {
                   minimumSize: const Size(0, 30),
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
-                child: const Text(
-                  'تجديد',
-                  style: TextStyle(
+                child: Text(
+                  tr('تجديد'),
+                  style: const TextStyle(
                     fontFamily: 'cairo',
                     fontSize: 12,
                     fontWeight: FontWeight.bold,

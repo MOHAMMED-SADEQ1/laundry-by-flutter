@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:laundry/controller/invoicecontroller.dart';
 import 'package:laundry/core/theme/app_colors.dart';
+import 'package:laundry/services/i18n/l10n.dart';
 import 'package:laundry/view/widget/customimg.dart';
 
 /// بند داخل الفاتورة — تصميم أنيق مع حذف عند الضغط
@@ -38,7 +39,7 @@ class CustomViewInvoice extends StatelessWidget {
           child: const Icon(Icons.checkroom, size: 15, color: Colors.white),
         ),
         title: Text(
-          "${part['vestments']} — ${part['content']}",
+          '${localizedText('${part['vestments'] ?? ''}', '${part['vestments_en'] ?? ''}')} — ${tr('${part['content'] ?? ''}')}',
           style: TextStyle(
             fontSize: 12.5,
             fontWeight: FontWeight.bold,
@@ -52,7 +53,7 @@ class CustomViewInvoice extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              "${part['price']} ر.س × ${part['count']}",
+              "${part['price']} ${tr('ر.س')} × ${part['count']}",
               style: TextStyle(
                 fontSize: 11.5,
                 fontWeight: FontWeight.w600,
@@ -82,7 +83,7 @@ class CustomViewInvoice extends StatelessWidget {
                         '${part['note']}'.trim().isNotEmpty)
                       Flexible(
                         child: Text(
-                          "${part['note']}",
+                          localizedText('${part['note'] ?? ''}', '${part['note_en'] ?? ''}'),
                           style: TextStyle(
                             fontSize: 10.5,
                             fontWeight: FontWeight.w600,
@@ -96,18 +97,18 @@ class CustomViewInvoice extends StatelessWidget {
                       const SizedBox(width: 5),
                       InkWell(
                         onTap: () => _showPhoto(part['photo']),
-                        child: const Row(
+                        child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(
+                            const Icon(
                               Icons.photo_camera,
                               size: 11,
                               color: AppColors.info,
                             ),
-                            SizedBox(width: 2),
+                            const SizedBox(width: 2),
                             Text(
-                              'صورة',
-                              style: TextStyle(
+                              tr('صورة'),
+                              style: const TextStyle(
                                 fontSize: 10,
                                 fontWeight: FontWeight.bold,
                                 color: AppColors.info,
@@ -139,7 +140,7 @@ class CustomViewInvoice extends StatelessWidget {
             const CustomImg(sizeImg: 15),
             const SizedBox(width: 4),
             IconButton(
-              tooltip: 'حذف البند',
+              tooltip: tr('حذف البند'),
               onPressed: () => _confirmDelete(),
               icon: const Icon(
                 Icons.delete_outline,
@@ -158,8 +159,8 @@ class CustomViewInvoice extends StatelessWidget {
     final file = File(path);
     if (!file.existsSync()) {
       Get.snackbar(
-        'تنبيه',
-        'صورة البقعة غير متوفرة',
+        tr('تنبيه'),
+        tr('صورة البقعة غير متوفرة'),
         snackPosition: SnackPosition.BOTTOM,
         backgroundColor: AppColors.warning,
         colorText: Colors.white,
@@ -181,9 +182,9 @@ class CustomViewInvoice extends StatelessWidget {
               ),
               TextButton(
                 onPressed: () => Get.back(),
-                child: const Text(
-                  'إغلاق',
-                  style: TextStyle(fontFamily: 'cairo', fontSize: 14),
+                child: Text(
+                  tr('إغلاق'),
+                  style: const TextStyle(fontFamily: 'cairo', fontSize: 14),
                 ),
               ),
             ],
@@ -196,17 +197,19 @@ class CustomViewInvoice extends StatelessWidget {
   void _confirmDelete() {
     Get.defaultDialog(
       backgroundColor: AppColors.surface,
-      title: 'حذف البند؟',
+      title: tr('حذف البند؟'),
       titleStyle: const TextStyle(
         fontFamily: 'cairo',
         fontWeight: FontWeight.bold,
         color: AppColors.danger,
       ),
-      middleText:
-          '${part['vestments']} (${part['content']}) سيتم حذفه من الفاتورة.',
+      middleText: trf(
+        '{0} ({1}) سيتم حذفه من الفاتورة.',
+        [localized(part, 'vestments'), localized(part, 'content')],
+      ),
       middleTextStyle: const TextStyle(fontFamily: 'cairo', fontSize: 14),
-      textConfirm: 'حذف',
-      textCancel: 'إلغاء',
+      textConfirm: tr('حذف'),
+      textCancel: tr('إلغاء'),
       confirmTextColor: Colors.white,
       buttonColor: AppColors.danger,
       cancelTextColor: AppColors.textSecondary,

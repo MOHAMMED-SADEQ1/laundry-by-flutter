@@ -4,6 +4,9 @@ import 'package:get/get.dart';
 import 'package:laundry/controller/customersnumbercontroller.dart';
 import 'package:laundry/core/constant/routes.dart';
 import 'package:laundry/core/theme/app_colors.dart';
+import 'package:laundry/services/i18n/l10n.dart';
+import 'package:laundry/services/invoice/processing_status.dart';
+import 'package:laundry/services/payment/payment_method.dart';
 import 'package:laundry/sqldb.dart';
 import 'package:laundry/services/customer/customer_search.dart';
 import 'package:laundry/services/subscription/subscription_service.dart';
@@ -34,7 +37,10 @@ class _CustomerNumberState extends State<CustomerNumber> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: CustomAppbar(title: 'الزبائن', subtitle: 'إدارة سجل الزبائن'),
+      appBar: CustomAppbar(
+        title: tr('الزبائن'),
+        subtitle: tr('إدارة سجل الزبائن'),
+      ),
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
@@ -56,10 +62,10 @@ class _CustomerNumberState extends State<CustomerNumber> {
             }
             final data = controller.customers;
             if (data.isEmpty) {
-              return const EmptyState(
+              return EmptyState(
                 icon: Icons.contacts_outlined,
-                title: 'لا يوجد زبائن',
-                subtitle: 'اضغط زر + لإضافة زبون جديد',
+                title: tr('لا يوجد زبائن'),
+                subtitle: tr('اضغط زر + لإضافة زبون جديد'),
               );
             }
 
@@ -105,7 +111,9 @@ class _CustomerNumberState extends State<CustomerNumber> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  'إجمالي الذمم: ${ctrl.totalDebt.value.toStringAsFixed(2)} ر.س',
+                                  trf('إجمالي الذمم: {0} ر.س', [
+                                    ctrl.totalDebt.value.toStringAsFixed(2),
+                                  ]),
                                   style: const TextStyle(
                                     fontFamily: 'cairo',
                                     fontSize: 13.5,
@@ -114,7 +122,10 @@ class _CustomerNumberState extends State<CustomerNumber> {
                                   ),
                                 ),
                                 Text(
-                                  '${ctrl.debtorsCount.value} زبون عليهم ذمة قائمة · اضغط لعرض أعمار الديون',
+                                  trf(
+                                    '{0} زبون عليهم ذمة قائمة · اضغط لعرض أعمار الديون',
+                                    [ctrl.debtorsCount.value],
+                                  ),
                                   style: TextStyle(
                                     fontFamily: 'cairo',
                                     fontSize: 11,
@@ -142,7 +153,7 @@ class _CustomerNumberState extends State<CustomerNumber> {
                     controller: _searchCtrl,
                     onChanged: (v) => setState(() => _query = v.trim()),
                     decoration: InputDecoration(
-                      hintText: 'ابحث عن زبون بالاسم أو الرقم...',
+                      hintText: tr('ابحث عن زبون بالاسم أو الرقم...'),
                       prefixIcon: const Icon(Icons.search),
                       suffixIcon:
                           _query.isEmpty
@@ -160,10 +171,10 @@ class _CustomerNumberState extends State<CustomerNumber> {
                 Expanded(
                   child:
                       filtered.isEmpty
-                          ? const EmptyState(
+                          ? EmptyState(
                             icon: Icons.search_off,
-                            title: 'لا توجد نتائج',
-                            subtitle: 'جرّب البحث باسم آخر أو برقم الجوال',
+                            title: tr('لا توجد نتائج'),
+                            subtitle: tr('جرّب البحث باسم آخر أو برقم الجوال'),
                           )
                           : ListView.builder(
                             padding: const EdgeInsets.fromLTRB(14, 8, 14, 90),
@@ -298,20 +309,20 @@ class _DebtBadge extends StatelessWidget {
       final credit = controller.creditOf(customer);
 
       if (debt <= 0 && credit <= 0) {
-        return const Padding(
-          padding: EdgeInsets.only(top: 4),
+        return Padding(
+          padding: const EdgeInsets.only(top: 4),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
+              const Icon(
                 Icons.check_circle_outline,
                 size: 12,
                 color: Color(0xFF6B7280),
               ),
-              SizedBox(width: 4),
+              const SizedBox(width: 4),
               Text(
-                'لا ذمة',
-                style: TextStyle(
+                tr('لا ذمة'),
+                style: const TextStyle(
                   fontFamily: 'cairo',
                   fontSize: 10.5,
                   color: Color(0xFF6B7280),
@@ -326,8 +337,8 @@ class _DebtBadge extends StatelessWidget {
       final color = isDebt ? AppColors.danger : AppColors.warning;
       final label =
           isDebt
-              ? 'عليه ذمة: ${debt.toStringAsFixed(2)} ر.س'
-              : 'له رصيد: ${credit.toStringAsFixed(2)} ر.س';
+              ? trf('عليه ذمة: {0} ر.س', [debt.toStringAsFixed(2)])
+              : trf('له رصيد: {0} ر.س', [credit.toStringAsFixed(2)]);
 
       return Padding(
         padding: const EdgeInsets.only(top: 4),
@@ -366,7 +377,7 @@ class _DebtBadge extends StatelessWidget {
 
 String _initialOf(dynamic value) {
   final name = value?.toString() ?? '';
-  return name.isEmpty ? '؟' : name.substring(0, 1);
+  return name.isEmpty ? tr('؟') : name.substring(0, 1);
 }
 
 /// زر كشف حساب الزبون — عرض سريع + طباعة + مشاركة PDF + ملخّص واتساب.
@@ -378,7 +389,7 @@ class _StatementBtn extends StatelessWidget {
   Widget build(BuildContext context) {
     final id = customer['customer_id'] as int?;
     return IconButton(
-      tooltip: 'كشف حساب الزبون',
+      tooltip: tr('كشف حساب الزبون'),
       onPressed:
           id == null
               ? null
@@ -405,7 +416,7 @@ class _AccountBtn extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return IconButton(
-      tooltip: 'حساب الزبون',
+      tooltip: tr('حساب الزبون'),
       onPressed: () {
         Get.toNamed('/customer-account', arguments: customer['customer_id']);
       },
@@ -461,11 +472,7 @@ class _CustomerStatementDialogState extends State<_CustomerStatementDialog> {
     // سلفة/دفعات ديون الزبون من دفتر الأستاذ
     final directPays = await db
         .readData(
-          'SELECT cp.*, u.full_name AS user_name '
-          'FROM customer_payments cp '
-          'LEFT JOIN users u ON cp.recorded_by = u.user_id '
-          'WHERE cp.customer_id = ? '
-          'ORDER BY cp.payment_date DESC',
+          'SELECT cp.*, u.full_name AS user_name FROM customer_payments cp LEFT JOIN users u ON cp.recorded_by = u.user_id WHERE cp.customer_id = ? ORDER BY cp.payment_date DESC',
           [id],
         )
         .catchError((_) => <Map<String, dynamic>>[]);
@@ -473,10 +480,7 @@ class _CustomerStatementDialogState extends State<_CustomerStatementDialog> {
     // دفعات اشتراكاته (مصدر منفصل — اشتراك لا دين)
     final pays = await db
         .readData(
-          'SELECT sp.*, s.amount AS sub_price, s.period_days AS sub_period '
-          'FROM subscription_payments sp '
-          'JOIN subscriptions s ON s.subscription_id = sp.subscription_id '
-          'WHERE s.customer_id = ? ORDER BY sp.paid_date DESC',
+          'SELECT sp.*, s.amount AS sub_price, s.period_days AS sub_period FROM subscription_payments sp JOIN subscriptions s ON s.subscription_id = sp.subscription_id WHERE s.customer_id = ? ORDER BY sp.paid_date DESC',
           [id],
         )
         .catchError((_) => <Map<String, dynamic>>[]);
@@ -500,9 +504,7 @@ class _CustomerStatementDialogState extends State<_CustomerStatementDialog> {
   Future<double> _loadDeferredLiability(int id) async {
     try {
       final subs = await db.readData(
-        'SELECT subscription_id, amount, paid_until_date, period_days, status '
-        'FROM subscriptions '
-        'WHERE customer_id = ? AND "is_active" = 1 AND status != ?',
+        'SELECT subscription_id, amount, paid_until_date, period_days, status FROM subscriptions WHERE customer_id = ? AND "is_active" = 1 AND status != ?',
         [id, 'cancelled'],
       );
       final today = DateTime.now();
@@ -589,7 +591,10 @@ class _CustomerStatementDialogState extends State<_CustomerStatementDialog> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'كشف حساب — ${widget.customer['customer_name']}',
+                          trf(
+                            'كشف حساب — {0}',
+                            [widget.customer['customer_name']],
+                          ),
                           overflow: TextOverflow.ellipsis,
                           maxLines: 1,
                           style: const TextStyle(
@@ -623,25 +628,26 @@ class _CustomerStatementDialogState extends State<_CustomerStatementDialog> {
               child: Row(
                 children: [
                   _SumBox(
-                    label: 'المشتريات',
+                    label: tr('المشتريات'),
                     value: total,
                     color: AppColors.primary,
                   ),
                   const SizedBox(width: 8),
                   _SumBox(
-                    label: 'المدفوع',
+                    label: tr('المدفوع'),
                     value: paid,
                     color: AppColors.success,
                   ),
                   const SizedBox(width: 8),
                   _SumBox(
-                    label: 'المتبقي (ذمة)',
+                    label: tr('المتبقي (ذمة)'),
                     value: remaining,
                     color: remaining > 0 ? AppColors.danger : AppColors.slate,
                   ),
                   const SizedBox(width: 8),
                   _SumBox(
-                    label: credit > 0 ? 'رصيد (سلفة)' : 'دفعات الذمم',
+                    label:
+                        tr(credit > 0 ? 'رصيد (سلفة)' : 'دفعات الذمم'),
                     value: credit > 0 ? credit : debtPaid,
                     color: credit > 0 ? AppColors.warning : AppColors.violet,
                   ),
@@ -676,8 +682,9 @@ class _CustomerStatementDialogState extends State<_CustomerStatementDialog> {
                       const SizedBox(width: 6),
                       Expanded(
                         child: Text(
-                          'خدمة اشتراك مدفوعة مقدماً لم تُنفَّذ بعد '
-                          '(التزام على المنشأة — ليست ديناً على الزبون)',
+                          tr(
+                            'خدمة اشتراك مدفوعة مقدماً لم تُنفَّذ بعد (التزام على المنشأة — ليست ديناً على الزبون)',
+                          ),
                           style: const TextStyle(
                             fontFamily: 'cairo',
                             fontSize: 10.5,
@@ -687,7 +694,9 @@ class _CustomerStatementDialogState extends State<_CustomerStatementDialog> {
                       ),
                       const SizedBox(width: 6),
                       Text(
-                        '${deferredLiability.toStringAsFixed(2)} ر.س',
+                        trf('{0} ر.س', [
+                          deferredLiability.toStringAsFixed(2),
+                        ]),
                         style: const TextStyle(
                           fontFamily: 'cairo',
                           fontSize: 12,
@@ -705,7 +714,7 @@ class _CustomerStatementDialogState extends State<_CustomerStatementDialog> {
               child: Align(
                 alignment: Alignment.centerRight,
                 child: Text(
-                  'الفواتير (${invoices.length})',
+                  trf('الفواتير ({0})', [invoices.length]),
                   style: TextStyle(
                     fontFamily: 'cairo',
                     fontSize: 12,
@@ -729,7 +738,7 @@ class _CustomerStatementDialogState extends State<_CustomerStatementDialog> {
                       ? Padding(
                         padding: EdgeInsets.all(24),
                         child: Text(
-                          'لا توجد فواتير أو دفعات لهذا الزبون',
+                          tr('لا توجد فواتير أو دفعات لهذا الزبون'),
                           style: TextStyle(
                             fontFamily: 'cairo',
                             fontSize: 13,
@@ -742,7 +751,7 @@ class _CustomerStatementDialogState extends State<_CustomerStatementDialog> {
                         children: [
                           if (debtPayments.isNotEmpty) ...[
                             Text(
-                              'دفعات الذمم (${debtPayments.length})',
+                              trf('دفعات الذمم ({0})', [debtPayments.length]),
                               style: TextStyle(
                                 fontFamily: 'cairo',
                                 fontSize: 12,
@@ -756,7 +765,10 @@ class _CustomerStatementDialogState extends State<_CustomerStatementDialog> {
                           ],
                           if (subPayments.isNotEmpty) ...[
                             Text(
-                              'دفعات الاشتراكات (${subPayments.length})',
+                              trf(
+                                'دفعات الاشتراكات ({0})',
+                                [subPayments.length],
+                              ),
                               style: TextStyle(
                                 fontFamily: 'cairo',
                                 fontSize: 12,
@@ -784,12 +796,14 @@ class _CustomerStatementDialogState extends State<_CustomerStatementDialog> {
     final paidDate = '${p['payment_date'] ?? ''}'.split('T').first;
     final notes = p['notes']?.toString() ?? '';
     final source = p['source']?.toString() ?? 'manual';
-    final method = p['method'] ?? p['payment_method'] ?? 'كاش';
+    final method = PaymentMethods.label(
+      p['method'] ?? p['payment_method'] ?? 'cash',
+    );
     final amount = double.tryParse('${p['amount'] ?? 0}') ?? 0;
     final srcLabel = switch (source) {
-      'delivery' => 'سداد عند التسليم',
-      'credit_use' => 'من الرصيد',
-      _ => 'دفعة يدوية',
+      'delivery' => tr('سداد عند التسليم'),
+      'credit_use' => tr('من الرصيد'),
+      _ => tr('دفعة يدوية'),
     };
 
     return Container(
@@ -822,7 +836,7 @@ class _CustomerStatementDialogState extends State<_CustomerStatementDialog> {
               ),
               const Spacer(),
               Text(
-                '${amount.toStringAsFixed(2)} ر.س',
+                trf('{0} ر.س', [amount.toStringAsFixed(2)]),
                 style: const TextStyle(
                   fontFamily: 'cairo',
                   fontSize: 12,
@@ -834,8 +848,10 @@ class _CustomerStatementDialogState extends State<_CustomerStatementDialog> {
           ),
           const SizedBox(height: 4),
           Text(
-            'التاريخ: $paidDate — $method'
-            '${notes.isEmpty ? '' : ' — $notes'}',
+            trf(
+              tr('التاريخ: {0} — {1}{2}'),
+              [paidDate, method, notes.isEmpty ? '' : ' — $notes'],
+            ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
@@ -872,7 +888,7 @@ class _CustomerStatementDialogState extends State<_CustomerStatementDialog> {
               ),
               const SizedBox(width: 6),
               Text(
-                'دفعة اشتراك',
+                tr('دفعة اشتراك'),
                 style: TextStyle(
                   fontFamily: 'cairo',
                   fontSize: 12,
@@ -882,7 +898,7 @@ class _CustomerStatementDialogState extends State<_CustomerStatementDialog> {
               ),
               const Spacer(),
               Text(
-                '${p['amount']} ر.س',
+                trf('{0} ر.س', [p['amount']]),
                 style: const TextStyle(
                   fontFamily: 'cairo',
                   fontSize: 12,
@@ -894,8 +910,10 @@ class _CustomerStatementDialogState extends State<_CustomerStatementDialog> {
           ),
           const SizedBox(height: 4),
           Text(
-            'التاريخ: $paidDate — ${p['method'] ?? 'كاش'}'
-            '${notes.isEmpty ? '' : ' — $notes'}',
+            trf(
+              tr('التاريخ: {0} — {1}{2}'),
+              [paidDate, p['method'] ?? tr('كاش'), notes.isEmpty ? '' : ' — $notes'],
+            ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
@@ -928,7 +946,7 @@ class _CustomerStatementDialogState extends State<_CustomerStatementDialog> {
           Row(
             children: [
               Text(
-                'فاتورة #${inv['invoices_id']}',
+                trf('فاتورة #{0}', [inv['invoices_id']]),
                 style: TextStyle(
                   fontFamily: 'cairo',
                   fontSize: 12,
@@ -940,7 +958,7 @@ class _CustomerStatementDialogState extends State<_CustomerStatementDialog> {
                 Padding(
                   padding: const EdgeInsets.only(right: 8),
                   child: Text(
-                    'رمز: ${inv['pickup_code']}',
+                    trf('رمز: {0}', [inv['pickup_code']]),
                     style: const TextStyle(
                       fontFamily: 'cairo',
                       fontSize: 10,
@@ -952,7 +970,7 @@ class _CustomerStatementDialogState extends State<_CustomerStatementDialog> {
               const Spacer(),
               if (status.isNotEmpty)
                 LabelChip(
-                  text: status,
+                  text: ProcessingStatuses.label(status),
                   color: AppColors.info,
                   icon: Icons.local_laundry_service,
                 ),
@@ -962,7 +980,7 @@ class _CustomerStatementDialogState extends State<_CustomerStatementDialog> {
           Text(
             items.isEmpty
                 ? '${inv['invoice_date'] ?? ''}'
-                : '${items.take(2).map((x) => '${x['vestments']} ×${x['count']}').join('، ')}${items.length > 2 ? ' +${items.length - 2}' : ''} — ${inv['invoice_date']?.toString().split('T').first ?? ''}',
+                : '${items.take(2).map((x) => '${localized(x, 'vestments')} ×${x['count']}').join('، ')}${items.length > 2 ? ' +${items.length - 2}' : ''} — ${inv['invoice_date']?.toString().split('T').first ?? ''}',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
@@ -975,7 +993,7 @@ class _CustomerStatementDialogState extends State<_CustomerStatementDialog> {
           Row(
             children: [
               Text(
-                'إجمالي ${inv['total_price']}',
+                trf('إجمالي {0}', [inv['total_price']]),
                 style: TextStyle(
                   fontFamily: 'cairo',
                   fontSize: 11,
@@ -985,7 +1003,7 @@ class _CustomerStatementDialogState extends State<_CustomerStatementDialog> {
               ),
               const SizedBox(width: 10),
               Text(
-                'مدفوع ${inv['paid_amount']}',
+                trf('مدفوع {0}', [inv['paid_amount']]),
                 style: const TextStyle(
                   fontFamily: 'cairo',
                   fontSize: 11,
@@ -996,7 +1014,7 @@ class _CustomerStatementDialogState extends State<_CustomerStatementDialog> {
               const Spacer(),
               if (invRemaining > 0)
                 Text(
-                  'متبقي ${invRemaining.toStringAsFixed(2)}',
+                  trf('متبقي {0}', [invRemaining.toStringAsFixed(2)]),
                   style: const TextStyle(
                     fontFamily: 'cairo',
                     fontSize: 11.5,

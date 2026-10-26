@@ -3,10 +3,16 @@ import 'package:get/get.dart';
 import 'package:intl/intl.dart';
 import 'package:laundry/core/services/preparePDF.dart';
 import 'package:laundry/core/theme/app_colors.dart';
+import 'package:laundry/services/i18n/l10n.dart';
 import 'package:laundry/sqldb.dart';
-import 'package:pdf/pdf.dart';
-import 'package:printing/printing.dart';
+import 'package:laundry/services/payment/payment_method.dart';
+import 'package:laundry/core/services/paper_size.dart';
+import 'package:laundry/services/printer/printer_service.dart';
+import 'package:laundry/services/pdf/doc_template.dart';
+import 'package:laundry/services/pdf/doc_template_service.dart';
 import 'package:laundry/services/business_info_service.dart';
+import 'package:laundry/services/permission/permission_catalog.dart';
+import 'package:laundry/services/permission/permission_service.dart';
 import 'package:laundry/services/security/session_manager.dart';
 
 class ShiftController extends GetxController {
@@ -66,10 +72,21 @@ class ShiftController extends GetxController {
 
   /// بدء وردية جديدة
   Future<void> startShift() async {
+    // 🛡️ الصلاحية أولًا — قبل أي فحص أو كتابة، كي لا تُنشأ وردية بلا حق.
+    if (!PermissionService.can(PermissionKeys.shiftOpen)) {
+      Get.snackbar(
+        tr('لا تملك صلاحية'),
+        tr('فتح الوردية يحتاج صلاحية «فتح وردية»، راجع مدير النظام.'),
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+      return;
+    }
+
     // أولاً: تأكد لا توجد وردية مفتوحة
     await checkActiveShift();
     if (isShiftActive.value) {
-      Get.snackbar('تنبيه', 'يوجد وردية مفتوحة بالفعل.');
+      Get.snackbar(tr('تنبيه'), tr('يوجد وردية مفتوحة بالفعل.'));
       return;
     }
 
@@ -97,20 +114,35 @@ class ShiftController extends GetxController {
       ).format(DateTime.parse(startTime));
 
       Get.snackbar(
-        'نجاح',
-        'تم فتح الوردية بنجاح.',
+        tr('نجاح'),
+        tr('تم فتح الوردية بنجاح.'),
         backgroundColor: Colors.green,
         colorText: Colors.white,
       );
     } catch (e) {
-      Get.snackbar('خطأ', 'حدث خطأ أثناء فتح الوردية: $e');
+      Get.snackbar(
+        tr('خطأ'),
+        trf('حدث خطأ أثناء فتح الوردية: {0}', ['$e']),
+      );
     }
   }
 
   /// إغلاق الوردية الحالية
   Future<void> closeShift() async {
+    // 🛡️ `shift.close` مستقلّة عن `shift.open`: من يفتح الدرج ليس بالضرورة
+    // من يُحاسَب على جرده، والفصل يمنع إغلاقًا يمحو فرقًا حرجًا.
+    if (!PermissionService.can(PermissionKeys.shiftClose)) {
+      Get.snackbar(
+        tr('لا تملك صلاحية'),
+        tr('إغلاق الوردية يحتاج صلاحية «إغلاق وردية وجردها»، راجع مدير النظام.'),
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+      return;
+    }
+
     if (!isShiftActive.value || activeShiftId.value == null) {
-      Get.snackbar('تنبيه', 'لا توجد وردية مفتوحة لإغلاقها.');
+      Get.snackbar(tr('تنبيه'), tr('لا توجد وردية مفتوحة لإغلاقها.'));
       return;
     }
 
@@ -126,13 +158,8 @@ class ShiftController extends GetxController {
 
       // 1.a الفواتير النقدية والشبكية
       final summaryList = await _sqlDB.readData(
-        'SELECT SUM(CASE WHEN payment_method = ? THEN paid_amount ELSE 0 END) '
-        '  as total_cash, '
-        'SUM(CASE WHEN payment_method = ? THEN paid_amount ELSE 0 END) '
-        '  as total_network, '
-        'COUNT(invoices_id) as invoice_count '
-        'FROM invoices WHERE shift_id = ? AND subscription_id IS NULL',
-        ['كاش', 'شبكة', shiftId],
+        'SELECT SUM(CASE WHEN payment_method = ? THEN paid_amount ELSE 0 END)   as total_cash, SUM(CASE WHEN payment_method = ? THEN paid_amount ELSE 0 END)   as total_network, COUNT(invoices_id) as invoice_count FROM invoices WHERE shift_id = ? AND subscription_id IS NULL',
+        [PaymentMethod.cash.key, PaymentMethod.card.key, shiftId],
       );
 
       final summary = summaryList.isNotEmpty
@@ -145,15 +172,9 @@ class ShiftController extends GetxController {
 
       // ─── 1.b دفعات الاشتراكات — بالمعرّف لا بالنافذة الزمنية ───
       final subPays = await _sqlDB.readData(
-        'SELECT '
-        '  COALESCE(SUM(CASE WHEN method = ? THEN amount ELSE 0 END), 0) '
-        '    as cash, '
-        '  COALESCE(SUM(CASE WHEN method = ? THEN amount ELSE 0 END), 0) '
-        '    as network '
-        'FROM subscription_payments '
-        'WHERE shift_id = ? '
+        'SELECT   COALESCE(SUM(CASE WHEN method = ? THEN amount ELSE 0 END), 0)     as cash,   COALESCE(SUM(CASE WHEN method = ? THEN amount ELSE 0 END), 0)     as network FROM subscription_payments WHERE shift_id = ? '
         "  AND COALESCE(source, 'manual') != 'cancel_refund'",
-        ['كاش', 'شبكة', shiftId],
+        [PaymentMethod.cash.key, PaymentMethod.card.key, shiftId],
       );
       if (subPays.isNotEmpty) {
         totalCash += (subPays.first['cash'] as num?)?.toDouble() ?? 0.0;
@@ -163,15 +184,9 @@ class ShiftController extends GetxController {
       // ─── 1.c سداد ذمم الزبائن ───
       // نستثني `credit_use`: استهلاك سلفة تسوية لا نقدية.
       final debtPays = await _sqlDB.readData(
-        'SELECT '
-        '  COALESCE(SUM(CASE WHEN payment_method = ? THEN amount ELSE 0 END), '
-        '    0) as cash, '
-        '  COALESCE(SUM(CASE WHEN payment_method = ? THEN amount ELSE 0 END), '
-        '    0) as network '
-        'FROM customer_payments '
-        'WHERE shift_id = ? '
+        'SELECT   COALESCE(SUM(CASE WHEN payment_method = ? THEN amount ELSE 0 END),     0) as cash,   COALESCE(SUM(CASE WHEN payment_method = ? THEN amount ELSE 0 END),     0) as network FROM customer_payments WHERE shift_id = ? '
         "  AND COALESCE(source, 'manual') != 'credit_use'",
-        ['كاش', 'شبكة', shiftId],
+        [PaymentMethod.cash.key, PaymentMethod.card.key, shiftId],
       );
       if (debtPays.isNotEmpty) {
         totalCash += (debtPays.first['cash'] as num?)?.toDouble() ?? 0.0;
@@ -183,11 +198,10 @@ class ShiftController extends GetxController {
       // الاسترداد قد يكون رصيدًا دائنًا (`method = 'رصيد'`) وهو تسوية دفاتر
       // لا نقدية — لم تخرج من الدرج فلا يجوز خصمها، وإلا ظهر عجز وهمي.
       final refunds = await _sqlDB.readData(
-        'SELECT COALESCE(SUM(amount), 0) as t FROM subscription_payments '
-        'WHERE shift_id = ? '
+        'SELECT COALESCE(SUM(amount), 0) as t FROM subscription_payments WHERE shift_id = ? '
         "  AND COALESCE(source, 'manual') = 'cancel_refund' "
         '  AND method != ?',
-        [shiftId, 'رصيد'],
+        [shiftId, PaymentMethod.balance.key],
       );
       if (refunds.isNotEmpty) {
         totalCash -= (refunds.first['t'] as num?)?.toDouble() ?? 0.0;
@@ -199,9 +213,8 @@ class ShiftController extends GetxController {
       // يُخصم، فيُقفل الكاشير على مبلغ أكبر من الموجود فعلًا ويُحمَّل الفرق
       // عليه بلا سبب. مصروف الشبكة/التسوية لا يخرج من الدرج فلا يُخصم.
       final expensesOut = await _sqlDB.readData(
-        'SELECT COALESCE(SUM(amount), 0) as t FROM expenses '
-        'WHERE shift_id = ? AND COALESCE(payment_method, ?) = ?',
-        [shiftId, 'كاش', 'كاش'],
+        'SELECT COALESCE(SUM(amount), 0) as t FROM expenses WHERE shift_id = ? AND COALESCE(payment_method, ?) = ?',
+        [shiftId, PaymentMethod.cash.key, PaymentMethod.cash.key],
       );
       final double cashExpenses = expensesOut.isEmpty
           ? 0.0
@@ -209,8 +222,7 @@ class ShiftController extends GetxController {
 
       // ─── 1.f رصيد الافتتاح الفعلي + المتوقع في الدرج ───
       final openRows = await _sqlDB.readData(
-        'SELECT COALESCE(opening_balance, 0) as ob FROM shifts '
-        'WHERE shift_id = ?',
+        'SELECT COALESCE(opening_balance, 0) as ob FROM shifts WHERE shift_id = ?',
         [shiftId],
       );
       final double openingBalance = openRows.isEmpty
@@ -256,10 +268,7 @@ class ShiftController extends GetxController {
         tableName: 'shifts',
         recordId: activeShiftId.value,
         newValues:
-            '{"total_cash":$totalCash,"total_network":$totalNetwork,'
-            '"invoice_count":$invoiceCount,'
-            '"expected":$expectedCash,"counted":$countedCash,'
-            '"difference":$difference}',
+            '{"total_cash":$totalCash,"total_network":$totalNetwork,"invoice_count":$invoiceCount,"expected":$expectedCash,"counted":$countedCash,"difference":$difference}',
       );
 
       // 4. تحديث الحالة في المتحكم
@@ -284,40 +293,48 @@ class ShiftController extends GetxController {
       shiftStartTimeForQuery.value = '';
 
       Get.snackbar(
-        'نجاح',
-        'تم إغلاق الوردية بنجاح.',
+        tr('نجاح'),
+        tr('تم إغلاق الوردية بنجاح.'),
         backgroundColor: Colors.green,
         colorText: Colors.white,
       );
 
       // 5. عرض خيار لطباعة الملخص — مع نتيجة الجرد
       final diffText = countedCash == null
-          ? 'الدرج: لم يُجرَد'
+          ? tr('الدرج: لم يُجرَد')
           : (difference ?? 0).abs() < 0.01
-          ? 'الدرج: مطابق'
+          ? tr('الدرج: مطابق')
           : (difference ?? 0) > 0
-          ? 'الدرج: زيادة ${(difference ?? 0).toStringAsFixed(2)}'
-          : 'الدرج: عجز ${(difference ?? 0).abs().toStringAsFixed(2)}';
+          ? trf('الدرج: زيادة {0}', [
+              (difference ?? 0).toStringAsFixed(2),
+            ])
+          : trf('الدرج: عجز {0}', [
+              (difference ?? 0).abs().toStringAsFixed(2),
+            ]);
 
       Get.defaultDialog(
-        title: 'ملخص الوردية',
-        middleText:
-            'المقبوضات: ${totalCash.toStringAsFixed(2)}\n'
-            'الشبكة: ${totalNetwork.toStringAsFixed(2)}\n'
-            'السحوبات النقدية: ${cashExpenses.toStringAsFixed(2)}\n'
-            'المتوقع في الدرج: ${expectedCash.toStringAsFixed(2)}\n'
-            'المعدود: ${countedCash?.toStringAsFixed(2) ?? '—'}\n'
-            '$diffText\n'
-            'عدد الفواتير: $invoiceCount',
-        textConfirm: 'طباعة',
-        textCancel: 'إغلاق',
+        title: tr('ملخص الوردية'),
+        middleText: [
+          trf('المقبوضات: {0}', [totalCash.toStringAsFixed(2)]),
+          trf('الشبكة: {0}', [totalNetwork.toStringAsFixed(2)]),
+          trf('السحوبات النقدية: {0}', [cashExpenses.toStringAsFixed(2)]),
+          trf('المتوقع في الدرج: {0}', [expectedCash.toStringAsFixed(2)]),
+          trf('المعدود: {0}', [countedCash?.toStringAsFixed(2) ?? '—']),
+          diffText,
+          trf('عدد الفواتير: {0}', ['$invoiceCount']),
+        ].join('\n'),
+        textConfirm: tr('طباعة'),
+        textCancel: tr('إغلاق'),
         onConfirm: () {
           printShift(shiftDataForPrint);
           Get.back();
         },
       );
     } catch (e) {
-      Get.snackbar('خطأ', 'حدث خطأ أثناء إغلاق الوردية: $e');
+      Get.snackbar(
+        tr('خطأ'),
+        trf('حدث خطأ أثناء إغلاق الوردية: {0}', ['$e']),
+      );
     }
   }
 
@@ -330,7 +347,7 @@ class ShiftController extends GetxController {
       );
       closedShifts.assignAll(data);
     } catch (e) {
-      Get.snackbar('خطأ', 'فشل في تحميل الورديات السابقة.');
+      Get.snackbar(tr('خطأ'), tr('فشل في تحميل الورديات السابقة.'));
     } finally {
       isLoadingShifts.value = false;
     }
@@ -342,10 +359,20 @@ class ShiftController extends GetxController {
       shiftData['bizName'] = BusinessInfoService.instance.name;
       shiftData['bizPhone'] = BusinessInfoService.instance.phone;
       shiftData['bizAddress'] = BusinessInfoService.instance.address;
+      // ─── قالب المستند: تفعيل ونصوص ونمط كل سطر في ملخّص الوردية ───
+      // كان الملخّص خارج نظام القوالب تمامًا (نصوصه وأحجامه في الكود).
+      shiftData.addAll(DocTemplateService.instance.transport(DocKind.shift));
       final pdfBytes = await PreparePDF.generateShiftSummaryPdf(shiftData);
-      await Printing.layoutPdf(onLayout: (PdfPageFormat format) => pdfBytes);
+      await PrinterService.instance.printPdf(
+        pdfBytes,
+        jobName: tr('ملخص الوردية'),
+        paper: PaperSizes.a6,
+      );
     } catch (e) {
-      Get.snackbar('خطأ', 'فشل في طباعة ملخص الوردية: $e');
+      Get.snackbar(
+        tr('خطأ'),
+        trf('فشل في طباعة ملخص الوردية: {0}', ['$e']),
+      );
     }
   }
 
@@ -370,9 +397,9 @@ class ShiftController extends GetxController {
           final diff = counted == null ? null : counted - expected;
           final balanced = diff != null && diff.abs() < 0.01;
           return AlertDialog(
-            title: const Text(
-              'جرد الدرج قبل الإقفال',
-              style: TextStyle(
+            title: Text(
+              tr('جرد الدرج قبل الإقفال'),
+              style: const TextStyle(
                 fontFamily: 'cairo',
                 fontWeight: FontWeight.bold,
               ),
@@ -382,10 +409,13 @@ class ShiftController extends GetxController {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _stockRow('رصيد الافتتاح + المقبوضات', expected + cashExpenses),
-                  _stockRow('سحوبات نقدية', -cashExpenses),
+                  _stockRow(
+                    tr('رصيد الافتتاح + المقبوضات'),
+                    expected + cashExpenses,
+                  ),
+                  _stockRow(tr('سحوبات نقدية'), -cashExpenses),
                   const Divider(),
-                  _stockRow('المتوقع في الدرج', expected, bold: true),
+                  _stockRow(tr('المتوقع في الدرج'), expected, bold: true),
                   const SizedBox(height: 12),
                   TextField(
                     controller: countedCtrl,
@@ -396,9 +426,9 @@ class ShiftController extends GetxController {
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
                     ),
-                    decoration: const InputDecoration(
-                      labelText: 'المبلغ المعدود فعليًا',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: tr('المبلغ المعدود فعليًا'),
+                      border: const OutlineInputBorder(),
                     ),
                     onChanged: (_) => setState(() {}),
                   ),
@@ -414,10 +444,14 @@ class ShiftController extends GetxController {
                       ),
                       child: Text(
                         balanced
-                            ? 'مطابق تمامًا'
+                            ? tr('مطابق تمامًا')
                             : diff > 0
-                            ? 'زيادة ${diff.toStringAsFixed(2)} ر.س'
-                            : 'عجز ${diff.abs().toStringAsFixed(2)} ر.س',
+                            ? trf('زيادة {0} ر.س', [
+                                diff.toStringAsFixed(2),
+                              ])
+                            : trf('عجز {0} ر.س', [
+                                diff.abs().toStringAsFixed(2),
+                              ]),
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           fontFamily: 'cairo',
@@ -433,9 +467,9 @@ class ShiftController extends GetxController {
                     const SizedBox(height: 10),
                     TextField(
                       controller: reasonCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'سبب الفرق (مطلوب)',
-                        border: OutlineInputBorder(),
+                      decoration: InputDecoration(
+                        labelText: tr('سبب الفرق (مطلوب)'),
+                        border: const OutlineInputBorder(),
                       ),
                     ),
                   ],
@@ -445,16 +479,22 @@ class ShiftController extends GetxController {
             actions: [
               TextButton(
                 onPressed: () => Get.back<Map<String, dynamic>>(),
-                child: const Text('إقفال بلا جرد'),
+                child: Text(tr('إقفال بلا جرد')),
               ),
               ElevatedButton(
                 onPressed: () {
                   if (diff == null) {
-                    Get.snackbar('تنبيه', 'أدخل المبلغ المعدود أو أقفل بلا جرد');
+                    Get.snackbar(
+                      tr('تنبيه'),
+                      tr('أدخل المبلغ المعدود أو أقفل بلا جرد'),
+                    );
                     return;
                   }
                   if (!balanced && reasonCtrl.text.trim().isEmpty) {
-                    Get.snackbar('تنبيه', 'اذكر سبب الفرق قبل الإقفال');
+                    Get.snackbar(
+                      tr('تنبيه'),
+                      tr('اذكر سبب الفرق قبل الإقفال'),
+                    );
                     return;
                   }
                   Get.back<Map<String, dynamic>>(
@@ -466,7 +506,7 @@ class ShiftController extends GetxController {
                     },
                   );
                 },
-                child: const Text('إقفال مع جرد'),
+                child: Text(tr('إقفال مع جرد')),
               ),
             ],
           );

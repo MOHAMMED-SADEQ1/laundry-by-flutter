@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:laundry/services/i18n/l10n.dart';
 import 'package:laundry/core/theme/app_colors.dart';
 import 'package:laundry/view/widget/home/dialog.dart';
 
@@ -17,7 +18,8 @@ class _CustomShowDialogState extends State<CustomShowDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final name = widget.data['clothing_name'] ?? '';
+    // الاسم بلغة الواجهة: `clothing_name_en` إن وُجد وإلا العربي.
+    final name = localized(widget.data, 'clothing_name');
     final price = widget.data['normal_washing_and_ironing_price'] ?? 0;
     final urgent =
         (widget.data['urgent_washing_and_ironing_price'] ?? 0).toDouble();
@@ -114,7 +116,7 @@ class _CustomShowDialogState extends State<CustomShowDialog> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        'من $normal ر.س',
+                        trf('من {0} ر.س', [normal]),
                         style: TextStyle(
                           fontFamily: 'cairo',
                           fontSize: 11,
@@ -149,7 +151,7 @@ class _CustomShowDialogState extends State<CustomShowDialog> {
                               ),
                               const SizedBox(width: 2),
                               Text(
-                                'مستعجل $urgent',
+                                trf('مستعجل {0}', [urgent]),
                                 style: TextStyle(
                                   fontFamily: 'cairo',
                                   fontSize: 10,

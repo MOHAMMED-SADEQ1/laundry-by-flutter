@@ -8,12 +8,18 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:laundry/controller/printInvoicecontroller.dart';
 import 'package:laundry/core/services/preparePDF.dart';
+import 'package:laundry/services/pdf/doc_template.dart';
+import 'package:laundry/services/pdf/doc_template_service.dart';
 import 'package:laundry/core/theme/app_colors.dart';
 import 'package:laundry/sqldb.dart';
 import 'package:laundry/services/business_info_service.dart';
+import 'package:laundry/services/i18n/l10n.dart';
+import 'package:laundry/services/payment/payment_method.dart';
+import 'package:laundry/services/settings/app_settings_service.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:printing/printing.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:laundry/services/i18n/ui_direction.dart';
 
 /// إرسال الفاتورة للزبون عبر واتساب:
 /// - مشاركة ملف الفاتورة نفسه (PDF) من قائمة المشاركة → واتساب،
@@ -56,29 +62,35 @@ class InvoiceShareService {
     Map<String, dynamic>? extra,
   }) {
     final stored =
-        extra?['summation'] ?? invoice['total_price'] ?? invoice['final_amount'];
-    final parsed = stored is num
-        ? stored.toDouble()
-        : double.tryParse('${stored ?? 0}') ?? 0.0;
+        extra?['summation'] ??
+        invoice['total_price'] ??
+        invoice['final_amount'];
+    final parsed =
+        stored is num
+            ? stored.toDouble()
+            : double.tryParse('${stored ?? 0}') ?? 0.0;
     if (parsed > 0) return parsed;
 
     final list = items ?? decodeItems(invoice['list_data']);
     var total = 0.0;
     for (final item in list) {
       final lineTotal = item['total_price'];
-      final parsedLine = lineTotal is num
-          ? lineTotal.toDouble()
-          : double.tryParse('${lineTotal ?? ''}') ?? 0.0;
+      final parsedLine =
+          lineTotal is num
+              ? lineTotal.toDouble()
+              : double.tryParse('${lineTotal ?? ''}') ?? 0.0;
       if (parsedLine > 0) {
         total += parsedLine;
         continue;
       }
-      final count = item['count'] is num
-          ? (item['count'] as num).toDouble()
-          : double.tryParse('${item['count'] ?? 0}') ?? 0.0;
-      final price = item['price'] is num
-          ? (item['price'] as num).toDouble()
-          : double.tryParse('${item['price'] ?? 0}') ?? 0.0;
+      final count =
+          item['count'] is num
+              ? (item['count'] as num).toDouble()
+              : double.tryParse('${item['count'] ?? 0}') ?? 0.0;
+      final price =
+          item['price'] is num
+              ? (item['price'] as num).toDouble()
+              : double.tryParse('${item['price'] ?? 0}') ?? 0.0;
       total += price * count;
     }
     return total;
@@ -88,11 +100,11 @@ class InvoiceShareService {
   static Map<String, dynamic> buildPdfData(Map<String, dynamic> invoice) {
     final items = decodeItems(invoice['list_data']);
     final extra = decodeMap(invoice['map_data']);
-    final name = (extra['customername'] ?? invoice['customer_name'] ?? '')
-        .toString();
+    final name =
+        (extra['customername'] ?? invoice['customer_name'] ?? '').toString();
     return {
-      'payment': (extra['payment'] ?? invoice['payment_method'] ?? 'كاش')
-          .toString(),
+      'payment':
+          (extra['payment'] ?? invoice['payment_method'] ?? 'كاش').toString(),
       'logoImage': PrintInvoiceController.logoImageBytes,
       'riyalImage': PrintInvoiceController.riyalImageBytes,
       'arabicFont': PrintInvoiceController.arabicFont,
@@ -111,6 +123,11 @@ class InvoiceShareService {
       'bizPhone': BusinessInfoService.instance.phone,
       'bizAddress': BusinessInfoService.instance.address,
       'createdByName': '',
+      // حجم الشعار يتبع إعداد الفاتورة الحالي — إعادة المشاركة تُخرج الشكل
+      // نفسه الذي يراه المستخدم في المعاينة، لا مقاسًا ثابتًا في الكود.
+      'logoSizeMm': AppSettingsService.instance.invoiceLogoSizeMm,
+      // ─── قالب المستند (تفعيل ونصوص كل عنصر) ───
+      ...DocTemplateService.instance.transport(DocKind.invoice),
     };
   }
 
@@ -134,47 +151,59 @@ class InvoiceShareService {
     final items = decodeItems(invoice['list_data']);
     final extra = decodeMap(invoice['map_data']);
     final lines = StringBuffer();
-    final bizName = BusinessInfoService.instance.name.isNotEmpty
-        ? BusinessInfoService.instance.name
-        : 'نظام المغاسل';
-    lines.writeln('🧺 *فاتورة $bizName #${invoice['invoices_id']}*');
-    final customer = (extra['customername'] ?? invoice['customer_name'] ?? '')
-        .toString()
-        .trim();
-    if (customer.isNotEmpty) lines.writeln('👤 الزبون: $customer');
+    final bizName =
+        BusinessInfoService.instance.name.isNotEmpty
+            ? BusinessInfoService.instance.name
+            : tr('نظام المغاسل');
+    lines.writeln(
+      trf('🧺 *فاتورة {0} #{1}*', [bizName, invoice['invoices_id']]),
+    );
+    final customer =
+        (extra['customername'] ?? invoice['customer_name'] ?? '')
+            .toString()
+            .trim();
+    if (customer.isNotEmpty) lines.writeln(trf('👤 الزبون: {0}', [customer]));
     final date = extra['date']?.toString() ?? '';
     if (date.isNotEmpty) lines.writeln('📅 $date');
     lines.writeln('─────────────────');
     for (final item in items.take(12)) {
       lines.writeln(
-        '• ${item['vestments']} (${item['content']}) × ${item['count']}',
+        '• ${localized(item, 'vestments')} (${localized(item, 'content')}) × ${item['count']}',
       );
       final note = '${item['note'] ?? ''}'.trim();
       if (note.isNotEmpty) lines.writeln('   📝 $note');
     }
     if (items.length > 12) {
-      lines.writeln('... و${items.length - 12} أصناف أخرى');
+      lines.writeln(trf('... و{0} أصناف أخرى', [items.length - 12]));
     }
     lines.writeln('─────────────────');
     if (invoice['subscription_id'] != null) {
-      lines.writeln(' على حساب الاشتراك الشهري');
+      lines.writeln(tr(' على حساب الاشتراك الشهري'));
     } else {
       final total = resolveTotal(invoice, items: items, extra: extra);
       final paid = double.tryParse('${invoice['paid_amount'] ?? 0}') ?? 0;
       final remaining =
           double.tryParse('${invoice['remaining_amount'] ?? 0}') ?? 0;
-      lines.writeln('💰 الإجمالي: ${total.toStringAsFixed(2)} ر.س');
+      lines.writeln(trf('💰 الإجمالي: {0} ر.س', [total.toStringAsFixed(2)]));
+      final method = PaymentMethods.label(
+        '${extra['payment'] ?? invoice['payment_method'] ?? ''}',
+      );
       lines.writeln(
-        '💳 الدفع: ${extra['payment'] ?? invoice['payment_method'] ?? ''} '
-        '(مدفوع: ${paid.toStringAsFixed(2)})',
+        trf('💳 الدفع: {0} (مدفوع: {1})', [method, paid.toStringAsFixed(2)]),
       );
       if (remaining > 0) {
-        lines.writeln('⚠️ متبقي: ${remaining.toStringAsFixed(2)} ر.س');
+        lines.writeln(trf('⚠️ متبقي: {0} ر.س', [remaining.toStringAsFixed(2)]));
       }
     }
     final code = invoice['pickup_code']?.toString() ?? '';
-    if (code.isNotEmpty) lines.writeln('🔑 رمز استلام الغسيل: $code');
-    lines.writeln('شكراً لثقتكم — ${BusinessInfoService.instance.name.isNotEmpty ? BusinessInfoService.instance.name : 'نظام المغاسل'} 💙');
+    if (code.isNotEmpty) {
+      lines.writeln(trf('🔑 رمز استلام الغسيل: {0}', [code]));
+    }
+    final shop =
+        BusinessInfoService.instance.name.isNotEmpty
+            ? BusinessInfoService.instance.name
+            : tr('نظام المغاسل');
+    lines.writeln(trf('شكراً لثقتكم — {0} 💙', [shop]));
     return lines.toString();
   }
 
@@ -278,8 +307,8 @@ class InvoiceShareService {
         whereArgs: [invoice['invoices_id']],
       );
       Get.snackbar(
-        'تم الحفظ',
-        'حُفظ رقم الزبون في سجله — يمكن إرسال الفاتورة الآن',
+        tr('تم الحفظ'),
+        tr('حُفظ رقم الزبون في سجله — يمكن إرسال الفاتورة الآن'),
         snackPosition: SnackPosition.BOTTOM,
         backgroundColor: AppColors.success,
         colorText: Colors.white,
@@ -288,7 +317,7 @@ class InvoiceShareService {
       );
     } catch (e) {
       debugPrint('saveCustomerPhone error: $e');
-      _error('تعذر حفظ رقم الزبون: $e');
+      _error(trf('تعذر حفظ رقم الزبون: {0}', [e]));
     }
   }
 
@@ -299,15 +328,20 @@ class InvoiceShareService {
     try {
       final bytes = await buildInvoicePdf(invoice);
       if (bytes == null || bytes.isEmpty) {
-        _error('تعذر تجهيز ملف الفاتورة');
+        _error(tr('تعذر تجهيز ملف الفاتورة'));
         return;
       }
-      final filename = 'فاتورة_${invoice['invoices_id']}.pdf';
+      final filename = '${tr('فاتورة')}_${invoice['invoices_id']}.pdf';
       if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
         await Printing.sharePdf(
           bytes: bytes,
           filename: filename,
-          subject: 'فاتورة ${BusinessInfoService.instance.name.isNotEmpty ? BusinessInfoService.instance.name : 'نظام المغاسل'} #${invoice['invoices_id']}',
+          subject: trf('فاتورة {0} #{1}', [
+            BusinessInfoService.instance.name.isNotEmpty
+                ? BusinessInfoService.instance.name
+                : tr('نظام المغاسل'),
+            invoice['invoices_id'],
+          ]),
           body: buildMessage(invoice),
         );
         return;
@@ -321,8 +355,8 @@ class InvoiceShareService {
         await launchUrl(uri);
       } else {
         Get.snackbar(
-          'تم تجهيز الفاتورة',
-          'حُفظت الفاتورة في: ${file.path}',
+          tr('تم تجهيز الفاتورة'),
+          trf('حُفظت الفاتورة في: {0}', [file.path]),
           snackPosition: SnackPosition.BOTTOM,
           backgroundColor: AppColors.info,
           colorText: Colors.white,
@@ -331,7 +365,7 @@ class InvoiceShareService {
       }
     } catch (e) {
       debugPrint('sharePdfFile error: $e');
-      _error('فشل مشاركة الفاتورة: $e');
+      _error(trf('فشل مشاركة الفاتورة: {0}', [e]));
     }
   }
 
@@ -339,13 +373,12 @@ class InvoiceShareService {
   static Future<void> openWhatsAppChat(String phone, String message) async {
     final number = normalizePhone(phone);
     final uri = Uri.parse(
-      'https://wa.me/${number.isEmpty ? '' : number}'
-      '?text=${Uri.encodeComponent(message)}',
+      'https://wa.me/${number.isEmpty ? '' : number}?text=${Uri.encodeComponent(message)}',
     );
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     } else {
-      _error('تعذر فتح واتساب');
+      _error(tr('تعذر فتح واتساب'));
     }
   }
 
@@ -370,7 +403,7 @@ class InvoiceShareService {
   ) {
     Get.bottomSheet(
       Directionality(
-        textDirection: TextDirection.rtl,
+        textDirection: L10n.isRtl ? appTextDirection : TextDirection.ltr,
         child: Container(
           decoration: const BoxDecoration(
             color: Colors.white,
@@ -409,7 +442,7 @@ class InvoiceShareService {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'إرسال الفاتورة #${invoice['invoices_id']}',
+                          trf('إرسال الفاتورة #{0}', [invoice['invoices_id']]),
                           style: const TextStyle(
                             fontFamily: 'cairo',
                             fontSize: 14.5,
@@ -418,7 +451,7 @@ class InvoiceShareService {
                           ),
                         ),
                         Text(
-                          'رقم الزبون: $phone',
+                          trf('رقم الزبون: {0}', [phone]),
                           style: const TextStyle(
                             fontFamily: 'cairo',
                             fontSize: 11.5,
@@ -438,8 +471,8 @@ class InvoiceShareService {
               _SheetOption(
                 icon: Icons.picture_as_pdf,
                 color: AppColors.danger,
-                title: 'إرسال ملف الفاتورة (PDF)',
-                subtitle: 'تظهر قائمة المشاركة — اختر واتساب ثم الزبون',
+                title: tr('إرسال ملف الفاتورة (PDF)'),
+                subtitle: tr('تظهر قائمة المشاركة — اختر واتساب ثم الزبون'),
                 onTap: () {
                   Get.back();
                   sharePdfFile(invoice);
@@ -448,8 +481,10 @@ class InvoiceShareService {
               _SheetOption(
                 icon: Icons.chat,
                 color: const Color(0xFF25D366),
-                title: 'فتح محادثة الزبون على واتساب',
-                subtitle: 'رسالة ملخّص الفاتورة إلى الرقم $phone مباشرة',
+                title: tr('فتح محادثة الزبون على واتساب'),
+                subtitle: trf('رسالة ملخّص الفاتورة إلى الرقم {0} مباشرة', [
+                  phone,
+                ]),
                 onTap: () {
                   Get.back();
                   openWhatsAppChat(phone, message);
@@ -458,8 +493,8 @@ class InvoiceShareService {
               _SheetOption(
                 icon: Icons.ios_share,
                 color: AppColors.info,
-                title: 'إرسال ملخّص نصي لأي جهة',
-                subtitle: 'لمشاركة الملخّص دون تحديد رقم',
+                title: tr('إرسال ملخّص نصي لأي جهة'),
+                subtitle: tr('لمشاركة الملخّص دون تحديد رقم'),
                 onTap: () {
                   Get.back();
                   openWhatsAppChat('', message);
@@ -482,7 +517,10 @@ class InvoiceShareService {
     final name = (invoice['customer_name'] ?? '').toString().trim();
     final phoneCtrl = TextEditingController(text: _pickPhone(customer ?? {}));
     Get.dialog(
-      Directionality(textDirection: TextDirection.rtl, child: _phoneDialog(invoice, name, phoneCtrl)),
+      Directionality(
+        textDirection: L10n.isRtl ? appTextDirection : TextDirection.ltr,
+        child: _phoneDialog(invoice, name, phoneCtrl),
+      ),
       barrierDismissible: true,
     );
   }
@@ -515,10 +553,10 @@ class InvoiceShareService {
               ),
             ),
             const SizedBox(height: 12),
-            const Text(
-              'لا يوجد رقم واتساب لهذا الزبون',
+            Text(
+              tr('لا يوجد رقم واتساب لهذا الزبون'),
               textAlign: TextAlign.center,
-              style: TextStyle(
+              style: const TextStyle(
                 fontFamily: 'cairo',
                 fontSize: 15,
                 fontWeight: FontWeight.bold,
@@ -528,8 +566,11 @@ class InvoiceShareService {
             const SizedBox(height: 6),
             Text(
               name.isEmpty
-                  ? 'أدخل رقم الزبون ليُحفظ في سجله وتُرسل الفاتورة إليه.'
-                  : 'الزبون «$name» غير مسجّل برقم — أدخل الرقم ليُحفظ في سجله.',
+                  ? tr('أدخل رقم الزبون ليُحفظ في سجله وتُرسل الفاتورة إليه.')
+                  : trf(
+                    'الزبون «{0}» غير مسجّل برقم — أدخل الرقم ليُحفظ في سجله.',
+                    [name],
+                  ),
               textAlign: TextAlign.center,
               style: const TextStyle(
                 fontFamily: 'cairo',
@@ -582,9 +623,9 @@ class InvoiceShareService {
             Expanded(
               child: OutlinedButton(
                 onPressed: () => Get.back(),
-                child: const Text(
-                  'إلغاء',
-                  style: TextStyle(fontFamily: 'cairo', fontSize: 13),
+                child: Text(
+                  tr('إلغاء'),
+                  style: const TextStyle(fontFamily: 'cairo', fontSize: 13),
                 ),
               ),
             ),
@@ -598,9 +639,9 @@ class InvoiceShareService {
                 style: OutlinedButton.styleFrom(
                   foregroundColor: AppColors.info,
                 ),
-                child: const Text(
-                  'إرسال الملف فقط',
-                  style: TextStyle(fontFamily: 'cairo', fontSize: 13),
+                child: Text(
+                  tr('إرسال الملف فقط'),
+                  style: const TextStyle(fontFamily: 'cairo', fontSize: 13),
                 ),
               ),
             ),
@@ -610,15 +651,13 @@ class InvoiceShareService {
         SizedBox(
           width: double.infinity,
           child: ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.success,
-            ),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.success),
             onPressed: () async {
               final phone = phoneCtrl.text.trim();
               if (phone.isEmpty) {
                 Get.snackbar(
-                  'تنبيه',
-                  'أدخل رقم الزبون أولاً',
+                  tr('تنبيه'),
+                  tr('أدخل رقم الزبون أولاً'),
                   snackPosition: SnackPosition.BOTTOM,
                   backgroundColor: AppColors.warning,
                   colorText: Colors.white,
@@ -629,9 +668,9 @@ class InvoiceShareService {
               await saveCustomerPhone(invoice: invoice, phone: phone);
               _showSendSheet(invoice, phone, buildMessage(invoice));
             },
-            child: const Text(
-              'حفظ الرقم وإرسال الفاتورة',
-              style: TextStyle(
+            child: Text(
+              tr('حفظ الرقم وإرسال الفاتورة'),
+              style: const TextStyle(
                 fontFamily: 'cairo',
                 fontSize: 13.5,
                 fontWeight: FontWeight.bold,
@@ -646,7 +685,7 @@ class InvoiceShareService {
 
   static void _error(String message) {
     Get.snackbar(
-      'خطأ',
+      tr('خطأ'),
       message,
       snackPosition: SnackPosition.BOTTOM,
       backgroundColor: AppColors.danger,
@@ -655,6 +694,7 @@ class InvoiceShareService {
     );
   }
 }
+
 /// خيار داخل لوحة الإرسال (واتساب)
 class _SheetOption extends StatelessWidget {
   final IconData icon;

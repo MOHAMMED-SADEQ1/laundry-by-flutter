@@ -28,4 +28,19 @@ class AppRoute {
   static const String licenseLog = "/license-log";
   static const String backup = "/backup";
   static const String discounts = "/discounts";
+  static const String roles = "/roles";
+
+  // صفحات الإعدادات الفرعية — صفحة لكل جزء (الفهرس في `/settings`).
+  static const String settingsBusiness = "/settings/business";
+  static const String settingsAppearance = "/settings/appearance";
+  static const String settingsInvoice = "/settings/invoice";
+  static const String settingsPrinting = "/settings/printing";
+  static const String settingsAccounts = "/settings/accounts";
+  static const String settingsOperations = "/settings/operations";
+  static const String settingsTax = "/settings/tax";
+  static const String settingsRetention = "/settings/retention";
+  static const String settingsLicense = "/settings/license";
+  static const String settingsBackup = "/settings/backup";
+  static const String settingsAbout = "/settings/about";
+  static const String settingsDocTemplate = "/settings/doc-template";
 }

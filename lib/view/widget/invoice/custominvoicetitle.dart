@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:laundry/services/i18n/l10n.dart';
 
 class CustomInvoiceTitle extends StatelessWidget {
   const CustomInvoiceTitle({super.key});
@@ -30,7 +31,7 @@ class CustomInvoiceTitle extends StatelessWidget {
           const Icon(Icons.receipt_long, size: 20, color: Colors.white),
           const SizedBox(width: 8),
           Text(
-            "الفاتورة",
+            tr("الفاتورة"),
             style: TextStyle(
               fontFamily: 'cairo',
               fontSize: 18,

@@ -4,7 +4,9 @@ import 'package:intl/intl.dart' hide TextDirection;
 import 'package:laundry/controller/customer/debt_report_controller.dart';
 import 'package:laundry/core/theme/app_colors.dart';
 import 'package:laundry/services/customer/debt_report_service.dart';
+import 'package:laundry/services/i18n/l10n.dart';
 import 'package:laundry/sqldb.dart';
+import 'package:laundry/services/i18n/ui_direction.dart';
 
 /// مطابقة أرصدة الزبائن + دفتر الأستاذ المرئي.
 ///
@@ -32,34 +34,34 @@ class _DebtReconciliationScreenState
   @override
   Widget build(BuildContext context) {
     return Directionality(
-      textDirection: TextDirection.rtl,
+      textDirection: L10n.isRtl ? appTextDirection : TextDirection.ltr,
       child: DefaultTabController(
         length: 2,
         child: Scaffold(
           backgroundColor: AppColors.background,
           appBar: AppBar(
-            title: const Text(
-              'المطابقة ودفتر الأستاذ',
-              style: TextStyle(
+            title: Text(
+              tr('المطابقة ودفتر الأستاذ'),
+              style: const TextStyle(
                 fontFamily: 'cairo',
                 fontWeight: FontWeight.bold,
               ),
             ),
             centerTitle: true,
-            bottom: const TabBar(
+            bottom: TabBar(
               indicatorSize: TabBarIndicatorSize.tab,
-              labelStyle: TextStyle(
+              labelStyle: const TextStyle(
                 fontFamily: 'cairo',
                 fontSize: 13,
                 fontWeight: FontWeight.bold,
               ),
-              unselectedLabelStyle: TextStyle(
+              unselectedLabelStyle: const TextStyle(
                 fontFamily: 'cairo',
                 fontSize: 13,
               ),
               tabs: [
-                Tab(text: 'مطابقة الأرصدة'),
-                Tab(text: 'دفتر الأستاذ'),
+                Tab(text: tr('مطابقة الأرصدة')),
+                Tab(text: tr('دفتر الأستاذ')),
               ],
             ),
           ),
@@ -108,9 +110,9 @@ class _ReconciliationTab extends StatelessWidget {
             if (bad.isNotEmpty) ...[
               _repairButton(context, bad.length),
               const SizedBox(height: 12),
-              const _SectionTitle(
-                title: 'زبائن بأرصدة غير مطابقة',
-                subtitle: 'مخزَّن الرصيد يختلف عن الذمة الحقيقية من الفواتير',
+              _SectionTitle(
+                title: tr('زبائن بأرصدة غير مطابقة'),
+                subtitle: tr('مخزَّن الرصيد يختلف عن الذمة الحقيقية من الفواتير'),
                 color: AppColors.danger,
                 icon: Icons.error_outline,
               ),
@@ -119,9 +121,11 @@ class _ReconciliationTab extends StatelessWidget {
               const SizedBox(height: 16),
             ],
             _SectionTitle(
-              title: 'كل الزبائن',
-              subtitle:
-                  '${report.rows.length} زبون لهم ذمة أو رصيد — الأكثر فرقًا أولًا',
+              title: tr('كل الزبائن'),
+              subtitle: trf(
+                tr('{0} زبون لهم ذمة أو رصيد — الأكثر فرقًا أولًا'),
+                ['${report.rows.length}'],
+              ),
               color: AppColors.primary,
               icon: Icons.list_alt,
             ),
@@ -134,13 +138,13 @@ class _ReconciliationTab extends StatelessWidget {
   }
 
   Widget _empty() {
-    return const Center(
+    return Center(
       child: Padding(
-        padding: EdgeInsets.all(30),
+        padding: const EdgeInsets.all(30),
         child: Text(
-          'لا زبائن لهم ذمة أو رصيد قائم',
+          tr('لا زبائن لهم ذمة أو رصيد قائم'),
           textAlign: TextAlign.center,
-          style: TextStyle(
+          style: const TextStyle(
             fontFamily: 'cairo',
             fontSize: 13.5,
             color: AppColors.textSecondary,
@@ -155,13 +159,15 @@ class _ReconciliationTab extends StatelessWidget {
     final color = hasIssue ? AppColors.danger : AppColors.success;
     final icon = hasIssue ? Icons.warning_amber_rounded : Icons.verified_rounded;
     final title = hasIssue
-        ? 'يوجد ${report.mismatched.length} رصيد غير مطابق'
-        : 'كل الأرصدة مطابقة';
+        ? trf('يوجد {0} رصيد غير مطابق', ['${report.mismatched.length}'])
+        : tr('كل الأرصدة مطابقة');
     final subtitle = hasIssue
-        ? 'هذه أرصدة تخزينية تختلف عن مجموع الفواتير — استخدم زر الإصلاح '
-            'لإعادة اشتقاقها من الفواتير.'
-        : 'الرصيد المخزَّن لكل زبون يساوي ذمته المحتسبة من الفواتير. '
-            'لا خلل في الكتابة.';
+        ? tr(
+            'هذه أرصدة تخزينية تختلف عن مجموع الفواتير — استخدم زر الإصلاح لإعادة اشتقاقها من الفواتير.',
+          )
+        : tr(
+            'الرصيد المخزَّن لكل زبون يساوي ذمته المحتسبة من الفواتير. لا خلل في الكتابة.',
+          );
 
     return Container(
       padding: const EdgeInsets.all(14),
@@ -219,8 +225,8 @@ class _ReconciliationTab extends StatelessWidget {
       children: [
         Expanded(
           child: _MetricCard(
-            label: 'ذمة الفواتير (الحقيقة)',
-            value: '${money.format(report.totalDerived)} ر.س',
+            label: tr('ذمة الفواتير (الحقيقة)'),
+            value: trf('{0} ر.س', [money.format(report.totalDerived)]),
             color: AppColors.danger,
             icon: Icons.receipt_long,
           ),
@@ -228,8 +234,8 @@ class _ReconciliationTab extends StatelessWidget {
         const SizedBox(width: 8),
         Expanded(
           child: _MetricCard(
-            label: 'المخزَّن كمدين (balance)',
-            value: '${money.format(report.totalStoredDebt)} ر.س',
+            label: tr('المخزَّن كمدين (balance)'),
+            value: trf('{0} ر.س', [money.format(report.totalStoredDebt)]),
             color: AppColors.warning,
             icon: Icons.save_outlined,
           ),
@@ -237,8 +243,8 @@ class _ReconciliationTab extends StatelessWidget {
         const SizedBox(width: 8),
         Expanded(
           child: _MetricCard(
-            label: 'سلف الزبائن',
-            value: '${money.format(report.totalCredit)} ر.س',
+            label: tr('سلف الزبائن'),
+            value: trf('{0} ر.س', [money.format(report.totalCredit)]),
             color: AppColors.info,
             icon: Icons.savings_outlined,
           ),
@@ -275,8 +281,8 @@ class _ReconciliationTab extends StatelessWidget {
                   color: Colors.white, size: 19),
           label: Text(
             controller.repairing.value
-                ? 'جارٍ الإصلاح…'
-                : 'إصلاح كل الأرصدة ($count زبون)',
+                ? tr('جارٍ الإصلاح…')
+                : trf('إصلاح كل الأرصدة ({0} زبون)', ['$count']),
             style: const TextStyle(
               fontFamily: 'cairo',
               fontSize: 13.5,
@@ -293,17 +299,18 @@ class _ReconciliationTab extends StatelessWidget {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => Directionality(
-        textDirection: TextDirection.rtl,
+        textDirection: L10n.isRtl ? appTextDirection : TextDirection.ltr,
         child: AlertDialog(
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-          title: const Row(
+          title: Row(
             children: [
-              Icon(Icons.build_circle, color: AppColors.danger, size: 20),
-              SizedBox(width: 8),
+              const Icon(Icons.build_circle,
+                  color: AppColors.danger, size: 20),
+              const SizedBox(width: 8),
               Text(
-                'تأكيد إصلاح الأرصدة',
-                style: TextStyle(
+                tr('تأكيد إصلاح الأرصدة'),
+                style: const TextStyle(
                   fontFamily: 'cairo',
                   fontSize: 14,
                   fontWeight: FontWeight.bold,
@@ -312,10 +319,10 @@ class _ReconciliationTab extends StatelessWidget {
             ],
           ),
           content: Text(
-            'سيُعاد اشتقاق رصيد $count زبون من فواتيره الفعلية، فتصبح الأرصدة '
-            'مطابقة للفواتير تمامًا.\n\n'
-            'آمن تمامًا: لا يُحذف ولا يُعدَّل أي مبلغ في الفواتير، ولا يُمسّ '
-            'الدفعات المسجّلة. العملية تُصحّح حقل الرصيد فقط.',
+            trf(
+              'سيُعاد اشتقاق رصيد {0} زبون من فواتيره الفعلية، فتصبح الأرصدة مطابقة للفواتير تمامًا.\n\nآمن تمامًا: لا يُحذف ولا يُعدَّل أي مبلغ في الفواتير، ولا يُمسّ الدفعات المسجّلة. العملية تُصحّح حقل الرصيد فقط.',
+              ['$count'],
+            ),
             style: const TextStyle(
               fontFamily: 'cairo',
               fontSize: 12.5,
@@ -326,18 +333,18 @@ class _ReconciliationTab extends StatelessWidget {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: const Text(
-                'إلغاء',
-                style: TextStyle(fontFamily: 'cairo', fontSize: 13),
+              child: Text(
+                tr('إلغاء'),
+                style: const TextStyle(fontFamily: 'cairo', fontSize: 13),
               ),
             ),
             ElevatedButton(
               style:
                   ElevatedButton.styleFrom(backgroundColor: AppColors.danger),
               onPressed: () => Navigator.pop(ctx, true),
-              child: const Text(
-                'إصلاح الآن',
-                style: TextStyle(
+              child: Text(
+                tr('إصلاح الآن'),
+                style: const TextStyle(
                   fontFamily: 'cairo',
                   fontSize: 13,
                   fontWeight: FontWeight.bold,
@@ -353,11 +360,29 @@ class _ReconciliationTab extends StatelessWidget {
     if (ok != true) return;
 
     final fixed = await controller.repairBalances();
+
+    // رفض الصلاحية (`-1`) وخطأ التنفيذ (`-2`) ليسا «لا حاجة لتعديل» —
+    // خلطهما كان سيقول للمستخدم «كل الأرصدة سليمة» بينما لم يُنفَّذ شيء.
+    if (fixed < 0) {
+      Get.snackbar(
+        fixed == -1 ? tr('لا تملك الصلاحية') : tr('تعذّر الإصلاح'),
+        fixed == -1
+            ? tr('إصلاح الأرصدة يحتاج صلاحية «إصلاح أرصدة الزبائن»، راجع مدير النظام.')
+            : tr('حدث خطأ أثناء إصلاح الأرصدة، لم تُعدَّل بيانات.'),
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: AppColors.danger,
+        colorText: Colors.white,
+        duration: const Duration(seconds: 4),
+        icon: const Icon(Icons.lock_outline, color: Colors.white),
+      );
+      return;
+    }
+
     Get.snackbar(
-      'تمت المطابقة',
+      tr('تمت المطابقة'),
       fixed > 0
-          ? 'صُحّح رصيد $fixed زبون — أصبح مطابقًا للفواتير'
-          : 'كل الأرصدة كانت سليمة، لا حاجة لتعديل',
+          ? trf('صُحّح رصيد {0} زبون — أصبح مطابقًا للفواتير', ['$fixed'])
+          : tr('كل الأرصدة كانت سليمة، لا حاجة لتعديل'),
       snackPosition: SnackPosition.BOTTOM,
       backgroundColor: AppColors.success,
       colorText: Colors.white,
@@ -400,7 +425,7 @@ class _ReconciliationTab extends StatelessWidget {
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
-                  'فرق ${money.format(r.difference.abs())}',
+                  trf('فرق {0}', [money.format(r.difference.abs())]),
                   style: const TextStyle(
                     fontFamily: 'cairo',
                     fontSize: 10,
@@ -416,15 +441,15 @@ class _ReconciliationTab extends StatelessWidget {
             children: [
               Expanded(
                 child: _miniStat(
-                  'ذمة الفواتير',
-                  '${money.format(r.derivedDebt)} ر.س',
+                  tr('ذمة الفواتير'),
+                  trf('{0} ر.س', [money.format(r.derivedDebt)]),
                   AppColors.danger,
                 ),
               ),
               Expanded(
                 child: _miniStat(
-                  'الرصيد المخزَّن',
-                  '${money.format(r.storedBalance)} ر.س',
+                  tr('الرصيد المخزَّن'),
+                  trf('{0} ر.س', [money.format(r.storedBalance)]),
                   AppColors.warning,
                 ),
               ),
@@ -472,7 +497,7 @@ class _ReconciliationTab extends StatelessWidget {
           ),
           if (r.derivedDebt > 0)
             Text(
-              'ذمة ${money.format(r.derivedDebt)}',
+              trf('ذمة {0}', [money.format(r.derivedDebt)]),
               style: const TextStyle(
                 fontFamily: 'cairo',
                 fontSize: 11.5,
@@ -486,7 +511,7 @@ class _ReconciliationTab extends StatelessWidget {
               style: TextStyle(color: AppColors.textMuted),
             ),
             Text(
-              'سلفة ${money.format(r.storedBalance)}',
+              trf('سلفة {0}', [money.format(r.storedBalance)]),
               style: const TextStyle(
                 fontFamily: 'cairo',
                 fontSize: 11.5,
@@ -497,7 +522,7 @@ class _ReconciliationTab extends StatelessWidget {
           ],
           if (r.derivedDebt <= 0 && r.storedBalance <= 0)
             Text(
-              'رصيد ${money.format(r.storedBalance)}',
+              trf('رصيد {0}', [money.format(r.storedBalance)]),
               style: const TextStyle(
                 fontFamily: 'cairo',
                 fontSize: 11.5,
@@ -565,9 +590,7 @@ class _LedgerTabState extends State<_LedgerTab> {
   Future<void> _loadCustomers() async {
     try {
       final rows = await _db.readData(
-        'SELECT customer_id, customer_name, phone_1, COALESCE(balance,0) AS bal '
-        'FROM customers WHERE COALESCE(is_active, 1) = 1 '
-        'ORDER BY customer_name',
+        'SELECT customer_id, customer_name, phone_1, COALESCE(balance,0) AS bal FROM customers WHERE COALESCE(is_active, 1) = 1 ORDER BY customer_name',
       );
       if (!mounted) return;
       setState(() {
@@ -589,8 +612,7 @@ class _LedgerTabState extends State<_LedgerTab> {
     });
     try {
       final rows = await _db.readData(
-        'SELECT * FROM customer_balance_log WHERE customer_id = ? '
-        'ORDER BY created_at DESC, log_id DESC LIMIT 200',
+        'SELECT * FROM customer_balance_log WHERE customer_id = ? ORDER BY created_at DESC, log_id DESC LIMIT 200',
         [_selectedId],
       );
       if (!mounted) return;
@@ -640,9 +662,9 @@ class _LedgerTabState extends State<_LedgerTab> {
     return ListView(
       padding: const EdgeInsets.all(12),
       children: [
-        const _SectionTitle(
-          title: 'اختر زبونًا',
-          subtitle: 'لعرض سجل كل حركات رصيده زمنيًا — سبب كل تغيير ومقداره',
+        _SectionTitle(
+          title: tr('اختر زبونًا'),
+          subtitle: tr('لعرض سجل كل حركات رصيده زمنيًا — سبب كل تغيير ومقداره'),
           color: AppColors.primary,
           icon: Icons.person_search,
         ),
@@ -650,10 +672,10 @@ class _LedgerTabState extends State<_LedgerTab> {
         ..._customers.map((c) {
           final bal = ((c['bal'] ?? 0) as num).toDouble();
           final label = bal > 0
-              ? 'له سلفة ${money.format(bal)}'
+              ? trf('له سلفة {0}', [money.format(bal)])
               : bal < 0
-                  ? 'عليه دين ${money.format(bal.abs())}'
-                  : 'لا ذمة';
+                  ? trf('عليه دين {0}', [money.format(bal.abs())])
+                  : tr('لا ذمة');
           final color = bal > 0
               ? AppColors.info
               : bal < 0
@@ -689,7 +711,7 @@ class _LedgerTabState extends State<_LedgerTab> {
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      (c['customer_name'] ?? 'غير محدد').toString(),
+                      (c['customer_name'] ?? tr('غير محدد')).toString(),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -733,7 +755,7 @@ class _LedgerTabState extends State<_LedgerTab> {
               _entries = [];
             }),
             icon: const Icon(Icons.arrow_forward, size: 20),
-            tooltip: 'رجوع للقائمة',
+            tooltip: tr('رجوع للقائمة'),
           ),
           Expanded(
             child: Column(
@@ -749,7 +771,7 @@ class _LedgerTabState extends State<_LedgerTab> {
                   ),
                 ),
                 Text(
-                  '${_entries.length} حركة مسجّلة',
+                  trf('{0} حركة مسجّلة', ['${_entries.length}']),
                   style: const TextStyle(
                     fontFamily: 'cairo',
                     fontSize: 10.5,
@@ -764,10 +786,10 @@ class _LedgerTabState extends State<_LedgerTab> {
             children: [
               Text(
                 bal > 0
-                    ? 'سلفة'
+                    ? tr('سلفة')
                     : bal < 0
-                        ? 'دين'
-                        : 'متوازن',
+                        ? tr('دين')
+                        : tr('متوازن'),
                 style: TextStyle(
                   fontFamily: 'cairo',
                   fontSize: 10,
@@ -779,7 +801,7 @@ class _LedgerTabState extends State<_LedgerTab> {
                 ),
               ),
               Text(
-                '${money.format(bal.abs())} ر.س',
+                trf('{0} ر.س', [money.format(bal.abs())]),
                 style: TextStyle(
                   fontFamily: 'cairo',
                   fontSize: 15,
@@ -808,19 +830,19 @@ class _LedgerTabState extends State<_LedgerTab> {
             Icon(Icons.history_toggle_off,
                 size: 40, color: AppColors.textMuted),
             const SizedBox(height: 10),
-            const Text(
-              'لا حركات مسجّلة لهذا الزبون',
-              style: TextStyle(
+            Text(
+              tr('لا حركات مسجّلة لهذا الزبون'),
+              style: const TextStyle(
                 fontFamily: 'cairo',
                 fontSize: 13,
                 color: AppColors.textSecondary,
               ),
             ),
             const SizedBox(height: 6),
-            const Text(
-              'يُسجَّل الدفتر تلقائيًا عند كل دفعة أو إصدار فاتورة آجلة',
+            Text(
+              tr('يُسجَّل الدفتر تلقائيًا عند كل دفعة أو إصدار فاتورة آجلة'),
               textAlign: TextAlign.center,
-              style: TextStyle(
+              style: const TextStyle(
                 fontFamily: 'cairo',
                 fontSize: 11,
                 color: AppColors.textMuted,
@@ -922,7 +944,7 @@ class _LedgerTabState extends State<_LedgerTab> {
                         size: 11, color: AppColors.textMuted),
                     const SizedBox(width: 3),
                     Text(
-                      'الرصيد بعدها: ${money.format(after)}',
+                      trf('الرصيد بعدها: {0}', [money.format(after)]),
                       style: const TextStyle(
                         fontFamily: 'cairo',
                         fontSize: 10,
@@ -952,39 +974,39 @@ class _LedgerTabState extends State<_LedgerTab> {
 
   static String _initial(dynamic name) {
     final s = (name ?? '').toString().trim();
-    return s.isEmpty ? '؟' : s.characters.first;
+    return s.isEmpty ? L10n.pick('؟', '?') : s.characters.first;
   }
 
   /// ترجمة رمز السبب إلى نص عربي + أيقونة + لون
   static _ReasonMeta _reasonMeta(String reason) {
     switch (reason) {
       case 'invoice_create':
-        return const _ReasonMeta(
-          'إصدار فاتورة آجلة',
+        return _ReasonMeta(
+          tr('إصدار فاتورة آجلة'),
           Icons.receipt_long,
           AppColors.danger,
         );
       case 'invoice_credit_use':
-        return const _ReasonMeta(
-          'استخدام رصيد على فاتورة',
+        return _ReasonMeta(
+          tr('استخدام رصيد على فاتورة'),
           Icons.swap_horiz,
           AppColors.warning,
         );
       case 'payment':
-        return const _ReasonMeta(
-          'تسجيل دفعة',
+        return _ReasonMeta(
+          tr('تسجيل دفعة'),
           Icons.payments,
           AppColors.success,
         );
       case 'invoice_delivered_with_payment':
-        return const _ReasonMeta(
-          'سداد عند التسليم',
+        return _ReasonMeta(
+          tr('سداد عند التسليم'),
           Icons.local_laundry_service,
           AppColors.success,
         );
       default:
         return _ReasonMeta(
-          reason.isEmpty ? 'حركة رصيد' : reason,
+          reason.isEmpty ? tr('حركة رصيد') : reason,
           Icons.sync_alt,
           AppColors.info,
         );

@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:laundry/config/constants.dart';
 import 'package:laundry/core/theme/app_colors.dart';
+import 'package:laundry/services/i18n/l10n.dart';
 import 'package:laundry/services/license/system_license_service.dart';
 import 'package:laundry/view/widget/license/license_renew_dialog.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:laundry/services/i18n/ui_direction.dart';
 
 /// إشعار «قرب انتهاء الاشتراك» عند الدخول، مع **زر تجديد مباشر**.
 ///
@@ -56,7 +58,7 @@ class _LicenseExpiryNoticeDialog extends StatelessWidget {
     final urgent = (license.daysRemaining ?? 99) <= 1;
 
     return Directionality(
-      textDirection: TextDirection.rtl,
+      textDirection: appTextDirection,
       child: AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
         title: Row(
@@ -66,9 +68,9 @@ class _LicenseExpiryNoticeDialog extends StatelessWidget {
               color: urgent ? AppColors.danger : AppColors.warning,
             ),
             const SizedBox(width: 8),
-            const Text(
-              'تنبيه: اشتراك النظام',
-              style: TextStyle(
+            Text(
+              tr('تنبيه: اشتراك النظام'),
+              style: const TextStyle(
                 fontFamily: 'cairo',
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
@@ -92,7 +94,9 @@ class _LicenseExpiryNoticeDialog extends StatelessWidget {
             if (expiry != null) ...[
               const SizedBox(height: 6),
               Text(
-                'تاريخ الانتهاء: ${SystemLicenseController.formatDate(expiry)}',
+                trf('تاريخ الانتهاء: {0}', [
+                  SystemLicenseController.formatDate(expiry),
+                ]),
                 style: TextStyle(
                   fontFamily: 'cairo',
                   fontSize: 13,
@@ -102,8 +106,9 @@ class _LicenseExpiryNoticeDialog extends StatelessWidget {
             ],
             const SizedBox(height: 10),
             Text(
-              'جدّد الاشتراك الآن لتفادي توقّف النظام. يتطلب التجديد بيانات '
-              'مدير النظام (admin).',
+              tr(
+                'جدّد الاشتراك الآن لتفادي توقّف النظام. يتطلب التجديد بيانات مدير النظام (admin).',
+              ),
               style: TextStyle(
                 fontFamily: 'cairo',
                 fontSize: 12.5,
@@ -116,9 +121,9 @@ class _LicenseExpiryNoticeDialog extends StatelessWidget {
         actions: [
           TextButton(
             onPressed: () => Get.back<void>(),
-            child: const Text(
-              'لاحقًا',
-              style: TextStyle(fontFamily: 'cairo'),
+            child: Text(
+              tr('لاحقًا'),
+              style: const TextStyle(fontFamily: 'cairo'),
             ),
           ),
           ElevatedButton.icon(
@@ -134,9 +139,9 @@ class _LicenseExpiryNoticeDialog extends StatelessWidget {
               showLicenseRenewDialog(navContext);
             },
             icon: const Icon(Icons.key_outlined, size: 18),
-            label: const Text(
-              'تجديد الآن',
-              style: TextStyle(fontFamily: 'cairo'),
+            label: Text(
+              tr('تجديد الآن'),
+              style: const TextStyle(fontFamily: 'cairo'),
             ),
           ),
         ],

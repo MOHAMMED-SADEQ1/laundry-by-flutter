@@ -114,9 +114,7 @@ class AppPlatform {
         // يبدو فارغًا، أو فشل عند الإقلاع). التحذير يكفي ليُصلح المفتاح.
         if (kRunTarget != real) {
           debugPrint(
-            '⚠️ RunTarget: مطلوب «${kRunTarget.name}» والنظام الفعلي '
-            '«${real.name}» ⇒ يُستخدم الفعلي. '
-            'عدّل kRunTarget في lib/config/run_target.dart.',
+            '⚠️ RunTarget: مطلوب «${kRunTarget.name}» والنظام الفعلي «${real.name}» ⇒ يُستخدم الفعلي. عدّل kRunTarget في lib/config/run_target.dart.',
           );
           return real;
         }

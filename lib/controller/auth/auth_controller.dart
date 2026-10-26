@@ -1,7 +1,10 @@
 import 'package:get/get.dart';
 import 'package:laundry/config/constants.dart';
 import 'package:laundry/core/constant/routes.dart';
+import 'package:laundry/services/i18n/l10n.dart';
+import 'package:laundry/services/i18n/translations_en.dart';
 import 'package:laundry/sqldb.dart';
+import 'package:laundry/services/permission/permission_service.dart';
 import 'package:laundry/services/security/security_service.dart';
 import 'package:laundry/services/security/session_manager.dart';
 import 'package:laundry/view/widget/license/license_expiry_notice.dart';
@@ -16,8 +19,8 @@ class AuthController extends GetxController {
   void login() async {
     if (username.value.isEmpty || password.value.isEmpty) {
       Get.snackbar(
-        'خطأ',
-        'أدخل اسم المستخدم وكلمة المرور',
+        tr('خطأ'),
+        tr('أدخل اسم المستخدم وكلمة المرور'),
         snackPosition: SnackPosition.BOTTOM,
       );
       return;
@@ -37,8 +40,8 @@ class AuthController extends GetxController {
 
     if (users.isEmpty) {
       Get.snackbar(
-        'خطأ',
-        'اسم المستخدم غير موجود',
+        tr('خطأ'),
+        tr('اسم المستخدم غير موجود'),
         snackPosition: SnackPosition.BOTTOM,
       );
       isLoading.value = false;
@@ -51,8 +54,8 @@ class AuthController extends GetxController {
     // Verify password
     if (!SecurityService.verifyPassword(password.value, storedHash)) {
       Get.snackbar(
-        'خطأ',
-        'كلمة المرور غير صحيحة',
+        tr('خطأ'),
+        tr('كلمة المرور غير صحيحة'),
         snackPosition: SnackPosition.BOTTOM,
       );
       isLoading.value = false;
@@ -64,6 +67,10 @@ class AuthController extends GetxController {
     final role = user['role'] as String;
 
     await SessionManager.login(userId, username.value, role);
+
+    // 🛡️ تحميل صلاحيات الداخل **قبل** الانتقال — فلا تظهر أي شاشة أو زر
+    // محمي لحظةً ثم يختفي. التحميل يقرأ إسنادات دوره وتجاوزاته الفردية.
+    await PermissionService.load();
 
     // Initialize invoice counter if first time
     SharedPreferences prefs = await SharedPreferences.getInstance();
@@ -96,7 +103,7 @@ class AuthController extends GetxController {
   }
 
   Future<void> _insertDefaultClothing(SqlDB db) async {
-    final items = [
+    final items = <Map<String, dynamic>>[
       {
         'clothing_name': 'ثوب أبيض',
         'normal_washing_and_ironing_price': 5.0,
@@ -443,21 +450,67 @@ class AuthController extends GetxController {
       },
     ];
 
+    // 🚨 مصدر الترجمة **واحد**: القاموس في `translations_en.dart`.
+    // كانت هنا خريطة `namesEn` مكرّرة (43 صنفًا) — تكرار يعني أن تصحيح
+    // ترجمة في مكان لا يصل إلى الآخر، وأن الصنف القديم (`_en = NULL`)
+    // يبقى عربيًّا لأن الواجهة لا تجد له مدخلًا في القاموس.
     for (final item in items) {
+      final arabic = '${item['clothing_name']}';
+      item['clothing_name_en'] = kEnglish[arabic] ?? '';
       await db.safeInsert('clothing', item);
     }
   }
 
   Future<void> _insertDefaultCategories(SqlDB db) async {
-    final categories = [
-      {'name': 'ملابس رجالية', 'description': 'ثوب، شماغ، غترة'},
-      {'name': 'إكسسوارات رجالية', 'description': 'شماغ، غترة، طاقية'},
-      {'name': 'ملابس داخلية', 'description': 'فانيلة، سروال، جوارب'},
-      {'name': 'بِدَل', 'description': 'عسكرية، افرنجية، صوف'},
-      {'name': 'قمصان وبنطلونات', 'description': 'قميص، بنطلون، جاكيت'},
-      {'name': 'أكسسوارات', 'description': 'قبعة، طماق'},
-      {'name': 'ملابس نسائية', 'description': 'فستان، بلوزة، عباية'},
-      {'name': 'مفروشات', 'description': 'شرشف، مفرش، بطانية، ستائر'},
+    final categories = <Map<String, dynamic>>[
+      {
+        'name': 'ملابس رجالية',
+        'name_en': 'Men\'s clothing',
+        'description': 'ثوب، شماغ، غترة',
+        'description_en': 'Thobe, shemagh, ghutra',
+      },
+      {
+        'name': 'إكسسوارات رجالية',
+        'name_en': 'Men\'s accessories',
+        'description': 'شماغ، غترة، طاقية',
+        'description_en': 'Shemagh, ghutra, kufi cap',
+      },
+      {
+        'name': 'ملابس داخلية',
+        'name_en': 'Underwear',
+        'description': 'فانيلة، سروال، جوارب',
+        'description_en': 'Undershirt, trousers, socks',
+      },
+      {
+        'name': 'بِدَل',
+        'name_en': 'Suits',
+        'description': 'عسكرية، افرنجية، صوف',
+        'description_en': 'Military, Western, wool',
+      },
+      {
+        'name': 'قمصان وبنطلونات',
+        'name_en': 'Shirts and pants',
+        'description': 'قميص، بنطلون، جاكيت',
+        'description_en': 'Shirt, pants, jacket',
+      },
+      {
+        'name': 'أكسسوارات',
+        'name_en': 'Accessories',
+        'description': 'قبعة، طماق',
+        'description_en': 'Hat, leggings',
+      },
+      {
+        'name': 'ملابس نسائية',
+        'name_en': 'Women\'s clothing',
+        'description': 'فستان، بلوزة، عباية',
+        'description_en': 'Dress, blouse, abaya',
+      },
+      {
+        'name': 'مفروشات',
+        'name_en': 'Furnishings',
+        'description': 'شرشف، مفرش، بطانية، ستائر',
+        'description_en': 'Bedsheet, bedspread, blanket, curtains',
+      },
     ];
 
     for (final cat in categories) {
@@ -467,6 +520,9 @@ class AuthController extends GetxController {
 
   void logout() async {
     await SessionManager.logout();
+    // 🛡️ إفراغ كاش الصلاحيات عند الخروج — وإلا بقي المستخدم التالي يرى
+    // صلاحيات سابقه حتى الدخول (وهو أسوأ تسريب ممكن في جهاز مشترك).
+    PermissionService.clear();
     Get.offNamed(AppRoute.login);
   }
 

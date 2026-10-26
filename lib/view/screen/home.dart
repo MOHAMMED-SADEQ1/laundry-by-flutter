@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:laundry/services/i18n/l10n.dart';
 import 'package:get/get.dart';
 import 'package:laundry/controller/addeditcategorycontroller.dart';
 import 'package:laundry/controller/shift_controller.dart';
@@ -8,9 +9,12 @@ import 'package:laundry/view/screen/invoice.dart';
 import 'package:laundry/view/widget/common/animation_wrappers.dart';
 import 'package:laundry/view/widget/common/common_widgets.dart';
 import 'package:laundry/view/widget/home/customdrawer.dart';
+import 'package:laundry/view/widget/home/catalog_refresh_button.dart';
+import 'package:laundry/view/widget/home/clothing_sort_menu.dart';
 import 'package:laundry/view/widget/home/customshowdialog.dart';
 import 'package:laundry/services/permission/permission_service.dart';
 import 'package:laundry/view/widget/customer/customer_search_dialog.dart';
+import 'package:laundry/services/permission/permission_catalog.dart';
 
 class Home extends StatelessWidget {
   const Home({super.key});
@@ -40,8 +44,8 @@ class Home extends StatelessWidget {
                       color: Colors.white.withValues(alpha: 0.9),
                     ),
                     const SizedBox(width: 6),
-                    const Text(
-                      "وردية مفتوحة",
+                    Text(
+                      tr("وردية مفتوحة"),
                       style: TextStyle(
                         fontFamily: 'cairo',
                         fontSize: 13,
@@ -87,29 +91,32 @@ class Home extends StatelessWidget {
         centerTitle: true,
         elevation: 0,
         actions: [
+          // 🔄 إعادة جلب الأصناف والخدمات من القاعدة دون إعادة فتح الشاشة.
+          // كل صفّ صنف يحمل خدماته الأربع، فطلب واحد يحدّث الاثنين.
+          const CatalogRefreshButton(),
           // 🔎 بحث سريع عن زبون بالاسم أو رقم الجوال ← يفتح حساب الزبون.
           // الصلاحية هي نفسها صلاحية قائمة الزبائن (انظر `CustomDrawer`).
-          if (PermissionService.canManageCustomers)
+          if (PermissionService.can(PermissionKeys.customerManage))
             IconButton(
-              tooltip: 'بحث عن زبون',
+              tooltip: tr('بحث عن زبون'),
               onPressed: () => showCustomerSearchDialog(context),
               icon: const Icon(Icons.person_search, color: Colors.white),
             ),
-          if (PermissionService.canViewDashboard)
+          if (PermissionService.can(PermissionKeys.dashboardView))
             IconButton(
-              tooltip: 'لوحة التحكم',
+              tooltip: tr('لوحة التحكم'),
               onPressed: () => Get.toNamed('/dashboard'),
               icon: const Icon(Icons.dashboard_outlined, color: Colors.white),
             ),
           IconButton(
-            tooltip: 'الفواتير السابقة',
+            tooltip: tr('الفواتير السابقة'),
             onPressed: () => Get.toNamed('/invoices'),
             icon: const Icon(Icons.receipt_long_outlined, color: Colors.white),
           ),
           Padding(
             padding: const EdgeInsets.only(left: 6),
             child: IconButton(
-              tooltip: 'القائمة الجانبية',
+              tooltip: tr('القائمة الجانبية'),
               onPressed: () => scaffoldKey.currentState?.openEndDrawer(),
               icon: const Icon(Icons.menu_rounded, color: Colors.white),
             ),
@@ -186,10 +193,10 @@ class _ItemsAreaState extends State<_ItemsArea> {
             padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
             child: Row(
               children: [
-                const Flexible(
+                Flexible(
                   fit: FlexFit.loose,
                   child: SectionHeader(
-                    title: 'الأصناف والخدمات',
+                    title: tr('الأصناف والخدمات'),
                     icon: Icons.local_laundry_service_outlined,
                   ),
                 ),
@@ -202,7 +209,7 @@ class _ItemsAreaState extends State<_ItemsArea> {
                       setState(() => _query = v.trim());
                     },
                     decoration: InputDecoration(
-                      hintText: 'ابحث عن صنف...',
+                      hintText: tr('ابحث عن صنف...'),
                       prefixIcon: const Icon(Icons.search),
                       suffixIcon:
                           _query.isEmpty
@@ -235,6 +242,9 @@ class _ItemsAreaState extends State<_ItemsArea> {
                     ),
                   ),
                 ),
+                const SizedBox(width: 8),
+                // ─── ترتيب الأصناف (الفرز في القاعدة) ───
+                const ClothingSortMenu(),
               ],
             ),
           ),
@@ -262,9 +272,11 @@ class _ItemsAreaState extends State<_ItemsArea> {
                     size: 18,
                   ),
                   const SizedBox(width: 8),
-                  const Expanded(
+                  Expanded(
                     child: Text(
-                      'لا توجد وردية مفتوحة — افتح الوردية أولاً لإصدار الفواتير',
+                      tr(
+                        'لا توجد وردية مفتوحة — افتح الوردية أولاً لإصدار الفواتير',
+                      ),
                       style: TextStyle(
                         fontFamily: 'cairo',
                         fontSize: 11.5,
@@ -279,13 +291,13 @@ class _ItemsAreaState extends State<_ItemsArea> {
                     child: InkWell(
                       borderRadius: BorderRadius.circular(8),
                       onTap: shiftController.startShift,
-                      child: const Padding(
+                      child: Padding(
                         padding: EdgeInsets.symmetric(
                           horizontal: 10,
                           vertical: 5,
                         ),
                         child: Text(
-                          'فتح وردية',
+                          tr('فتح وردية'),
                           style: TextStyle(
                             fontFamily: 'cairo',
                             fontSize: 11,
@@ -319,14 +331,26 @@ class _ItemsAreaState extends State<_ItemsArea> {
                   catController.clothing
                       .map((e) => Map<String, dynamic>.from(e))
                       .toList();
+              // 🚨 البحث بالإنجليزية يجب أن يكون **غير حسّاس لحالة الأحرف**،
+              // وإلا كتب المستخدم `thobe` فلم يجد `Thobe` المعروض أمامه.
+              // نُحسب المفتاح مرّة واحدة خارج `where` لا لكل صنف.
+              final q = _query.toLowerCase();
               final filtered =
                   _query.isEmpty
                       ? data
                       : data
                           .where(
-                            (item) => (item['clothing_name'] ?? '')
-                                .toString()
-                                .contains(_query),
+                            // البحث في الاسم المعروض بلغة الواجهة، وإلا لم
+                            // يجد المستخدم بالإنجليزية صنفًا يراه أمامه.
+                            (item) =>
+                                localized(
+                                  item,
+                                  'clothing_name',
+                                ).toLowerCase().contains(q) ||
+                                (item['clothing_name'] ?? '')
+                                    .toString()
+                                    .toLowerCase()
+                                    .contains(q),
                           )
                           .toList();
 
@@ -342,15 +366,18 @@ class _ItemsAreaState extends State<_ItemsArea> {
                       _query.isEmpty
                           ? Icons.inventory_2_outlined
                           : Icons.search_off,
-                  title: _query.isEmpty ? 'لا توجد أصناف' : 'لا توجد نتائج',
+                  title:
+                      _query.isEmpty
+                          ? tr('لا توجد أصناف')
+                          : tr('لا توجد نتائج'),
                   subtitle:
                       _query.isEmpty
-                          ? 'أضف الأصناف من قائمة الإضافة لبس'
-                          : 'لم نجد صنفاً يطابق البحث "$_query"',
+                          ? tr('أضف الأصناف من قائمة الإضافة لبس')
+                          : trf('لم نجد صنفاً يطابق البحث "{0}"', [_query]),
                   action:
                       _query.isEmpty
                           ? GradientButton(
-                            label: 'إضافة لبس',
+                            label: tr('إضافة لبس'),
                             icon: Icons.add,
                             gradient: AppColors.primaryGradient,
                             onPressed: () => Get.toNamed('/addcategory'),

@@ -3,6 +3,8 @@ import 'package:get/get.dart';
 import 'package:intl/intl.dart';
 import 'package:laundry/controller/daily_cash_controller.dart';
 import 'package:laundry/core/theme/app_colors.dart';
+import 'package:laundry/services/i18n/l10n.dart';
+import 'package:laundry/services/payment/payment_method.dart';
 import 'package:laundry/view/widget/customappbar.dart';
 
 class DailyCashScreen extends StatefulWidget {
@@ -30,8 +32,10 @@ class _DailyCashScreenState extends State<DailyCashScreen> {
         preferredSize: const Size.fromHeight(64),
         child: Obx(
           () => CustomAppbar(
-            title: 'الصندوق',
-            subtitle: controller.isShiftMode ? 'عرض بالوردية' : 'عرض بالتاريخ',
+            title: tr('الصندوق'),
+            subtitle: controller.isShiftMode
+                ? tr('عرض بالوردية')
+                : tr('عرض بالتاريخ'),
           ),
         ),
       ),
@@ -91,7 +95,7 @@ class _ViewModeToggle extends StatelessWidget {
             children: [
               Expanded(
                 child: _ModeButton(
-                  label: 'بالتاريخ',
+                  label: tr('بالتاريخ'),
                   icon: Icons.calendar_today,
                   selected: !isShift,
                   onTap: () =>
@@ -101,7 +105,7 @@ class _ViewModeToggle extends StatelessWidget {
               const SizedBox(width: 4),
               Expanded(
                 child: _ModeButton(
-                  label: 'بالوردية',
+                  label: tr('بالوردية'),
                   icon: Icons.lock_clock,
                   selected: isShift,
                   onTap: () =>
@@ -185,7 +189,7 @@ class _ShiftSelector extends StatelessWidget {
             // الأقدم ← (shift_id أكبر = أحدث، والقائمة تنازلية)
             IconButton(
               icon: const Icon(Icons.chevron_right),
-              tooltip: 'الوردية الأقدم',
+              tooltip: tr('الوردية الأقدم'),
               onPressed: hasShifts ? () => controller.stepShift(1) : null,
             ),
             Expanded(
@@ -211,7 +215,7 @@ class _ShiftSelector extends StatelessWidget {
                                   borderRadius: BorderRadius.circular(20),
                                 ),
                                 child: Text(
-                                  isOpen ? 'مفتوحة' : 'مُقفَلة',
+                                  isOpen ? tr('مفتوحة') : tr('مُقفَلة'),
                                   style: TextStyle(
                                     fontFamily: 'cairo',
                                     fontSize: 11,
@@ -243,9 +247,9 @@ class _ShiftSelector extends StatelessWidget {
                         ],
                       ),
                     )
-                  : const Text(
-                      'لا توجد ورديات مسجّلة',
-                      style: TextStyle(
+                  : Text(
+                      tr('لا توجد ورديات مسجّلة'),
+                      style: const TextStyle(
                         fontFamily: 'cairo',
                         fontSize: 14,
                         color: Colors.grey,
@@ -254,7 +258,7 @@ class _ShiftSelector extends StatelessWidget {
             ),
             IconButton(
               icon: const Icon(Icons.chevron_left),
-              tooltip: 'الوردية الأحدث',
+              tooltip: tr('الوردية الأحدث'),
               onPressed: hasShifts ? () => controller.stepShift(-1) : null,
             ),
           ],
@@ -290,9 +294,9 @@ class _ShiftPickerSheet extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           const SizedBox(height: 12),
-          const Text(
-            'اختر الوردية',
-            style: TextStyle(
+          Text(
+            tr('اختر الوردية'),
+            style: const TextStyle(
               fontFamily: 'cairo',
               fontSize: 16,
               fontWeight: FontWeight.bold,
@@ -316,15 +320,14 @@ class _ShiftPickerSheet extends StatelessWidget {
                     color: isOpen ? AppColors.success : AppColors.textMuted,
                   ),
                   title: Text(
-                    'وردية #$id',
+                    trf('وردية #{0}', ['$id']),
                     style: const TextStyle(
                       fontFamily: 'cairo',
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                   subtitle: Text(
-                    '${_shiftTimeLabel(s['start_time'])}'
-                    '${isOpen ? ' · مفتوحة الآن' : ' → ${_shiftTimeLabel(s['end_time'])}'}',
+                    '${_shiftTimeLabel(s['start_time'])}${isOpen ? tr(' · مفتوحة الآن') : ' → ${_shiftTimeLabel(s['end_time'])}'}',
                     style: const TextStyle(fontFamily: 'cairo', fontSize: 12),
                   ),
                   trailing: isCurrent
@@ -416,18 +419,35 @@ class _DateSelector extends StatelessWidget {
 
       String prefix = '';
       if (dateStr == today) {
-        prefix = 'اليوم — ';
+        prefix = tr('اليوم — ');
       } else if (dateStr == yesterday) {
-        prefix = 'أمس — ';
+        prefix = tr('أمس — ');
       }
 
       final months = [
-        '', 'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
-        'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'
+        '',
+        tr('يناير'),
+        tr('فبراير'),
+        tr('مارس'),
+        tr('أبريل'),
+        tr('مايو'),
+        tr('يونيو'),
+        tr('يوليو'),
+        tr('أغسطس'),
+        tr('سبتمبر'),
+        tr('أكتوبر'),
+        tr('نوفمبر'),
+        tr('ديسمبر'),
       ];
       final days = [
-        '', 'الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء',
-        'الخميس', 'الجمعة', 'السبت'
+        '',
+        tr('الأحد'),
+        tr('الإثنين'),
+        tr('الثلاثاء'),
+        tr('الأربعاء'),
+        tr('الخميس'),
+        tr('الجمعة'),
+        tr('السبت'),
       ];
 
       return '$prefix${days[date.weekday]} ${date.day} ${months[date.month]} ${date.year}';
@@ -452,7 +472,7 @@ class _CashSummary extends StatelessWidget {
         const SizedBox(height: 12),
         // إيداعات (فواتير كاش)
         _OperationSection(
-          title: 'إيداعات (فواتير كاش)',
+          title: tr('إيداعات (فواتير كاش)'),
           icon: Icons.arrow_downward,
           color: AppColors.success,
           items: controller.cashIn,
@@ -463,7 +483,7 @@ class _CashSummary extends StatelessWidget {
         const SizedBox(height: 12),
         // مدفوعات ديون الزبائن
         _OperationSection(
-          title: 'سداد ديون الزبائن',
+          title: tr('سداد ديون الزبائن'),
           icon: Icons.payments,
           color: AppColors.info,
           items: controller.debtPayments,
@@ -476,7 +496,7 @@ class _CashSummary extends StatelessWidget {
         // دفعات الاشتراكات الشهرية — نقدية دخلت الدرج
         if (controller.subscriptionPayments.isNotEmpty) ...[
           _OperationSection(
-            title: 'دفعات الاشتراكات',
+            title: tr('دفعات الاشتراكات'),
             icon: Icons.autorenew,
             color: AppColors.violet,
             items: controller.subscriptionPayments,
@@ -487,7 +507,7 @@ class _CashSummary extends StatelessWidget {
         ],
         // سحوبات
         _OperationSection(
-          title: 'سحوبات (مصروفات)',
+          title: tr('سحوبات (مصروفات)'),
           icon: Icons.arrow_upward,
           color: AppColors.danger,
           items: controller.cashOut,
@@ -517,15 +537,19 @@ class _OpeningBalance extends StatelessWidget {
       final dayShifts = controller.dayShifts.length;
       final String title;
       if (!hasShift) {
-        title = isShiftMode ? 'لا توجد وردية محددة' : 'لا توجد وردية في هذا اليوم';
+        title = isShiftMode
+            ? tr('لا توجد وردية محددة')
+            : tr('لا توجد وردية في هذا اليوم');
       } else if (isShiftMode) {
-        title = 'رصيد افتتاح وردية #$shiftId';
+        title = trf('رصيد افتتاح وردية #{0}', ['$shiftId']);
       } else {
         // تاريخ الصندوق = تاريخ فتح الوردية: الافتتاح هو افتتاح أول وردية
         // فُتحت في اليوم (كل وردية تالية ترحّل نقد سابقتها).
         title = dayShifts > 1
-            ? 'رصيد افتتاح يوم العمل ($dayShifts ورديات)'
-            : 'رصيد افتتاح وردية #${controller.dayShifts.first['shift_id']}';
+            ? trf('رصيد افتتاح يوم العمل ({0} ورديات)', ['$dayShifts'])
+            : trf('رصيد افتتاح وردية #{0}', [
+                '${controller.dayShifts.first['shift_id']}',
+              ]);
       }
       return Card(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
@@ -559,7 +583,7 @@ class _OpeningBalance extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      '${balance.toStringAsFixed(2)} ريال',
+                      trf('{0} ريال', [balance.toStringAsFixed(2)]),
                       style: const TextStyle(
                         fontFamily: 'cairo',
                         fontSize: 22,
@@ -627,7 +651,7 @@ class _OperationSection extends StatelessWidget {
                 ),
                 const Spacer(),
                 Text(
-                  '${total.toStringAsFixed(2)} ريال',
+                  trf('{0} ريال', [total.toStringAsFixed(2)]),
                   style: TextStyle(
                     fontFamily: 'cairo',
                     fontSize: 14,
@@ -640,12 +664,12 @@ class _OperationSection extends StatelessWidget {
           ),
           // العناصر
           if (items.isEmpty)
-            const Padding(
-              padding: EdgeInsets.all(20),
+            Padding(
+              padding: const EdgeInsets.all(20),
               child: Center(
                 child: Text(
-                  'لا توجد عمليات',
-                  style: TextStyle(
+                  tr('لا توجد عمليات'),
+                  style: const TextStyle(
                     fontFamily: 'cairo',
                     color: Colors.grey,
                   ),
@@ -669,7 +693,7 @@ class _InvoiceRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final customer = item['customer_name']?.toString().isNotEmpty == true
         ? item['customer_name']
-        : 'غير مسجل';
+        : tr('غير مسجل');
     final user = item['user_name']?.toString() ?? '';
     final amount = ((item['paid_amount'] ?? 0) as num).toDouble();
     final time = _formatTime(item['invoice_date']?.toString());
@@ -771,18 +795,18 @@ class _DebtPaymentRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final customer = item['customer_name']?.toString().isNotEmpty == true
         ? item['customer_name']
-        : 'غير محدد';
+        : tr('غير محدد');
     final user = item['user_name']?.toString() ?? '';
     final amount = ((item['amount'] ?? 0) as num).toDouble();
-    final method = item['payment_method']?.toString() ?? 'كاش';
+    final method = item['payment_method']?.toString() ?? PaymentMethod.cash.key;
     final time = _formatTime(item['payment_date']?.toString());
     // استهلاك السلفة ليس نقدية — نوسمه بوضوح حتى لا يُحتسب في الدرج
     final isCreditUse = (item['source'] ?? 'manual') == 'credit_use';
     final sourceLabel = isCreditUse
-        ? 'من الرصيد (ليست نقدية)'
+        ? tr('من الرصيد (ليست نقدية)')
         : switch (item['source']) {
-            'delivery' => 'سداد عند التسليم',
-            _ => 'دفعة يدوية',
+            'delivery' => tr('سداد عند التسليم'),
+            _ => tr('دفعة يدوية'),
           };
 
     return Container(
@@ -800,7 +824,9 @@ class _DebtPaymentRow extends StatelessWidget {
               borderRadius: BorderRadius.circular(8),
             ),
             child: Icon(
-              method == 'كاش' ? Icons.money : Icons.credit_card,
+              PaymentMethods.isCash(method)
+                  ? Icons.money
+                  : Icons.credit_card,
               size: 18,
               color: AppColors.info,
             ),
@@ -812,8 +838,8 @@ class _DebtPaymentRow extends StatelessWidget {
               children: [
                 Text(
                   isCreditUse
-                      ? 'استهلاك رصيد — $customer'
-                      : 'سداد دين — $customer',
+                      ? trf('استهلاك رصيد — {0}', [customer])
+                      : trf('سداد دين — {0}', [customer]),
                   style: const TextStyle(
                     fontFamily: 'cairo',
                     fontSize: 13,
@@ -886,20 +912,23 @@ class _SubscriptionPaymentRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final customer = item['customer_name']?.toString().isNotEmpty == true
         ? item['customer_name']
-        : 'غير محدد';
+        : tr('غير محدد');
     final user = item['user_name']?.toString() ?? '';
     final amount = ((item['amount'] ?? 0) as num).toDouble();
-    final method = item['method']?.toString() ?? 'كاش';
+    final method = item['method']?.toString() ?? PaymentMethod.cash.key;
     final time = _formatTime(item['paid_date']?.toString());
     final source = '${item['source'] ?? 'manual'}';
     final isRefund = source == 'cancel_refund';
     // الاسترداد كسلفة تسوية دفاتر لا نقدية — نوسمه حتى لا يُحتسب في الدرج
-    final isCreditRefund = isRefund && method.trim() == 'رصيد';
+    final isCreditRefund =
+        isRefund && PaymentMethods.tryParse(method) == PaymentMethod.balance;
     final sourceLabel = switch (source) {
-      'renewal' => 'تجديد اشتراك',
+      'renewal' => tr('تجديد اشتراك'),
       'cancel_refund' =>
-        isCreditRefund ? 'استرداد كسلفة (ليست نقدية)' : 'استرداد نقدي',
-      _ => 'دفعة اشتراك',
+        isCreditRefund
+            ? tr('استرداد كسلفة (ليست نقدية)')
+            : tr('استرداد نقدي'),
+      _ => tr('دفعة اشتراك'),
     };
     final accent = isRefund ? AppColors.danger : AppColors.violet;
 
@@ -920,7 +949,9 @@ class _SubscriptionPaymentRow extends StatelessWidget {
             child: Icon(
               isRefund
                   ? Icons.undo
-                  : (method == 'كاش' ? Icons.money : Icons.credit_card),
+                  : (PaymentMethods.isCash(method)
+                        ? Icons.money
+                        : Icons.credit_card),
               size: 18,
               color: accent,
             ),
@@ -931,7 +962,9 @@ class _SubscriptionPaymentRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  isRefund ? 'استرداد — $customer' : 'اشتراك — $customer',
+                  isRefund
+                      ? trf('استرداد — {0}', ['$customer'])
+                      : trf('اشتراك — {0}', ['$customer']),
                   style: const TextStyle(
                     fontFamily: 'cairo',
                     fontSize: 13,
@@ -1108,7 +1141,7 @@ class _TotalsSection extends StatelessWidget {
         child: Column(
           children: [
             _TotalRow(
-              label: 'إيداعات',
+              label: tr('إيداعات'),
               amount: controller.totalCashIn,
               color: AppColors.success,
               icon: Icons.arrow_downward,
@@ -1120,14 +1153,14 @@ class _TotalsSection extends StatelessWidget {
               const Divider(),
               if (controller.subscriptionCashTotal > 0)
                 _TotalRow(
-                  label: 'منها اشتراكات',
+                  label: tr('منها اشتراكات'),
                   amount: controller.subscriptionCashTotal,
                   color: AppColors.violet,
                   icon: Icons.autorenew,
                 ),
               if (controller.subscriptionRefundTotal > 0)
                 _TotalRow(
-                  label: 'استردادات اشتراكات نقدية',
+                  label: tr('استردادات اشتراكات نقدية'),
                   amount: controller.subscriptionRefundTotal,
                   color: AppColors.danger,
                   icon: Icons.undo,
@@ -1135,7 +1168,7 @@ class _TotalsSection extends StatelessWidget {
             ],
             const Divider(),
             _TotalRow(
-              label: 'سحوبات نقدية',
+              label: tr('سحوبات نقدية'),
               amount: controller.totalCashOut,
               color: AppColors.danger,
               icon: Icons.arrow_upward,
@@ -1144,7 +1177,7 @@ class _TotalsSection extends StatelessWidget {
             if (controller.nonCashExpenseTotal > 0) ...[
               const Divider(),
               _TotalRow(
-                label: 'مصروفات غير نقدية',
+                label: tr('مصروفات غير نقدية'),
                 amount: controller.nonCashExpenseTotal,
                 color: AppColors.textMuted,
                 icon: Icons.credit_card,
@@ -1152,7 +1185,7 @@ class _TotalsSection extends StatelessWidget {
             ],
             const Divider(),
             _TotalRow(
-              label: controller.netLabel,
+              label: tr(controller.netLabel),
               amount: controller.totalCashIn - controller.totalCashOut,
               color: AppColors.primary,
               icon: Icons.account_balance_wallet,
@@ -1160,14 +1193,14 @@ class _TotalsSection extends StatelessWidget {
             ),
             const Divider(),
             _TotalRow(
-              label: 'رصيد الافتتاح',
+              label: tr('رصيد الافتتاح'),
               amount: controller.openingBalance,
               color: AppColors.textMuted,
               icon: Icons.lock,
             ),
             const Divider(),
             _TotalRow(
-              label: 'الرصيد الختامي',
+              label: tr('الرصيد الختامي'),
               amount: controller.closingBalance,
               color: AppColors.primary,
               icon: Icons.savings,
@@ -1180,17 +1213,19 @@ class _TotalsSection extends StatelessWidget {
               const Divider(),
               if (controller.dayStocktakeCount > 0) ...[
                 _TotalRow(
-                  label: 'المعدود فعليًا (${controller.dayStocktakeCount} وردية)',
+                  label: trf('المعدود فعليًا ({0} وردية)', [
+                    '${controller.dayStocktakeCount}',
+                  ]),
                   amount: controller.dayCountedCash.value,
                   color: AppColors.textSecondary,
                   icon: Icons.calculate_outlined,
                 ),
                 _TotalRow(
                   label: controller.dayCashDifference.abs() < 0.01
-                      ? 'فروق الجرد (مطابقة)'
+                      ? tr('فروق الجرد (مطابقة)')
                       : controller.dayCashDifference > 0
-                      ? 'فروق الجرد (زيادة)'
-                      : 'فروق الجرد (عجز)',
+                      ? tr('فروق الجرد (زيادة)')
+                      : tr('فروق الجرد (عجز)'),
                   amount: controller.dayCashDifference.value,
                   color: controller.dayCashDifference.abs() < 0.01
                       ? AppColors.success
@@ -1201,7 +1236,7 @@ class _TotalsSection extends StatelessWidget {
               ],
               if (controller.dayUnstockedCount > 0)
                 _TotalRow(
-                  label: 'ورديات أُقفلت بلا جرد',
+                  label: tr('ورديات أُقفلت بلا جرد'),
                   amount: controller.dayUnstockedCount.toDouble(),
                   color: AppColors.warning,
                   icon: Icons.help_outline,
@@ -1246,7 +1281,7 @@ class _TotalRow extends StatelessWidget {
         ),
         const Spacer(),
         Text(
-          '${amount.toStringAsFixed(2)} ريال',
+          trf('{0} ريال', [amount.toStringAsFixed(2)]),
           style: TextStyle(
             fontFamily: 'cairo',
             fontSize: bold ? 16 : 14,
