@@ -167,19 +167,37 @@ void main() {
     AppConstants.licenseCheckInterval.inHours,
   );
   check(
-    'B12. invoice_logo_size = AppConstants.invoiceLogoSizeDefaultMm',
-    SettingOptions.invoiceLogoSize.defaultValue,
-    AppConstants.invoiceLogoSizeDefaultMm,
+    'B12. عرض الشعار = AppConstants.invoiceLogoWidthDefaultMm',
+    SettingOptions.invoiceLogoWidth.defaultValue,
+    AppConstants.invoiceLogoWidthDefaultMm,
   );
   check(
-    'B13. حدود مقاس الشعار تطابق الثوابت',
+    'B12b. ارتفاع الشعار = AppConstants.invoiceLogoHeightDefaultMm',
+    SettingOptions.invoiceLogoHeight.defaultValue,
+    AppConstants.invoiceLogoHeightDefaultMm,
+  );
+  check(
+    'B12c. مقاس رمز QR = AppConstants.mapQrSizeDefaultMm',
+    SettingOptions.mapQrSize.defaultValue,
+    AppConstants.mapQrSizeDefaultMm,
+  );
+  check(
+    'B13. حدود مقاسات الشعار والرمز تطابق الثوابت',
     <num?>[
-      SettingOptions.invoiceLogoSize.min,
-      SettingOptions.invoiceLogoSize.max,
+      SettingOptions.invoiceLogoWidth.min,
+      SettingOptions.invoiceLogoWidth.max,
+      SettingOptions.invoiceLogoHeight.min,
+      SettingOptions.invoiceLogoHeight.max,
+      SettingOptions.mapQrSize.min,
+      SettingOptions.mapQrSize.max,
     ],
     <num>[
-      AppConstants.invoiceLogoSizeMinMm,
-      AppConstants.invoiceLogoSizeMaxMm,
+      AppConstants.invoiceLogoWidthMinMm,
+      AppConstants.invoiceLogoWidthMaxMm,
+      AppConstants.invoiceLogoHeightMinMm,
+      AppConstants.invoiceLogoHeightMaxMm,
+      AppConstants.mapQrSizeMinMm,
+      AppConstants.mapQrSizeMaxMm,
     ],
   );
   print('=' * 70);

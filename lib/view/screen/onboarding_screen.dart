@@ -5,6 +5,7 @@ import 'package:laundry/services/business_info_service.dart';
 import 'package:laundry/services/i18n/l10n.dart';
 import 'package:laundry/sqldb.dart';
 import 'package:laundry/view/widget/common/developer_credit.dart';
+import 'package:laundry/view/widget/common/map_link_status.dart';
 import 'package:laundry/services/i18n/ui_direction.dart';
 
 /// شاشة ترحيب لإدخال معلومات النشاط التجاري عند أول تشغيل للنظام
@@ -231,6 +232,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                                       const Icon(Icons.map_outlined),
                                 ),
                               ),
+                              // 🚨 هنا يُدخَل الرابط **أول مرة**، وهنا وقع العيب:
+                              // حُفظ `https://<رمز بلا نطاق>` فلم يُطبع رمز QR
+                              // ولا كلمة تشرح السبب. الحكم الحيّ يمنعه من البداية.
+                              MapLinkStatus(controller: _locationCtrl),
                               const SizedBox(height: 24),
 
                               // زر الحفظ

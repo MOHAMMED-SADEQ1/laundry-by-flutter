@@ -4,6 +4,7 @@ import 'package:laundry/services/permission/permission_service.dart';
 import 'package:laundry/services/security/session_manager.dart';
 import 'package:laundry/sqldb.dart';
 import 'package:laundry/services/i18n/l10n.dart';
+import 'package:laundry/services/payment/payment_method.dart';
 
 /// نتيجة بند ذمة واحد
 class DebtItem {
@@ -321,7 +322,11 @@ class CustomerLedgerService {
         await _db.safeInsert('customer_payments', {
           'customer_id': customerId,
           'amount': fromCents(take),
-          'payment_method': 'رصيد',
+          // 🚨 المفتاح لا التسمية العربية. كان هنا `'رصيد'` بينما المسار
+          // المكافئ في `printInvoicecontroller` يكتب `PaymentMethod.balance.key`
+          // ⇒ صفّان بالمعنى نفسه بقيمتين مختلفتين، وأي فلتر بالمفتاح يفوت
+          // أحدهما. القراءة تقبل الشكلين، لكن **التخزين يجب أن يكون واحدًا**.
+          'payment_method': PaymentMethod.balance.key,
           'payment_date': DateTime.now().toIso8601String(),
           'notes': trf('استهلاك رصيد سلفة على فاتورة #{0}', [item.invoiceId]),
           'recorded_by': SessionManager.currentUserId,

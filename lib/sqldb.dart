@@ -10,6 +10,8 @@ import 'package:laundry/services/security/security_service.dart';
 import 'package:laundry/services/security/session_manager.dart';
 // منطق خالص (بلا قاعدة بيانات) ⇒ لا دورة استيراد مع `app_settings_service`.
 import 'package:laundry/services/settings/setting_option.dart';
+// مفاتيح إعداد ورثها النظام ولا يقرأها أي كود — تُنظَّف مرة واحدة.
+import 'package:laundry/services/settings/legacy_setting_keys.dart';
 // كتالوج الصلاحيات الخالص — مصدر حِزم الأدوار الافتراضية عند الزرع.
 import 'package:laundry/services/permission/permission_catalog.dart';
 // جسر الاتصال (بلا دورة استيراد) + خدمة الفحص لإنفاذ الصلاحيات في القاعدة.
@@ -603,9 +605,121 @@ class SqlDB {
     }
   }
 
+  /// يحذف مفاتيح الإعداد الميتة — **مرة واحدة، وبأثر تدقيقي**.
+  ///
+  /// الصفوف لا يقرأها كود ولا تعرضها شاشة (قائمتها وأدلّتها في
+  /// `LegacySettingKeys`)، لكنها تُضلّل الصيانة: من يفتح `settings` يظنّ
+  /// `inv_show_logo` ما زال يتحكّم في الفاتورة بينما التحكّم في
+  /// `SettingOptions` بمفاتيح أخرى.
+  ///
+  /// **لا حذف بلا نسخة:** القيم تُكتب في `audit_log` (`old_values`) قبل
+  /// الحذف، فلو احتاج المستخدم قيمة قديمة وجدها. والعَلَم يمنع التكرار فلا
+  /// يُعاد الحذف كل فتح.
+  Future<void> _cleanupLegacySettings(Database db) async {
+    try {
+      if (await getSetting('settings_cleanup_v1') == '1') return;
+      final keys = LegacySettingKeys.all;
+      if (keys.isEmpty) return;
+
+      final placeholders = LegacySettingKeys.placeholders;
+      final rows = await db.query(
+        'settings',
+        columns: <String>['key', 'value'],
+        where: 'key IN ($placeholders)',
+        whereArgs: keys,
+      );
+
+      if (rows.isNotEmpty) {
+        final snapshot = <String, String>{
+          for (final row in rows)
+            '${row['key']}': '${row['value'] ?? ''}',
+        };
+        await db.insert('audit_log', {
+          'user_id': null,
+          'action': 'settings_legacy_cleanup',
+          'table_name': 'settings',
+          'record_id': null,
+          'old_values': jsonEncode(snapshot),
+          'new_values': jsonEncode({'deleted': rows.length}),
+          'timestamp': DateTime.now().toIso8601String(),
+        }, conflictAlgorithm: ConflictAlgorithm.ignore);
+
+        await db.delete(
+          'settings',
+          where: 'key IN ($placeholders)',
+          whereArgs: keys,
+        );
+        debugPrint('تنظيف إعدادات قديمة: ${rows.length} مفتاحًا');
+      }
+
+      await updateSetting('settings_cleanup_v1', '1');
+    } catch (e) {
+      debugPrint('legacy settings cleanup skipped: $e');
+    }
+  }
+
+  /// يُسوّي كتالوج الصلاحيات مع ما هو مخزَّن — **مرة واحدة لكل قاعدة**.
+  ///
+  /// **المشكلة التي يعالجها:** الزرع في [_seedDefaultPermissions] لا يمسّ دورًا
+  /// له إسناد قائم (`_roleHasPermissions`) — وهو صحيح عمدًا كي لا يُدهس تعديل
+  /// المدير. لكنه يعني أن **أي مفتاح جديد** يُضاف للكتالوج لاحقًا لن يصل إلى
+  /// الأدوار القائمة أبدًا، فتصبح الصلاحية الجديدة ميتة عمليًّا: الكتالوج
+  /// يعرضها وشاشة الأدوار تتيحها، ولا أحد يملكها.
+  ///
+  /// لذلك تُمنح المفاتيح الجديدة هنا صراحةً للأدوار التي كانت تملك السلوك
+  /// قبل تحويله إلى صلاحية (المدير ومدير النظام)، **بلا مساس ببقية إسناداتهم**.
+  /// كذلك تُنظَّف مفاتيح أُزيلت من الكتالوج (`invoice.delete` ·
+  /// `invoice.edit_issued`) فلا تبقى صفوف لصلاحيات لا وجود لها.
+  Future<void> _reconcilePermissionCatalog(DatabaseExecutor db) async {
+    try {
+      if (await getSetting('permission_catalog_reconcile_v1') == '1') return;
+
+      // (أ) منح المفاتيح الجديدة لمن كان يملك السلوك بالدور.
+      for (final roleName in const <String>['admin', 'manager']) {
+        final roleId = await _roleIdOf(db, roleName);
+        if (roleId == null) continue;
+        await db.insert(
+          'role_permissions',
+          {
+            'role_id': roleId,
+            'permission_key': PermissionKeys.subscriptionUsageOverride,
+          },
+          conflictAlgorithm: ConflictAlgorithm.ignore,
+        );
+      }
+
+      // (ب) إزالة إسنادات المفاتيح المحذوفة من الكتالوج.
+      //
+      // `invoice.delete` و`invoice.edit_issued`: حُذفا لأن التصحيح المحاسبي
+      // الصحيح هو إشعار دائن لا حذف فاتورة صادرة ولا تحريرها بعد الإصدار.
+      // `export.data`: حُذف لأن **لا وظيفة تصدير في النظام** تُنفّذه — التصدير
+      // الوحيد هو النسخة الاحتياطية وهي محروسة بـ`backup.perform`. صلاحية
+      // تُعرض في شاشة الأدوار ولا تحرس شيئًا إعلان كاذب.
+      for (final dead in const <String>[
+        'invoice.delete',
+        'invoice.edit_issued',
+        'export.data',
+      ]) {
+        await db.delete(
+          'role_permissions',
+          where: 'permission_key = ?',
+          whereArgs: <Object?>[dead],
+        );
+        await db.delete(
+          'permission_overrides',
+          where: 'permission_key = ?',
+          whereArgs: <Object?>[dead],
+        );
+      }
+
+      await updateSetting('permission_catalog_reconcile_v1', '1');
+    } catch (e) {
+      debugPrint('permission catalog reconcile skipped: $e');
+    }
+  }
+
   /// `role_id` لاسم دور، أو `null`.
-  Future<int?> _roleIdOf(DatabaseExecutor db, String name) async {
-    final rows = await db.query(
+  Future<int?> _roleIdOf(DatabaseExecutor db, String name) async {    final rows = await db.query(
       'roles',
       columns: <String>['role_id'],
       where: 'name = ?',
@@ -696,6 +810,39 @@ class SqlDB {
   /// **غير مُتلِف:** يكتب القيمة الافتراضية **فقط عند غياب المفتاح** — فلا
   /// يعيد ضبط أي قيمة عدّلها المستخدم. لازم لأن قواعد التثبيتات القائمة لا
   /// تمرّ بـ`_onCreate` عند إضافة خيار جديد.
+  /// ينقل مقاس الشعار القديم (بُعد واحد مربّع) إلى عرض وارتفاع — **مرة واحدة**.
+  ///
+  /// **المشكلة:** كان الإعداد مفتاحًا واحدًا (`invoice_logo_size`) يُرسم
+  /// مربّعًا. صار عرضًا وارتفاعًا مستقلّين. ولو تُرك المفتاح القديم وحده
+  /// لعاد كل شعار ضبطه صاحب النشاط (٤٠ مم مثلًا) إلى الافتراضي ٥٣ عند أول
+  /// فتح بعد التحديث — تغيير صامت في مستنداته.
+  ///
+  /// **ولماذا قبل `_ensureDefaultSettings`؟** لأن الزرع يكتب القيمة
+  /// الافتراضية للمفتاح الغائب؛ فلو جرى أولًا لوجدناه موجودًا فلم نستطع
+  /// تمييز «لم يضبطه أحد» من «ضبطه المستخدم».
+  Future<void> _migrateLogoSizeToBox(Database db) async {
+    try {
+      if (await getSetting('logo_size_box_v1') == '1') return;
+
+      final legacy = (await getSetting(
+        AppConstants.settingInvoiceLogoSize,
+      ))?.trim();
+      final hasWidth =
+          await getSetting(AppConstants.settingInvoiceLogoWidth) != null;
+      final hasHeight =
+          await getSetting(AppConstants.settingInvoiceLogoHeight) != null;
+
+      if (legacy != null && legacy.isNotEmpty && !hasWidth && !hasHeight) {
+        await updateSetting(AppConstants.settingInvoiceLogoWidth, legacy);
+        await updateSetting(AppConstants.settingInvoiceLogoHeight, legacy);
+        debugPrint('ترحيل مقاس الشعار: $legacy مم ⇒ عرض × ارتفاع');
+      }
+      await updateSetting('logo_size_box_v1', '1');
+    } catch (e) {
+      debugPrint('logo size migration skipped: $e');
+    }
+  }
+
   Future<void> _ensureDefaultSettings() async {
     for (final option in SettingOptions.all) {
       try {
@@ -1052,13 +1199,23 @@ class SqlDB {
     // مُتلِف: لا يدهس صلاحيات دور عدّلها المدير (`_roleHasPermissions`).
     await _createPermissionTables(mydb);
     await _seedDefaultPermissions(mydb);
+    // مزامنة الكتالوج: منح المفاتيح الجديدة للأدوار القائمة وتنظيف المحذوفة.
+    await _reconcilePermissionCatalog(mydb);
 
     // ─── خيارات النظام: ضمان وجود مفاتيحها ───
     // كانت هنا عمليتان منفصلتان (`invoice_retention_days` و
     // `invoice_auto_delete_enabled`) — أُزيلتا وأُسند الزرع إلى
     // `_ensureDefaultSettings` أدناه، الذي يشتق **كل** الخيارات من السجل
     // الواحد `SettingOptions.all` (غير مُتلِف: لا يدهس قيمة عدّلها المستخدم).
+    // ─── ترحيل مقاس الشعار: بُعد واحد ⇒ عرض وارتفاع (مرة واحدة) ───
+    // **قبل** زرع الافتراضيات: الزرع يكتب الافتراضي للمفتاح الغائب، فلو جرى
+    // أولًا لما أمكن تمييز «لم يضبطه أحد» من «ضبطه المستخدم».
+    await _migrateLogoSizeToBox(mydb);
+
     await _ensureDefaultSettings();
+
+    // ─── تنظيف مفاتيح الإعداد الميتة (مرة واحدة، بأثر في audit_log) ───
+    await _cleanupLegacySettings(mydb);
 
     // ─── أعمدة اللغة الثانية (الإنجليزية) ───
     // تُضاف **هنا** لا في `_onCreate` فقط، لأن كل قاعدة قائمة لن تمرّ بـ
@@ -1082,7 +1239,8 @@ class SqlDB {
 
     // ─── ترحيل حالات المصنعية: نصّ عربي ⇒ رمز ثابت ───
     // نفس مبدأ طرق الدفع: `'تم الاستلام'` في القاعدة تجعل اللغة جزءًا من
-    // البيانات. القراءة تقبل الشكلين، فالترحيل لا يُعطّل قاعدة قديمة.
+    // البيانات. **يُعاد في كل فتح** (تطبيع خامل التكرار) لأن العمود في
+    // القواعد القديمة يحمل افتراضيًا عربيًّا لا يمكن تغييره بـ`ALTER`.
     await _migrateProcessingStatusKeys(mydb);
 
     // تكلفة القطعة (لحساب هامش الربح)
@@ -2071,21 +2229,46 @@ class SqlDB {
     }
   }
 
-  /// ترحيل حالات المصنعية من نصّ عربي إلى رمز ثابت — مرة واحدة.
+  /// ترحيل حالات المصنعية من نصّ عربي إلى رمز ثابت.
   ///
-  /// لا يرمي: فشل الترحيل لا يمنع فتح التطبيق، والقراءة تقبل الشكلين.
+  /// **لماذا لا يُحرس بعَلَم؟** لأن العَلَم كان يجعله «مرة واحدة في عمر القاعدة»
+  /// بينما مصدر العربية **لم يتوقف**: العمود في القواعد المُرقّاة يحمل
+  /// `DEFAULT "تم الاستلام"` من ترحيل قديم، و`ALTER TABLE` لا يغيّر افتراضي
+  /// عمود قائم. فأي فاتورة تُكتب بلا حالة صريحة تعود عربيةً بعد أن يكون
+  /// العَلَم قد رُفع ⇒ الترحيل كان «ينجح» ثم تُلوَّث البيانات من جديد بلا
+  /// أن يعود أحد لتصحيحها. الآن هو **تطبيع خامل التكرار** يجري في كل فتح:
+  /// تكلفته UPDATE واحد على صفوف مطابقة فقط، وفائدته أن البيانات لا تبقى
+  /// عربية أبدًا مهما كان تاريخ إنشاء القاعدة.
+  ///
+  /// لا يرمي: فشل الترحيل لا يمنع فتح التطبيق، والقراءة تقبل الشكلين
+  /// (`ProcessingStatuses.tryParse`).
   Future<void> _migrateProcessingStatusKeys(Database db) async {
     try {
-      if (await getSetting('processing_status_key_v1') == '1') return;
-      var changed = 0;
-      for (final status in ProcessingStatuses.all) {
-        changed += await db.rawUpdate(
-          'UPDATE "invoices" SET "status" = ? WHERE TRIM("status") = ?',
-          [status.key, status.arabicLabel],
-        );
+      final statuses = ProcessingStatuses.all;
+      if (statuses.isEmpty) return;
+
+      // CASE واحد يحوّل كل تسمية عربية إلى رمزها في مرور واحد على الجدول.
+      final cases = List.filled(statuses.length, 'WHEN ? THEN ?').join(' ');
+      final marks = List.filled(statuses.length, '?').join(',');
+      final args = <Object?>[
+        for (final status in statuses) ...[status.arabicLabel, status.key],
+        for (final status in statuses) status.arabicLabel,
+      ];
+
+      final changed = await db.rawUpdate(
+        'UPDATE "invoices" SET "status" = '
+        'CASE TRIM(COALESCE("status", \'\')) $cases ELSE "status" END '
+        'WHERE TRIM(COALESCE("status", \'\')) IN ($marks)',
+        args,
+      );
+
+      // العَلَم يبقى للتوافق مع القواعد التي قرأته سابقًا (لا يمنع التنفيذ).
+      if (await getSetting('processing_status_key_v1') != '1') {
+        await updateSetting('processing_status_key_v1', '1');
       }
-      await updateSetting('processing_status_key_v1', '1');
-      debugPrint('ترحيل حالات المصنعية: $changed قيمة');
+      if (changed > 0) {
+        debugPrint('تطبيع حالات المصنعية: $changed صفًّا');
+      }
     } catch (e) {
       debugPrint('processing status migration skipped: $e');
     }

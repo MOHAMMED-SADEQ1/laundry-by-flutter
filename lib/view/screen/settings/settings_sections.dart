@@ -30,20 +30,26 @@ import 'package:laundry/controller/settings/locale_controller.dart';
 import 'package:laundry/controller/settings/settings_controller.dart';
 import 'package:laundry/controller/settings/theme_controller.dart';
 import 'package:laundry/core/constant/routes.dart';
+import 'package:laundry/core/services/paper_size.dart';
 import 'package:laundry/core/theme/app_colors.dart';
 import 'package:laundry/services/business_info_service.dart';
 import 'package:laundry/services/database/backup_naming.dart';
 import 'package:laundry/services/invoice/invoice_output_service.dart';
 import 'package:laundry/services/pdf/doc_template.dart';
+import 'package:laundry/services/pdf/map_qr.dart';
+import 'package:laundry/services/pdf/print_visual_size.dart';
 import 'package:laundry/services/license/system_license_service.dart';
 import 'package:laundry/services/permission/permission_service.dart';
 import 'package:laundry/services/printer/printer_service.dart';
 import 'package:laundry/services/i18n/app_language.dart';
+import 'package:laundry/services/i18n/doc_language.dart';
 import 'package:laundry/services/i18n/l10n.dart';
+import 'package:laundry/services/i18n/translations_en.dart';
 import 'package:laundry/services/settings/setting_option.dart';
 import 'package:laundry/view/widget/common/animation_wrappers.dart';
 import 'package:laundry/view/widget/common/common_widgets.dart';
 import 'package:laundry/view/widget/common/developer_credit.dart';
+import 'package:laundry/view/widget/common/map_link_status.dart';
 import 'package:printing/printing.dart';
 import 'package:laundry/services/permission/permission_catalog.dart';
 
@@ -269,8 +275,21 @@ Widget optionsSection(SettingsController controller, List<String> groups) {
       var options = SettingOptions.ofGroup(group);
       // خطّ الطباعة له بطاقة معاينة خاصّة (`PrintFontCard`) تُظهر الخطّ نفسه —
       // لا يُعرض هنا كقائمة منسدلة، وإلا ظهر الإعداد مرّتين.
+      //
+      // و«لغة الطباعة» كذلك: لها بطاقة صريحة ([docLanguageCard]) في صفحتي
+      // «الفواتير» و«الطباعة» — فإبقاء سطرها المنسدل هنا يعني **تحكّمين
+      // لنفس المفتاح** في الصفحة الواحدة، وهو لبس لا ميزة.
+      // ومقاسات الشعار ورمز QR: بطاقة [printSizesCard] تحملها مع الحساب
+      // والتحذير — فسطرها هنا يعني تحكّمين لنفس المفتاح بقيمتين مختلفتين.
       options = options
-          .where((o) => o.key != AppConstants.settingPrintFont)
+          .where(
+            (o) =>
+                o.key != AppConstants.settingPrintFont &&
+                o.key != AppConstants.settingDocLanguage &&
+                o.key != AppConstants.settingInvoiceLogoWidth &&
+                o.key != AppConstants.settingInvoiceLogoHeight &&
+                o.key != AppConstants.settingMapQrSize,
+          )
           .toList(growable: false);
       if (meta == null || options.isEmpty) continue;
       // خيارات الترخيص لمدير النظام وحده — كبطاقة «ترخيص النظام» في الصفحة.
@@ -638,10 +657,13 @@ Widget businessInfoCard(SettingsController controller) {
           controller: locationCtrl,
           decoration: InputDecoration(
             labelText: tr('رابط الموقع (Google Maps)'),
-            hintText: tr('اختياري — الصق رابط الخريطة'),
+            hintText: tr('اختياري — يُطبع كرمز QR أسفل الفاتورة'),
             prefixIcon: Icon(Icons.map_outlined),
           ),
         ),
+        // حكم حيّ: هل سيُطبع رمز QR فعلًا؟ بلا هذا السطر يبقى الرابط الفاسد
+        // صامتًا فلا يعرف صاحب النشاط سبب اختفاء الرمز من ورقته.
+        MapLinkStatus(controller: locationCtrl),
         const SizedBox(height: 10),
         TextField(
           controller: taxNumberCtrl,
@@ -703,6 +725,22 @@ Widget businessInfoCard(SettingsController controller) {
               );
               // تحديث الخدمة المركزية
               await BusinessInfoService.instance.load();
+              // الرابط غير الصالح لا يُطبع رمزًا له بلا كلمة — كان سيُحفظ
+              // ويبقى صامتًا فلا يعرف صاحب النشاط أن رمزه لن يظهر أصلًا.
+              final verdict = MapLinkVerdict.of(locationCtrl.text);
+              if (verdict.state == MapLinkState.invalid) {
+                Get.snackbar(
+                  tr('تنبيه'),
+                  verdict.canRepair
+                      ? trf(
+                        'رابط الموقع بلا نطاق — لن يُطبع رمز QR. اضغط زرّ الإصلاح تحت الحقل، أو استخدم: {0}',
+                        [verdict.suggestion],
+                      )
+                      : verdict.message,
+                  snackPosition: SnackPosition.BOTTOM,
+                  duration: const Duration(seconds: 8),
+                );
+              }
             },
             icon: const Icon(Icons.save_outlined),
             label: Text(
@@ -956,6 +994,24 @@ Widget invoicePreviewCard(SettingsController controller) {
             border: Border.all(color: AppColors.border),
           ),
           child: Obx(() {
+            // 🚨 المعاينة تُعرض **بلغة الطباعة** لا بلغة الواجهة: البطاقة
+            // تسمى «معاينة الفاتورة»، فلو أظهرت العربية في واجهة إنجليزية
+            // (أو العكس) لَظنّ المستخدم أن إعداد اللغة لا يعمل. والنصّ يمرّ
+            // من نفس قاموس المستندات (`kEnglish`) الذي يمرّ منه الـPDF.
+            final docLang = DocLanguage.byCode(
+              controller.settings[AppConstants.settingDocLanguage] ??
+                  SettingOptions.docLanguage.defaultValue,
+            );
+            String doc(String arabic) =>
+                docLang.isEnglish ? (kEnglish[arabic] ?? arabic) : arabic;
+            String docf(String arabic, List<String> args) {
+              var out = doc(arabic);
+              for (var i = 0; i < args.length; i++) {
+                out = out.replaceAll('{$i}', args[i]);
+              }
+              return out;
+            }
+
             final lines = <Widget>[];
             void add(String text, {bool bold = false, double size = 12}) {
               lines.add(
@@ -982,7 +1038,7 @@ Widget invoicePreviewCard(SettingsController controller) {
               );
             }
             add(
-              biz.name.isEmpty ? tr('اسم النشاط') : biz.name,
+              biz.name.isEmpty ? doc('اسم النشاط') : biz.name,
               bold: true,
               size: 13,
             );
@@ -990,7 +1046,7 @@ Widget invoicePreviewCard(SettingsController controller) {
               controller,
               AppConstants.settingInvoiceShowShortAddress,
             )) {
-              add(tr('العنوان الوطني: 1234 الرياض'), size: 11);
+              add(doc('العنوان الوطني: 1234 الرياض'), size: 11);
             }
             add(
               controller.settings[AppConstants.settingInvoiceTitleText] ??
@@ -1001,37 +1057,37 @@ Widget invoicePreviewCard(SettingsController controller) {
               final tn = biz.taxNumber.isEmpty
                   ? '300000000000003'
                   : biz.taxNumber;
-              add(trf('الرقم الضريبي: {0}', [tn]), size: 11);
+              add(docf('الرقم الضريبي: {0}', [tn]), size: 11);
             }
             if (_effOn(controller, AppConstants.settingInvoiceShowCrNumber)) {
-              add(tr('السجل التجاري: 1010000000'), size: 11);
+              add(doc('السجل التجاري: 1010000000'), size: 11);
             }
             if (_effOn(controller, AppConstants.settingInvoiceShowDatetime)) {
-              add(tr('التاريخ: 2026-10-06 10:30 ص'), size: 11);
+              add(doc('التاريخ: 2026-10-06 10:30 ص'), size: 11);
             }
             if (_effOn(controller, AppConstants.settingInvoiceShowCashier)) {
-              add(tr('صدر بواسطة: مدير النظام'), size: 11);
+              add(doc('صدر بواسطة: مدير النظام'), size: 11);
             }
             if (_effOn(controller, AppConstants.settingInvoiceShowPickupCode)) {
-              add(tr('رمز الاستلام: 1234'), size: 11);
+              add(doc('رمز الاستلام: 1234'), size: 11);
             }
-            add(tr('— قميص ×1 = 10.00 —'), size: 11);
+            add(doc('— قميص ×1 = 10.00 —'), size: 11);
             if (_effOn(
               controller,
               AppConstants.settingInvoiceShowDiscountLine,
             )) {
-              add(tr('الخصم: 2.00'), size: 11);
+              add(doc('الخصم: 2.00'), size: 11);
             }
             if (_effOn(controller, AppConstants.settingTaxEnabled) &&
                 _effOn(controller, AppConstants.settingInvoiceShowTaxLine)) {
-              add(tr('ضريبة القيمة المضافة 15%: 1.04'), size: 11);
+              add(doc('ضريبة القيمة المضافة 15%: 1.04'), size: 11);
             }
-            add(tr('المستحق: 8.00 ر.س'), bold: true, size: 13);
+            add(doc('المستحق: 8.00 ر.س'), bold: true, size: 13);
             if (_effOn(controller, AppConstants.settingInvoiceShowPaid)) {
-              add(tr('المدفوع: 8.00'), size: 11);
+              add(doc('المدفوع: 8.00'), size: 11);
             }
             if (_effOn(controller, AppConstants.settingInvoiceShowRemaining)) {
-              add(tr('المتبقي: 0.00'), size: 11);
+              add(doc('المتبقي: 0.00'), size: 11);
             }
             final footer =
                 controller.settings[AppConstants.settingInvoiceFooterNote] ??
@@ -1047,12 +1103,51 @@ Widget invoicePreviewCard(SettingsController controller) {
                 const Icon(Icons.qr_code_2, size: 34, color: AppColors.indigo),
               );
             }
+            // رمز الموقع يُعرض في المعاينة **فقط إن كان سيُطبع فعلًا** —
+            // فالمعاينة لا تُظهر وعدًا لا يُنفَّذ. وسببه (إن لم يُطبع) مكتوب
+            // في سطر الحالة أسفل البطاقة.
+            final mapRaw =
+                (controller.settings['business_location'] ?? '').trim();
+            if (MapQr.isValid(mapRaw)) {
+              lines.add(const SizedBox(height: 4));
+              lines.add(
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(
+                      Icons.qr_code_2,
+                      size: 26,
+                      color: AppColors.success,
+                    ),
+                    const SizedBox(width: 5),
+                    Text(
+                      doc('رمز QR للموقع'),
+                      style: TextStyle(
+                        fontFamily: 'cairo',
+                        fontSize: 10,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }
             return Column(children: lines);
           }),
         ),
         const SizedBox(height: 8),
+        // الحكم على رابط الموقع في مكان المعاينة نفسه: من ينظر هنا ليعرف
+        // «ماذا سيُطبع» يجب أن يجد الجواب لا أن يجرّب الطباعة.
+        Obx(
+          () => MapLinkStatusText(
+            raw: controller.settings['business_location'] ?? '',
+          ),
+        ),
+        const SizedBox(height: 8),
         Text(
-          tr('معاينة تمثيلية تتغير مع كل خيار إظهار — لا تُحفظ ولا تُطبع.'),
+          tr(
+            'معاينة تمثيلية بلغة الطباعة المختارة — تتغير مع كل خيار إظهار، ولا تُحفظ ولا تُطبع.',
+          ),
           style: TextStyle(
             fontFamily: 'cairo',
             fontSize: 10.5,
@@ -1827,6 +1922,458 @@ class _PrinterSectionState extends State<PrinterSection> {
 /// ثالثة بل **قاعدة حسم**: النظام يقرأ لغة النظام التشغيلي ويختار (عربي ⇒
 /// عربي، غير ذلك ⇒ إنجليزي) — فالعميل على جهاز إنجليزي يجد واجهة إنجليزية
 /// بلا إعداد.
+/// **لغة الطباعة** — التحكّم الوحيد في لغة **كل** مستند يخرج من النظام.
+///
+/// ## القرار
+/// `settings.doc_language` يحكم: الفاتورة · كشف الحساب · ملخص الوردية · ورقة
+/// المغسلة · المشاركة على واتساب. وهو **مستقلّ تمامًا** عن لغة الواجهة
+/// (`settings.language`): واجهة عربية وورق إنجليزي، أو العكس، بلا تعارض.
+/// ولا يُشتقّ من `L10n` إطلاقًا لأن الرسم يحدث داخل `compute` (عزل لا يرى
+/// الحالة العامة للترجمة).
+///
+/// ## لماذا بطاقة مستقلّة لا سطرًا في مجموعة؟
+/// لأن الخيار كان سطرًا منسدلًا مدفونًا بين خمسة عشر سطرًا تحت «ما يظهر على
+/// الفاتورة» — فيظنّ من رآه أنه يخصّ الفاتورة وحدها، أو لا يجده أصلًا. وهو
+/// ليس خيار «إظهار» بل **قرار لغة المستند**، فاستحقّ بطاقة صريحة.
+///
+/// ## صادق لا مُجمَّل
+/// اللغة **غير مخزَّنة في صفّ الفاتورة**: إعادة طباعة فاتورة قديمة تستخدم
+/// اللغة المختارة **الآن**. لذلك تُكتب هذه الحقيقة في البطاقة نفسها بدل أن
+/// يكتشفها المستخدم بعد سنة.
+Widget docLanguageCard(SettingsController controller) {
+  return Obx(() {
+    final raw =
+        controller.settings[AppConstants.settingDocLanguage] ??
+        SettingOptions.docLanguage.defaultValue;
+    final current = DocLanguage.byCode(raw);
+    final uiLang =
+        L10n.isEnglish ? L10n.language.labelEn : L10n.language.label;
+
+    return SoftCard(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SectionHeader(title: tr('لغة الطباعة'), icon: Icons.translate),
+          const SizedBox(height: 6),
+          Text(
+            tr(
+              'لغة كل مستند يخرج من النظام: الفاتورة · كشف الحساب · ملخص الوردية · ورقة المغسلة. لا تتبع لغة النظام.',
+            ),
+            style: const TextStyle(
+              fontFamily: 'cairo',
+              fontSize: 11.5,
+              height: 1.55,
+              color: AppColors.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final lang in DocLanguage.values)
+                _DocLanguageChip(
+                  lang: lang,
+                  active: lang == current,
+                  onTap: () {
+                    if (lang == current) return;
+                    // المسار الواحد للكتابة: تطبيع + upsert + كاش + تدقيق.
+                    controller.updateSetting(
+                      AppConstants.settingDocLanguage,
+                      lang.code,
+                    );
+                  },
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          _DocLanguageNote(
+            icon: Icons.language,
+            text: trf('لغة النظام الآن: {0} — تغييرها لا يغيّر لغة الطباعة.', [
+              uiLang,
+            ]),
+          ),
+          const SizedBox(height: 6),
+          _DocLanguageNote(
+            icon: Icons.history,
+            color: AppColors.warning,
+            text: tr(
+              'تُطبَّق اللغة عند كل طباعة — إعادة طباعة فاتورة قديمة تستخدم اللغة المختارة الآن.',
+            ),
+          ),
+        ],
+      ),
+    );
+  });
+}
+
+/// **مقاسات العناصر المطبوعة** — الشعار ورمز QR: عرض × ارتفاع × مساحة.
+///
+/// ## لماذا بطاقة مستقلة؟
+/// كانت هذه القيم أسطرًا داخل مجموعة «ما يظهر على الفاتورة» (١٥ سطرًا)،
+/// والقيمة الواحدة تُغيّر شكل الورق كلّه. والأهمّ أن المستخدم كان يضبط رقمًا
+/// **ولا يعرف ما سيُطبع فعلًا**: العرض يُقصّ على الورق، والارتفاع الكبير يدفع
+/// الأصناف إلى صفحة ثانية — كلاهما بلا أي إعلان.
+///
+/// فالبطاقة تفعل ثلاثة أشياء معًا: تضبط، **تحسب** (مساحة ونسبة من الورق)،
+/// و**تعلن** التقييد («طُلب ٨٠ مم وسيُطبع ٤٨»). لا رقم بلا أثره.
+Widget printSizesCard(SettingsController controller) {
+  return Obx(() {
+    final paper = PaperSizes.resolve(
+      controller.settings[AppConstants.settingInvoicePaperSize],
+    );
+    final page = PrintVisualSize.pageOf(paper);
+
+    // الحساب بنفس الدالة التي يرسم بها المولّد — لا معادلة ثانية في الواجهة
+    // قد تنحرف عن الورق الحقيقي.
+    final logoBox = PrintVisualSize.logo(
+      widthMm: controller.settings[AppConstants.settingInvoiceLogoWidth],
+      heightMm: controller.settings[AppConstants.settingInvoiceLogoHeight],
+      maxWidth: page.widthPoints,
+      maxHeight: page.heightPoints,
+    );
+    final qrBox = PrintVisualSize.qr(
+      sizeMm: controller.settings[AppConstants.settingMapQrSize],
+      maxWidth: page.widthPoints,
+      maxHeight: page.heightPoints,
+    );
+
+    final logoShare = PrintVisualSize.shareOfPage(logoBox, page);
+    final qrShare = PrintVisualSize.shareOfPage(qrBox, page);
+    final budget = PrintVisualSize.verticalBudget(logoBox, qrBox, page);
+    final tight = budget > PrintVisualSize.verticalBudgetWarn;
+    final logoOn = _effOn(controller, AppConstants.settingInvoiceShowLogo);
+    final mapUrl = MapQr.resolve(controller.settings['business_location']);
+
+    return SoftCard(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SectionHeader(title: tr('مقاسات الطباعة'), icon: Icons.straighten),
+          const SizedBox(height: 6),
+          Text(
+            tr(
+              'عرض وارتفاع الشعار ورمز QR بالمليمتر — وتُحسب مساحتهما ونسبتهما من الورق، وتُقصّ القيم تلقائيًّا على مقاس الورق المختار.',
+            ),
+            style: const TextStyle(
+              fontFamily: 'cairo',
+              fontSize: 11.5,
+              height: 1.55,
+              color: AppColors.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 12),
+          _optionRow(controller, SettingOptions.invoiceLogoWidth),
+          const Divider(height: 18),
+          _optionRow(controller, SettingOptions.invoiceLogoHeight),
+          const Divider(height: 18),
+          _optionRow(controller, SettingOptions.mapQrSize),
+
+          // ─── أزرار سريعة ───
+          const SizedBox(height: 4),
+          // الحقول تحفظ عند تأكيدها فقط (سلوك كل خيارات الإعدادات: لا تُخزَّن
+          // قيمة نصف مكتوبة). فمن كتب رقمًا وانتقل بلا Enter يظنّ أنه حُفظ.
+          Text(
+            tr('اكتب الرقم ثم اضغط Enter لتطبيقه.'),
+            style: const TextStyle(
+              fontFamily: 'cairo',
+              fontSize: 11,
+              color: AppColors.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            children: [
+              OutlinedButton.icon(
+                onPressed: () {
+                  // شعار مربّع بضغطة: نسخ العرض إلى الارتفاع.
+                  final w =
+                      controller.settings[AppConstants.settingInvoiceLogoWidth] ??
+                      '${AppConstants.invoiceLogoWidthDefaultMm}';
+                  controller.updateSetting(
+                    AppConstants.settingInvoiceLogoHeight,
+                    w,
+                  );
+                },
+                icon: const Icon(Icons.crop_square, size: 16),
+                label: Text(
+                  tr('اجعل الشعار مربّعًا'),
+                  style: const TextStyle(fontFamily: 'cairo', fontSize: 11.5),
+                ),
+              ),
+              TextButton.icon(
+                onPressed: () {
+                  controller.updateSetting(
+                    AppConstants.settingInvoiceLogoWidth,
+                    '${AppConstants.invoiceLogoWidthDefaultMm}',
+                  );
+                  controller.updateSetting(
+                    AppConstants.settingInvoiceLogoHeight,
+                    '${AppConstants.invoiceLogoHeightDefaultMm}',
+                  );
+                  controller.updateSetting(
+                    AppConstants.settingMapQrSize,
+                    '${AppConstants.mapQrSizeDefaultMm}',
+                  );
+                },
+                icon: const Icon(Icons.restart_alt, size: 16),
+                label: Text(
+                  tr('القيم الافتراضية'),
+                  style: const TextStyle(fontFamily: 'cairo', fontSize: 11.5),
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 10),
+          _SizeReadout(
+            icon: Icons.image_outlined,
+            title: trf('الشعار على الورق: {0} × {1} مم', [
+              _mmText(logoBox.widthMm),
+              _mmText(logoBox.heightMm),
+            ]),
+            detail: trf('المساحة القصوى {0} مم² — {1}% من الورق', [
+              _areaText(logoBox.areaMm2),
+              _pctText(logoShare),
+            ]),
+            muted: !logoOn,
+          ),
+          const SizedBox(height: 6),
+          _SizeReadout(
+            icon: Icons.qr_code_2,
+            title: trf('رمز QR: {0} × {1} مم', [
+              _mmText(qrBox.widthMm),
+              _mmText(qrBox.heightMm),
+            ]),
+            detail: mapUrl.isEmpty
+                ? tr('لا يُطبع: لم يُسجَّل رابط موقع النشاط بعد.')
+                : trf('المساحة القصوى {0} مم² — {1}% من الورق', [
+                    _areaText(qrBox.areaMm2),
+                    _pctText(qrShare),
+                  ]),
+            muted: mapUrl.isEmpty,
+          ),
+          const SizedBox(height: 6),
+          _SizeReadout(
+            icon: tight ? Icons.warning_amber_rounded : Icons.space_bar,
+            title: trf('مجموع ارتفاعهما {0}% من ارتفاع الورق', [
+              _pctText(budget),
+            ]),
+            detail: tight
+                ? tr(
+                    'النسبة كبيرة: الرأس والتذييل يأكلان أغلب الورقة. صغّر الشعار أو الرمز كي لا يتزاحم النصّ أو يُدفع إلى صفحة ثانية.',
+                  )
+                : trf('الورق المختار: {0} — والمتاح للطباعة {1} مم عرضًا.', [
+                    paper.label,
+                    _mmText(page.widthMm),
+                  ]),
+            danger: tight,
+          ),
+
+          if (logoBox.clamped) ...[
+            const SizedBox(height: 6),
+            _SizeReadout(
+              icon: Icons.content_cut,
+              title: trf('الشعار سيُقصّ: طُلب أكبر من الورق ({0} مم عرضًا).', [
+                _mmText(page.widthMm),
+              ]),
+              detail: trf('سيُطبع {0} × {1} مم بدل المقاس المطلوب.', [
+                _mmText(logoBox.widthMm),
+                _mmText(logoBox.heightMm),
+              ]),
+              danger: true,
+            ),
+          ],
+          if (qrBox.clamped) ...[
+            const SizedBox(height: 6),
+            _SizeReadout(
+              icon: Icons.content_cut,
+              title: trf('رمز QR سيُقصّ إلى {0} مم لأن الورق لا يتّسع أكثر.', [
+                _mmText(qrBox.widthMm),
+              ]),
+              detail: tr('الأفضل اختيار مقاس أقلّ من ذلك صراحةً لتعرف ما سيُطبع.'),
+              danger: true,
+            ),
+          ],
+        ],
+      ),
+    );
+  });
+}
+
+/// سطر حساب مقروء: عنوان + تفصيل + أيقونة حالة.
+class _SizeReadout extends StatelessWidget {
+  const _SizeReadout({
+    required this.icon,
+    required this.title,
+    required this.detail,
+    this.danger = false,
+    this.muted = false,
+  });
+
+  final IconData icon;
+  final String title;
+  final String detail;
+  final bool danger;
+  final bool muted;
+
+  @override
+  Widget build(BuildContext context) {
+    final color =
+        danger
+            ? AppColors.danger
+            : muted
+            ? AppColors.textSecondary
+            : AppColors.success;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 15, color: color),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: TextStyle(
+                  fontFamily: 'cairo',
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: color,
+                ),
+              ),
+              Text(
+                detail,
+                style: const TextStyle(
+                  fontFamily: 'cairo',
+                  fontSize: 11,
+                  height: 1.5,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// مليمتر بلا كسور — المستخدم يضبط أعدادًا صحيحة.
+String _mmText(double value) => value.toStringAsFixed(0);
+
+/// نسبة مئوية بخانة واحدة (٤٫٦٪).
+String _pctText(double ratio) => (ratio * 100).toStringAsFixed(1);
+
+/// مساحة بفاصل آلاف — 2,809 مم² تُقرأ أسرع من 2809.
+String _areaText(double value) {
+  final digits = value.round().abs().toString();
+  final buffer = StringBuffer();
+  for (var i = 0; i < digits.length; i++) {
+    if (i > 0 && (digits.length - i) % 3 == 0) buffer.write(',');
+    buffer.write(digits[i]);
+  }
+  return buffer.toString();
+}
+
+/// زرّ لغة واحدة في بطاقة «لغة الطباعة» — بنفس شكل أزرار «لغة النظام».
+class _DocLanguageChip extends StatelessWidget {
+  const _DocLanguageChip({
+    required this.lang,
+    required this.active,
+    required this.onTap,
+  });
+
+  final DocLanguage lang;
+  final bool active;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      key: ValueKey<String>('doc-language-${lang.code}'),
+      borderRadius: BorderRadius.circular(10),
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color:
+              active
+                  ? AppColors.primary.withValues(alpha: 0.12)
+                  : AppColors.surfaceSoft,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: active ? AppColors.primary : AppColors.border,
+            width: active ? 1.4 : 1,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (active) ...[
+              const Icon(
+                Icons.check_circle,
+                size: 15,
+                color: AppColors.primary,
+              ),
+              const SizedBox(width: 6),
+            ],
+            Text(
+              lang == DocLanguage.arabic ? lang.label : lang.labelEn,
+              style: TextStyle(
+                fontFamily: 'cairo',
+                fontSize: 13,
+                fontWeight: active ? FontWeight.bold : FontWeight.w500,
+                color: active ? AppColors.primary : AppColors.textPrimary,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// سطر توضيحي صغير داخل بطاقة لغة الطباعة.
+class _DocLanguageNote extends StatelessWidget {
+  const _DocLanguageNote({
+    required this.icon,
+    required this.text,
+    this.color = AppColors.textSecondary,
+  });
+
+  final IconData icon;
+  final String text;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 14, color: color),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            text,
+            style: TextStyle(
+              fontFamily: 'cairo',
+              fontSize: 11,
+              height: 1.45,
+              color: color,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _LanguageRow extends StatelessWidget {
   const _LanguageRow();
 

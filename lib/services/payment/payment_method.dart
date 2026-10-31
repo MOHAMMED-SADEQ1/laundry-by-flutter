@@ -17,6 +17,7 @@
 // `sqldb.dart` يكتب المفاتيح، لكن **القراءة لا تعتمد عليه**.
 
 import 'package:laundry/services/i18n/l10n.dart';
+import 'package:laundry/services/i18n/translations_en.dart';
 
 /// طريقة دفع واحدة: مفتاح ثابت للتخزين + تسمية عربية للعرض.
 enum PaymentMethod {
@@ -139,6 +140,24 @@ class PaymentMethods {
   /// التسمية العربية بلا ترجمة — للطباعة في PDF عربي والتقارير المُصدَّرة.
   static String arabicLabel(String? raw) =>
       tryParse(raw)?.arabicLabel ?? (raw?.trim() ?? '');
+
+  /// التسمية بلغة **صريحة** بلا حالة عامة.
+  ///
+  /// تُستعمل داخل `compute` (عزل لا يرى `L10n`) وفي أي مستند لغته محدَّدة
+  /// بإعداد مستقلّ عن لغة الواجهة. [tr] كان يقرأ الحالة العامة فيعطي العربية
+  /// دائمًا داخل العزل — وهذا سبب طباعة «كاش» في فاتورة إنجليزية.
+  static String labelIn(String? raw, {required bool english}) {
+    final method = tryParse(raw);
+    if (method == null) {
+      final text = raw?.trim() ?? '';
+      if (text.isNotEmpty) return text;
+      return english ? _englishOf(defaultMethod) : defaultMethod.arabicLabel;
+    }
+    return english ? _englishOf(method) : method.arabicLabel;
+  }
+
+  static String _englishOf(PaymentMethod method) =>
+      kEnglish[method.arabicLabel] ?? method.arabicLabel;
 
   /// هل القيمة نقدية؟
   static bool isCash(String? raw) => tryParse(raw) == PaymentMethod.cash;

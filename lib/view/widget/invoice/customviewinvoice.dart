@@ -3,20 +3,39 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:laundry/controller/invoicecontroller.dart';
 import 'package:laundry/core/theme/app_colors.dart';
+import 'package:laundry/services/i18n/currency.dart';
 import 'package:laundry/services/i18n/l10n.dart';
+import 'package:laundry/services/invoice/invoice_lines.dart';
 import 'package:laundry/view/widget/customimg.dart';
+import 'package:laundry/view/widget/invoice/invoice_line_edit_dialog.dart';
 
-/// بند داخل الفاتورة — تصميم أنيق مع حذف عند الضغط
+/// بند داخل الفاتورة — **سطر واحد بثلاثة أفعال ظاهرة**:
+/// تعديل الكمية بلا حوار (− / +)، تعديل البند كاملًا (سعر/خدمة/ملاحظة)، وحذفه.
+///
+/// كان السطر يعرض زرّ حذف فقط داخل `ListTile.trailing`، وكانت الزيادة تتطلّب
+/// فتح حوار الصنف من جديد ثم اختيار الخدمة والكمية — أي ثلاث خطوات لتغيير
+/// رقم. الآن الزيادة نقرة واحدة، والتعديل نقرة واحدة.
 class CustomViewInvoice extends StatelessWidget {
   final Map<String, dynamic> part;
   final int index;
   final InvoiceController controllerprint;
+
   const CustomViewInvoice({
     super.key,
     required this.part,
     required this.controllerprint,
     required this.index,
   });
+
+  int get _quantity => InvoiceLines.quantityOf(part);
+
+  double get _price => InvoiceLines.priceOf(part);
+
+  double get _total => InvoiceLines.lineTotal(part);
+
+  String get _note => '${part['note'] ?? ''}'.trim();
+
+  String get _photo => '${part['photo'] ?? ''}'.trim();
 
   @override
   Widget build(BuildContext context) {
@@ -27,132 +46,190 @@ class CustomViewInvoice extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppColors.border, width: 1),
       ),
-      child: ListTile(
-        dense: true,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        leading: Container(
-          padding: const EdgeInsets.all(7),
-          decoration: BoxDecoration(
-            gradient: AppColors.primaryGradient,
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: const Icon(Icons.checkroom, size: 15, color: Colors.white),
-        ),
-        title: Text(
-          '${localizedText('${part['vestments'] ?? ''}', '${part['vestments_en'] ?? ''}')} — ${tr('${part['content'] ?? ''}')}',
-          style: TextStyle(
-            fontSize: 12.5,
-            fontWeight: FontWeight.bold,
-            fontFamily: 'cairo',
-            color: AppColors.textPrimary,
-          ),
-          overflow: TextOverflow.ellipsis,
-        ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              "${part['price']} ${tr('ر.س')} × ${part['count']}",
-              style: TextStyle(
-                fontSize: 11.5,
-                fontWeight: FontWeight.w600,
-                color: AppColors.textSecondary,
-                fontFamily: 'cairo',
-              ),
-            ),
-            if ((part['note'] != null && '${part['note']}'.trim().isNotEmpty) ||
-                (part['photo'] != null && '${part['photo']}'.trim().isNotEmpty))
-              Container(
-                margin: const EdgeInsets.only(top: 3),
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                decoration: BoxDecoration(
-                  color: AppColors.warning.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(
-                      Icons.sticky_note_2_outlined,
-                      size: 11,
-                      color: AppColors.warning,
+      child: Column(
+        children: [
+          // ─── السطر الأول: الصنف والخدمة والإجمالي ───
+          InkWell(
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+            onTap: _openEdit,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      gradient: AppColors.primaryGradient,
+                      borderRadius: BorderRadius.circular(9),
                     ),
-                    const SizedBox(width: 3),
-                    if (part['note'] != null &&
-                        '${part['note']}'.trim().isNotEmpty)
-                      Flexible(
-                        child: Text(
-                          localizedText('${part['note'] ?? ''}', '${part['note_en'] ?? ''}'),
-                          style: TextStyle(
-                            fontSize: 10.5,
+                    child: const Icon(
+                      Icons.checkroom,
+                      size: 14,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          '${localizedText('${part['vestments'] ?? ''}', '${part['vestments_en'] ?? ''}')} — ${tr('${part['content'] ?? ''}')}',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.bold,
+                            fontFamily: 'cairo',
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          // سعر الوحدة ظاهر دائمًا: الكاشير يسأله أمام الزبون
+                          '${_trim(_price)} ${Currency.symbol} × $_quantity',
+                          style: const TextStyle(
+                            fontSize: 11,
                             fontWeight: FontWeight.w600,
-                            color: AppColors.warning,
+                            color: AppColors.textSecondary,
                             fontFamily: 'cairo',
                           ),
-                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        _trim(_total),
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.success,
+                          fontFamily: 'cairo',
                         ),
                       ),
-                    if ('${part['photo'] ?? ''}'.trim().isNotEmpty) ...[
-                      const SizedBox(width: 5),
-                      InkWell(
-                        onTap: () => _showPhoto(part['photo']),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(
-                              Icons.photo_camera,
-                              size: 11,
-                              color: AppColors.info,
-                            ),
-                            const SizedBox(width: 2),
-                            Text(
-                              tr('صورة'),
-                              style: const TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                                color: AppColors.info,
-                                fontFamily: 'cairo',
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+                      const CustomImg(sizeImg: 13),
                     ],
-                  ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          // ─── السطر الثاني: ملاحظة/صورة + الكمية + تعديل + حذف ───
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 0, 4, 6),
+            child: Row(
+              children: [
+                if (_note.isNotEmpty || _photo.isNotEmpty)
+                  Flexible(child: _extras()),
+                const Spacer(),
+                _QuantityStepper(
+                  quantity: _quantity,
+                  onIncrease:
+                      () => controllerprint.increaseQuantity(index),
+                  onDecrease:
+                      () => controllerprint.decreaseQuantity(index),
                 ),
-              ),
-          ],
-        ),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              "${part['total_price']}",
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.bold,
-                color: AppColors.success,
-                fontFamily: 'cairo',
-              ),
+                const SizedBox(width: 4),
+                _LineAction(
+                  tooltip: tr('تعديل البند'),
+                  icon: Icons.edit_outlined,
+                  color: AppColors.primary,
+                  onTap: _openEdit,
+                ),
+                _LineAction(
+                  tooltip: tr('حذف البند'),
+                  icon: Icons.delete_outline,
+                  color: AppColors.danger,
+                  onTap: _confirmDelete,
+                ),
+              ],
             ),
-            const SizedBox(width: 4),
-            const CustomImg(sizeImg: 15),
-            const SizedBox(width: 4),
-            IconButton(
-              tooltip: tr('حذف البند'),
-              onPressed: () => _confirmDelete(),
-              icon: const Icon(
-                Icons.delete_outline,
-                size: 18,
-                color: AppColors.danger,
-              ),
-              visualDensity: VisualDensity.compact,
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
+  }
+
+  /// شريحة الملاحظة/الصورة — تُعرض أسفل السطر لا داخل عنوانه.
+  Widget _extras() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      decoration: BoxDecoration(
+        color: AppColors.warning.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (_note.isNotEmpty) ...[
+            const Icon(
+              Icons.sticky_note_2_outlined,
+              size: 11,
+              color: AppColors.warning,
+            ),
+            const SizedBox(width: 3),
+          ],
+          if (_note.isNotEmpty)
+            Flexible(
+              child: Text(
+                localizedText(_note, part['note_en']?.toString()),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.warning,
+                  fontFamily: 'cairo',
+                ),
+              ),
+            ),
+          if (_photo.isNotEmpty) ...[
+            const SizedBox(width: 5),
+            InkWell(
+              onTap: () => _showPhoto(_photo),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.photo_camera,
+                    size: 11,
+                    color: AppColors.info,
+                  ),
+                  const SizedBox(width: 2),
+                  Text(
+                    tr('صورة'),
+                    style: const TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.info,
+                      fontFamily: 'cairo',
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// رقم بلا `.0` زائدة: `5` لا `5.0` — الفاتورة تُقرأ لا تُحلَّل.
+  static String _trim(double value) {
+    final text = value.toStringAsFixed(2);
+    return text.endsWith('.00')
+        ? text.substring(0, text.length - 3)
+        : text.replaceAll(RegExp(r'0$'), '');
+  }
+
+  void _openEdit() {
+    showInvoiceLineEditDialog(controller: controllerprint, index: index);
   }
 
   void _showPhoto(String path) {
@@ -217,6 +294,124 @@ class CustomViewInvoice extends StatelessWidget {
         Get.back();
         controllerprint.removeItem(index);
       },
+    );
+  }
+}
+
+/// عدّاد كمية مصغّر داخل سطر الفاتورة.
+class _QuantityStepper extends StatelessWidget {
+  final int quantity;
+  final VoidCallback onIncrease;
+  final VoidCallback onDecrease;
+
+  const _QuantityStepper({
+    required this.quantity,
+    required this.onIncrease,
+    required this.onDecrease,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final canDecrease = quantity > InvoiceLines.minQuantity;
+    return Container(
+      height: 34,
+      decoration: BoxDecoration(
+        color: AppColors.surfaceSoft,
+        borderRadius: BorderRadius.circular(9),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _StepButton(
+            tooltip: tr('تقليل'),
+            icon: Icons.remove,
+            color: canDecrease ? AppColors.danger : AppColors.textMuted,
+            onTap: canDecrease ? onDecrease : null,
+          ),
+          ConstrainedBox(
+            constraints: const BoxConstraints(minWidth: 24),
+            child: Text(
+              '$quantity',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontFamily: 'cairo',
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+                color: AppColors.primary,
+              ),
+            ),
+          ),
+          _StepButton(
+            tooltip: tr('زيادة'),
+            icon: Icons.add,
+            color: AppColors.success,
+            onTap: onIncrease,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StepButton extends StatelessWidget {
+  final String tooltip;
+  final IconData icon;
+  final Color color;
+  final VoidCallback? onTap;
+
+  const _StepButton({
+    required this.tooltip,
+    required this.icon,
+    required this.color,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: onTap,
+        // 30×34: أقلّ من ذلك يصعب على شاشة لمس، والكاشير يعمل بإصبع لا بفأرة.
+        child: SizedBox(
+          width: 30,
+          height: 34,
+          child: Icon(icon, size: 16, color: color),
+        ),
+      ),
+    );
+  }
+}
+
+/// زرّ صغير (تعديل/حذف) بحجم لمس مريح.
+class _LineAction extends StatelessWidget {
+  final String tooltip;
+  final IconData icon;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _LineAction({
+    required this.tooltip,
+    required this.icon,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: onTap,
+        child: SizedBox(
+          width: 34,
+          height: 34,
+          child: Icon(icon, size: 18, color: color),
+        ),
+      ),
     );
   }
 }

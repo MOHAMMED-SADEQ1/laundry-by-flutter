@@ -7,6 +7,7 @@ import 'package:laundry/config/app_info.dart';
 import 'package:laundry/config/run_target.dart';
 import 'package:laundry/controller/auth/auth_controller.dart';
 import 'package:laundry/controller/settings/theme_controller.dart';
+import 'package:laundry/core/platform/touch_keyboard.dart';
 import 'package:laundry/core/services/invoicecounterservice.dart';
 import 'package:laundry/core/theme/app_theme.dart';
 import 'package:laundry/controller/printInvoicecontroller.dart';
@@ -106,7 +107,9 @@ void main(List<String> args) async {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Get.snackbar(
         tr('أُصلح ملفّ الإعدادات'),
-        tr('كان ملفّ الإعدادات تالفًا — أثر إطفاء مفاجئ للجهاز — فأُعيد ضبطه وأُبقيت نسخة من التالف جانبًا. سجّل الدخول مرة أخرى.'),
+        tr(
+          'كان ملفّ الإعدادات تالفًا — أثر إطفاء مفاجئ للجهاز — فأُعيد ضبطه وأُبقيت نسخة من التالف جانبًا. سجّل الدخول مرة أخرى.',
+        ),
         snackPosition: SnackPosition.BOTTOM,
         duration: const Duration(seconds: 9),
         backgroundColor: const Color(0xFFF59E0B),
@@ -147,36 +150,42 @@ class MyApp extends StatelessWidget {
       // نفسه يتعطّل. لذا نضع القفل **طبقةً فوقه** داخل Stack، ونمنحه Navigator
       // خاصًّا به كي تعمل حواراته بلا Navigator أعلى منه.
       builder: (context, child) {
-        return Obx(() {
-          final content = child ?? const SizedBox.shrink();
-          if (!Get.isRegistered<SystemLicenseController>()) {
-            return _scaled(context, content);
-          }
-          final license = Get.find<SystemLicenseController>();
-          return _scaled(
-            context,
-            Stack(
-              children: [
-                Column(
-                  children: [
-                    if (license.isExpiringSoon) const LicenseWarningBar(),
-                    Expanded(child: content),
-                  ],
-                ),
-                // القفل فوق كل شيء، ويتجاهل تفاعل المستخدم مع ما تحته.
-                if (license.isLocked)
-                  Positioned.fill(
-                    child: Navigator(
-                      onGenerateRoute:
-                          (_) => MaterialPageRoute(
-                            builder: (_) => const LicenseLockScreen(),
-                          ),
-                    ),
+        // ⌨️ لوحة المفاتيح اللمسية في ويندوز تبقى ظاهرة بعد مغادرة الحقل
+        // (عملية مستقلة لا يملكها Flutter). هذا المراقب يلفّ النظام كلّه —
+        // شاشات وحوارات — ويطلب إخفاءها كلّما زال التركيز عن حقل نصّ.
+        // على غير ويندوز لا يفعل شيئًا: النظام هناك يتولّى الأمر بنفسه.
+        return TouchKeyboardDismisser(
+          child: Obx(() {
+            final content = child ?? const SizedBox.shrink();
+            if (!Get.isRegistered<SystemLicenseController>()) {
+              return _scaled(context, content);
+            }
+            final license = Get.find<SystemLicenseController>();
+            return _scaled(
+              context,
+              Stack(
+                children: [
+                  Column(
+                    children: [
+                      if (license.isExpiringSoon) const LicenseWarningBar(),
+                      Expanded(child: content),
+                    ],
                   ),
-              ],
-            ),
-          );
-        });
+                  // القفل فوق كل شيء، ويتجاهل تفاعل المستخدم مع ما تحته.
+                  if (license.isLocked)
+                    Positioned.fill(
+                      child: Navigator(
+                        onGenerateRoute:
+                            (_) => MaterialPageRoute(
+                              builder: (_) => const LicenseLockScreen(),
+                            ),
+                      ),
+                    ),
+                ],
+              ),
+            );
+          }),
+        );
       },
       defaultTransition: Transition.fadeIn,
       transitionDuration: const Duration(milliseconds: 320),

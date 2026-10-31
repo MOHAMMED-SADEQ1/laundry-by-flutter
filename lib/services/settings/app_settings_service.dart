@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:laundry/services/catalog/clothing_sort.dart';
+import 'package:laundry/services/i18n/doc_language.dart';
 import 'package:laundry/services/security/session_manager.dart';
 import 'package:laundry/services/settings/setting_option.dart';
 import 'package:laundry/services/tax/tax_policy.dart';
@@ -159,9 +160,25 @@ class AppSettingsService {
 
   // ─── ما يظهر على الفاتورة ───
 
+  /// **لغة المستندات المطبوعة** — مستقلة تمامًا عن لغة الواجهة.
+  ///
+  /// لا تقرأ `settings.language` ولا `L10n`: تبديل لغة الشاشة لا يجوز أن
+  /// يغيّر لغة الفاتورة الضريبية. القيمة الافتراضية عربية (المطلوبة نظامًا)،
+  /// وأي قيمة مخزَّنة مجهولة تسقط للافتراضي بدل تعطيل الطباعة.
+  DocLanguage get docLanguage =>
+      DocLanguage.byCode(rawOf(SettingOptions.docLanguage));
+
   String get invoiceTitleText => rawOf(SettingOptions.invoiceTitleText);
   bool get invoiceShowLogo => isOn(SettingOptions.invoiceShowLogo);
-  int get invoiceLogoSizeMm => integerOf(SettingOptions.invoiceLogoSize);
+
+  /// عرض الشعار بالمليمتر — يُقصّ على الورق عند الرسم لا هنا.
+  int get invoiceLogoWidthMm => integerOf(SettingOptions.invoiceLogoWidth);
+
+  /// ارتفاع الشعار بالمليمتر.
+  int get invoiceLogoHeightMm => integerOf(SettingOptions.invoiceLogoHeight);
+
+  /// ضلع رمز QR لموقع النشاط بالمليمتر.
+  int get mapQrSizeMm => integerOf(SettingOptions.mapQrSize);
   bool get invoiceShowTaxNumber => isOn(SettingOptions.invoiceShowTaxNumber);
   bool get invoiceShowCrNumber => isOn(SettingOptions.invoiceShowCrNumber);
   bool get invoiceShowShortAddress =>
@@ -297,6 +314,10 @@ class AppSettingsService {
   /// ترتيب بطاقات الأصناف في شاشة البيع (مفتاح من [ClothingSort]).
   ClothingSort get clothingSort =>
       ClothingSort.byKey(rawOf(SettingOptions.clothingSort));
+
+  /// عدد أعمدة شبكة «الأصناف والخدمات» — صفر يعني تلقائيًا حسب عرض الشاشة.
+  int get homeGridColumns =>
+      int.tryParse(rawOf(SettingOptions.homeGridColumns)) ?? 0;
 
   // ─── الزبائن والولاء ───
 

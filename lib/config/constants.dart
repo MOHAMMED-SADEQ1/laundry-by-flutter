@@ -52,18 +52,51 @@ class AppConstants {
   static const String settingInvoiceAllowDiscount = 'invoice_allow_discount';
 
   // ─── ما يظهر على الفاتورة ───
+  /// لغة المستندات المطبوعة (`ar` · `en`) — **مستقلة عن لغة الواجهة**.
+  ///
+  /// لا تُشتقّ من `settings.language`: تبديل لغة الشاشة يجب ألّا يغيّر لغة
+  /// الفاتورة الضريبية. القيمة الافتراضية عربية لأنها المطلوبة نظامًا.
+  static const String settingDocLanguage = 'doc_language';
   static const String settingInvoiceTitleText = 'invoice_title_text';
   static const String settingInvoiceShowLogo = 'invoice_show_logo';
+
+  /// **المفتاح القديم** لمقاس الشعار المربّع (بُعد واحد).
+  ///
+  /// أُبقي في الكود ولا يظهر في الإعدادات: يُقرأ مرّة واحدة في الترحيل
+  /// (`_migrateLogoSizeToBox`) كي لا يفقد من ضبط مقاسًا مخصّصًا قبل التحديث،
+  /// ويُقرأ أيضًا من الحمولات القديمة عند إعادة طباعة فاتورة سابقة.
   static const String settingInvoiceLogoSize = 'invoice_logo_size';
 
-  /// مقاس شعار الفاتورة المربّع بالمليمتر.
+  /// مقاس شعار الفاتورة المربّع بالمليمتر (المفتاح القديم).
   ///
   /// 53 مم ≈ 150 نقطة — وهو المقاس الثابت القديم، فالقيمة الافتراضية
-  /// **لا تغيّر شكل أي فاتورة قائمة**. والحفظ بالمليمتر لأن المستخدم يفهمه،
-  /// والتحويل إلى نقاط يقع في مولّد PDF وحده.
+  /// **لا تغيّر شكل أي فاتورة قائمة**.
   static const int invoiceLogoSizeDefaultMm = 53;
   static const int invoiceLogoSizeMinMm = 10;
   static const int invoiceLogoSizeMaxMm = 120;
+
+  // ─── مقاسات العناصر المرئية (الشعار · رمز QR) ───
+  //
+  // عرض الشعار وارتفاعه **مستقلّان**: الشعار المستطيل (اسم نشاط + رسم)
+  // كان يُقصّ إلى مربّع فيضيع طرفاه. والمقاس يُحصر بالورق عند الرسم لا هنا،
+  // فالقيمة المخزَّنة تعبير عن رغبة المستخدم، والمولّد هو من يقرّر ما يُطبع
+  // ويعلن التقييد (`PrintVisualSize`).
+  static const String settingInvoiceLogoWidth = 'invoice_logo_width';
+  static const String settingInvoiceLogoHeight = 'invoice_logo_height';
+  static const String settingMapQrSize = 'map_qr_size';
+
+  static const int invoiceLogoWidthDefaultMm = 53;
+  static const int invoiceLogoWidthMinMm = 5;
+  static const int invoiceLogoWidthMaxMm = 120;
+
+  static const int invoiceLogoHeightDefaultMm = 53;
+  static const int invoiceLogoHeightMinMm = 5;
+  static const int invoiceLogoHeightMaxMm = 120;
+
+  /// ضلع رمز QR بالمليمتر — 30 مم ≈ 85 نقطة (المقاس الثابت السابق 84 نقطة).
+  static const int mapQrSizeDefaultMm = 30;
+  static const int mapQrSizeMinMm = 10;
+  static const int mapQrSizeMaxMm = 70;
   static const String settingInvoiceShowTaxNumber = 'invoice_show_tax_number';
   static const String settingInvoiceShowCrNumber = 'invoice_show_cr_number';
   static const String settingInvoiceShowShortAddress =
@@ -198,6 +231,9 @@ class AppConstants {
   /// ترتيب أصناف اللبس في شاشة البيع — قيمته مفتاح من `ClothingSort`.
   static const String settingClothingSort = 'clothing_sort';
 
+  /// عدد أعمدة شبكة «الأصناف والخدمات» في الشاشة الرئيسية.
+  static const String settingHomeGridColumns = 'home_grid_columns';
+
   // ─── الزبائن ───
   static const String settingCustomerRequirePhone = 'customer_require_phone';
   static const String settingCustomerDefaultTier = 'customer_default_tier';
@@ -224,6 +260,8 @@ class AppConstants {
   /// «شبكة» هي الافتراضي المطلوب تشغيليًّا؛ يمكن للموظف اختيار أي طريقة
   /// أخرى يدويًّا داخل النافذة، ويعود الافتراضي عند الفتح التالي.
   static const String posDefaultPaymentMethodDefault = 'card';
+  /// عدد أعمدة شبكة الأصناف والخدمات — `auto` تتبع عرض الشاشة.
+  static const String homeGridColumnsDefault = 'auto';
   static const String customerDefaultTierDefault = 'bronze';
   static const double defaultCreditLimitDefault = 0;
   static const double debtProvisionRateDefault = 0.25;

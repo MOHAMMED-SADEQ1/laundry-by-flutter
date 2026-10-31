@@ -7,9 +7,12 @@ import 'package:laundry/core/services/invoice_share_service.dart';
 import 'package:laundry/services/i18n/currency.dart';
 import 'package:laundry/services/i18n/l10n.dart';
 import 'package:laundry/services/payment/payment_method.dart';
+import 'package:laundry/services/permission/permission_catalog.dart';
+import 'package:laundry/services/permission/permission_service.dart';
 import 'package:laundry/view/widget/common/animation_wrappers.dart';
 import 'package:laundry/view/widget/common/common_widgets.dart';
 import 'package:laundry/view/widget/customappbar.dart';
+import 'package:laundry/view/widget/invoice/invoice_reprint_copies_dialog.dart';
 import 'package:laundry/services/i18n/ui_direction.dart';
 
 class PreviousInvoice extends StatefulWidget {
@@ -411,6 +414,25 @@ class _InvoiceCard extends StatelessWidget {
                             color: AppColors.textPrimary,
                           ),
                         ),
+                        // وسم المستند العكسي: «إشعار دائن» للصفّ السالب نفسه،
+                        // و«مُرجعة» للأصل بعد إصدار إشعار عليه.
+                        if (invoice['credit_note_of'] != null) ...[
+                          const SizedBox(width: 6),
+                          LabelChip(
+                            text: tr('إشعار دائن'),
+                            color: AppColors.danger,
+                            icon: Icons.assignment_return_outlined,
+                          ),
+                        ] else if (((invoice['is_returned'] as num?)?.toInt() ??
+                                0) >
+                            0) ...[
+                          const SizedBox(width: 6),
+                          LabelChip(
+                            text: tr('مُرجعة'),
+                            color: AppColors.warning,
+                            icon: Icons.undo,
+                          ),
+                        ],
                         const Spacer(),
                         LabelChip(
                           text: PaymentMethods.label(''),
@@ -507,8 +529,17 @@ class _InvoiceCard extends StatelessWidget {
                           // كل التفاصيل (الهاتف · رمز الاستلام · الضريبة ·
                           // المقاس · ورقة المغسلة) تُبنى في المتحكّم من صفّ
                           // القاعدة، لا من خريطة عرض ناقصة هنا.
-                          onTap: () => Get.find<PreviousInvoiceController>()
-                              .printInvoice(invoice),
+                          //
+                          // عدد النسخ يُختار عند الطباعة: إعادة الطباعة
+                          // العرَضية لا تكتب `invoice_copies` فلا تتغيّر
+                          // الطباعة التلقائية عند البيع.
+                          onTap: () async {
+                            final copies =
+                                await showInvoiceReprintCopiesDialog();
+                            if (copies == null) return;
+                            await Get.find<PreviousInvoiceController>()
+                                .printInvoice(invoice, copies: copies);
+                          },
                           child: Container(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 12,
@@ -541,9 +572,52 @@ class _InvoiceCard extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(width: 6),
+                        // حفظ نسخة PDF — **بلا طباعة**.
+                        //
+                        // زرّ مستقلّ لأن الطباعة والحفظ قراران مختلفان: قد
+                        // يريد المستخدم ملفًّا ليرسله أو يؤرشفه بلا أن يُخرج
+                        // ورقة، وقد لا تكون هناك طابعة متصلة أصلًا.
+                        // ويظهر لمن يملك `invoice.print` فقط، لأن الخدمة
+                        // ترفض الحفظ بدونه وتعود برسالة.
+                        if (PermissionService.can(PermissionKeys.invoicePrint))
+                          Tooltip(
+                            message: tr('حفظ نسخة PDF'),
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(8),
+                              onTap: () => Get.find<PreviousInvoiceController>()
+                                  .saveInvoicePdf(invoice),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 5,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: AppColors.success.withValues(
+                                    alpha: 0.1,
+                                  ),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: AppColors.success.withValues(
+                                      alpha: 0.35,
+                                    ),
+                                  ),
+                                ),
+                                child: Icon(
+                                  Icons.picture_as_pdf_outlined,
+                                  color: AppColors.success,
+                                  size: 15,
+                                ),
+                              ),
+                            ),
+                          ),
+                        const SizedBox(width: 6),
                         // ورقة المغسلة وحدها — للورقة التي فُقدت أو تلفت.
                         // الزرّ صريح، فلا يتقيّد بمفتاح «الطباعة عند البيع».
-                        Tooltip(
+                        //
+                        // **ولا يظهر لإشعار دائن**: لا قطع تُتابَع في المصنعية،
+                        // وورقة مغسلة برقم سالب مستند بلا معنى.
+                        if (invoice['credit_note_of'] == null)
+                          Tooltip(
                           message: tr('طباعة ورقة المغسلة فقط'),
                           child: InkWell(
                             borderRadius: BorderRadius.circular(8),
@@ -571,6 +645,47 @@ class _InvoiceCard extends StatelessWidget {
                             ),
                           ),
                         ),
+                        // ─── إرجاع / إشعار دائن ───
+                        // يظهر فقط لمن يملك `invoice.return`، ولفاتورة قابلة
+                        // للإرجاع فعلًا: ليست إشعارًا بذاته، وليست فاتورة
+                        // اشتراك (تصحيحها إلغاء اشتراك بتسوية)، ولم تُرجَع بعد.
+                        if (PermissionService.can(PermissionKeys.invoiceReturn) &&
+                            invoice['credit_note_of'] == null &&
+                            invoice['subscription_id'] == null &&
+                            ((invoice['is_returned'] as num?)?.toInt() ?? 0) ==
+                                0) ...[
+                          const SizedBox(width: 6),
+                          Tooltip(
+                            message: tr('إرجاع الفاتورة / إشعار دائن'),
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(8),
+                              onTap: () => Get.find<PreviousInvoiceController>()
+                                  .returnInvoice(invoice),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 5,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: AppColors.danger.withValues(
+                                    alpha: 0.08,
+                                  ),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: AppColors.danger.withValues(
+                                      alpha: 0.3,
+                                    ),
+                                  ),
+                                ),
+                                child: Icon(
+                                  Icons.assignment_return_outlined,
+                                  color: AppColors.danger,
+                                  size: 15,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                         const Spacer(),
                         _WhatsAppShareBtn(
                           invoice: invoice,

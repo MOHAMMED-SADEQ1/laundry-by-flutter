@@ -2,7 +2,8 @@ import 'package:flutter/foundation.dart';
 import 'package:laundry/services/customer/customer_ledger_service.dart';
 import 'package:laundry/services/i18n/currency.dart';
 import 'package:laundry/services/i18n/l10n.dart';
-import 'package:laundry/services/security/session_manager.dart';
+import 'package:laundry/services/permission/permission_catalog.dart';
+import 'package:laundry/services/permission/permission_service.dart';
 import 'package:laundry/sqldb.dart';
 
 /// نتيجة فحص حدّ الائتمان قبل إتمام بيع آجل.
@@ -141,7 +142,15 @@ class CreditGuard {
       }
 
       final exceeded = CustomerLedgerService.fromCents(afterCents - limitCents);
-      final canOverride = SessionManager.isManager;
+      // 🛡️ التجاوز **صلاحية** لا اسم دور.
+      //
+      // كان `SessionManager.isManager` — أي أن دورًا مخصّصًا يملك
+      // `customer.credit_limit_override` لا يستطيع التجاوز، ومن يحمل اسم
+      // `manager` يستطيعه ولو أُسقطت عنه الصلاحية من شاشة الأدوار. الفحص الآن
+      // على المفتاح نفسه، فيتّسق مع بقية النظام ومع ما تعرضه شاشة الأدوار.
+      final canOverride = PermissionService.can(
+        PermissionKeys.customerCreditOverride,
+      );
 
       return CreditCheckResult(
         allowed: canOverride,

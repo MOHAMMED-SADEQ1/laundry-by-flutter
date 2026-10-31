@@ -4,6 +4,8 @@ import 'package:intl/intl.dart';
 import 'package:laundry/core/services/preparePDF.dart';
 import 'package:laundry/core/theme/app_colors.dart';
 import 'package:laundry/services/i18n/l10n.dart';
+import 'package:laundry/services/invoice/invoice_output_service.dart';
+import 'package:laundry/services/invoice/invoice_pdf_naming.dart';
 import 'package:laundry/sqldb.dart';
 import 'package:laundry/services/payment/payment_method.dart';
 import 'package:laundry/core/services/paper_size.dart';
@@ -157,8 +159,12 @@ class ShiftController extends GetxController {
       final int shiftId = activeShiftId.value!;
 
       // 1.a الفواتير النقدية والشبكية
+      //
+      // ⚠️ إشعار الدائن **يُحتسب في المبالغ ولا يُحتسب في العدد**: مبلغه سالب
+      // فيُخصم من نقدية الدرج تلقائيًّا (وهو المطلوب عند الردّ النقدي)، لكنه
+      // ليس فاتورة بيع فلا يجوز أن يزيد «عدد الفواتير» في الإقفال.
       final summaryList = await _sqlDB.readData(
-        'SELECT SUM(CASE WHEN payment_method = ? THEN paid_amount ELSE 0 END)   as total_cash, SUM(CASE WHEN payment_method = ? THEN paid_amount ELSE 0 END)   as total_network, COUNT(invoices_id) as invoice_count FROM invoices WHERE shift_id = ? AND subscription_id IS NULL',
+        'SELECT SUM(CASE WHEN payment_method = ? THEN paid_amount ELSE 0 END)   as total_cash, SUM(CASE WHEN payment_method = ? THEN paid_amount ELSE 0 END)   as total_network, COUNT(CASE WHEN COALESCE(credit_note_of, 0) = 0 THEN 1 END) as invoice_count FROM invoices WHERE shift_id = ? AND subscription_id IS NULL',
         [PaymentMethod.cash.key, PaymentMethod.card.key, shiftId],
       );
 
@@ -329,6 +335,34 @@ class ShiftController extends GetxController {
           printShift(shiftDataForPrint);
           Get.back();
         },
+        // ثلاثة مخارج لا اثنان: الإقفال يحتاج أحيانًا **ملفًّا** لا ورقة
+        // (أرشفة · مراجعة · إرسال للمحاسب) — وكان الحفظ غير متاح هنا إطلاقًا.
+        actions: [
+          TextButton(
+            onPressed: () {
+              Get.back();
+              printShift(shiftDataForPrint);
+            },
+            child: Text(tr('طباعة'), style: const TextStyle(fontFamily: 'cairo')),
+          ),
+          TextButton(
+            onPressed: () {
+              Get.back();
+              saveShiftPdf(shiftDataForPrint);
+            },
+            child: Text(
+              tr('حفظ PDF'),
+              style: const TextStyle(fontFamily: 'cairo'),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Get.back(),
+            child: Text(
+              tr('إغلاق'),
+              style: const TextStyle(fontFamily: 'cairo'),
+            ),
+          ),
+        ],
       );
     } catch (e) {
       Get.snackbar(
@@ -372,6 +406,40 @@ class ShiftController extends GetxController {
       Get.snackbar(
         tr('خطأ'),
         trf('فشل في طباعة ملخص الوردية: {0}', ['$e']),
+      );
+    }
+  }
+
+  /// يحفظ ملخّص الوردية PDF — **بلا طباعة**.
+  ///
+  /// ملخّص الوردية مستند محاسبي يُحتاج غالبًا كملف (إقفال يوم · مراجعة ·
+  /// أرشفة)، وكان لا يُحفظ أبدًا: زرّه الوحيد يُرسل إلى الطابعة. هنا يُبنى
+  /// نفس المستند من نفس الحمولة ويُحفظ في مجلد المستندات مع بقية المخرجات.
+  Future<void> saveShiftPdf(Map<String, dynamic> shiftData) async {
+    try {
+      shiftData['bizName'] = BusinessInfoService.instance.name;
+      shiftData['bizPhone'] = BusinessInfoService.instance.phone;
+      shiftData['bizAddress'] = BusinessInfoService.instance.address;
+      shiftData.addAll(DocTemplateService.instance.transport(DocKind.shift));
+      final pdfBytes = await PreparePDF.generateShiftSummaryPdf(shiftData);
+      final id = '${shiftData['shift_id'] ?? ''}'.trim();
+      final path = await InvoiceOutputService.instance.saveDocumentPdf(
+        pdfBytes,
+        fileName: InvoicePdfNaming.buildDocumentFileName(
+          id.isEmpty ? 'ملخص_الوردية' : 'ملخص_الوردية_$id',
+        ),
+      );
+      Get.snackbar(
+        tr('حُفظت نسخة PDF'),
+        path,
+        snackPosition: SnackPosition.BOTTOM,
+        duration: const Duration(seconds: 4),
+      );
+    } catch (e) {
+      Get.snackbar(
+        tr('خطأ'),
+        trf('فشل في حفظ ملخص الوردية: {0}', ['$e']),
+        snackPosition: SnackPosition.BOTTOM,
       );
     }
   }

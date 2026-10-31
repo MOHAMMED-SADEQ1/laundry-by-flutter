@@ -118,6 +118,16 @@ class ShiftsHistoryScreen extends StatelessWidget {
                               size: 19,
                             ),
                           ),
+                          // حفظ الملخّص PDF — للإقفال المحاسبي والأرشفة بلا ورق.
+                          IconButton(
+                            tooltip: tr('حفظ الملخص PDF'),
+                            onPressed: () => controller.saveShiftPdf(shift),
+                            icon: const Icon(
+                              Icons.picture_as_pdf_outlined,
+                              color: Colors.white,
+                              size: 19,
+                            ),
+                          ),
                         ],
                       ),
                     ),

@@ -556,6 +556,14 @@ class DocCatalog {
   static const String kNotesSignature = 'notes_signature';
   static const String kBusinessPhone = 'business_phone';
 
+  /// رمز QR لموقع النشاط — مشترك بين الفاتورة وكشف الحساب (كلاهما ورقة
+  /// تُسلَّم للزبون). **لا يُضاف إلى ملخّص الوردية ولا ورقة المغسلة**:
+  /// كلاهما مستند داخلي لا يخرج من المحل، فرمز خريطة فيهما ضجيج لا فائدة.
+  static const String kMapQr = 'map_qr';
+
+  /// النصّ الافتراضي أسفل رمز الموقع.
+  static const String mapQrDefaultText = 'امسح الرمز للوصول إلى موقعنا';
+
   static const List<DocField> invoiceFields = <DocField>[
     // ── الترويسة ──
     DocField(
@@ -864,6 +872,16 @@ class DocCatalog {
       style: DocStyle(size: 20),
       legacyText: 'invoice_footer_note',
     ),
+    DocField(
+      key: kMapQr,
+      label: 'رمز QR لموقع النشاط',
+      hint:
+          'يُطبع أسفل الفاتورة ويفتح موقع النشاط على خرائط جوجل. يحتاج رابطًا في «معلومات النشاط ← رابط الموقع»، ولا يُطبع شيء إن كان الرابط فارغًا.',
+      section: DocSections.footer,
+      hasText: true,
+      defaultText: mapQrDefaultText,
+      style: DocStyle(size: 16),
+    ),
   ];
 
   static const List<DocField> statementFields = <DocField>[
@@ -1111,6 +1129,16 @@ class DocCatalog {
       hasText: true,
       defaultText: statementFooterDefault,
       style: DocStyle(size: 11),
+    ),
+    DocField(
+      key: kMapQr,
+      label: 'رمز QR لموقع النشاط',
+      hint:
+          'يُطبع أسفل الكشف ويفتح موقع النشاط على خرائط جوجل. يحتاج رابطًا في «معلومات النشاط ← رابط الموقع».',
+      section: DocSections.footer,
+      hasText: true,
+      defaultText: mapQrDefaultText,
+      style: DocStyle(size: 10),
     ),
   ];
 

@@ -61,6 +61,16 @@ Flutter POS مغاسل (عربي/RTL، offline، sqflite/GetX). البنية: `s
 - `costFor` = `SUM(ii.total_cost)` + رجوع قديم بالاسم محروس بـ`NOT EXISTS (SELECT 1 FROM invoice_items …)` ⇒ لا احتساب مزدوج.
 - `writeSnapshot` idempotent (يحذف صفوف الفاتورة أولًا) و**يبتلع الفشل** (`debugPrint`) كي لا يُسقط بيعًا مكتملًا. اللقطة **مجمَّدة وقت الإصدار** ⇒ إعادة التسمية لا تقطع التكلفة التاريخية، وتعديل `cost_price` لا يعيد كتابة أرباح الماضي. ترحيل `invoice_items_backfill_v1`. اختبار `verify_invoice_items.py` (21).
 
+## 🧮 بنود الفاتورة: لا سطرين متطابقين (2026-10-31)
+- **الملف الحاكم**: `services/invoice/invoice_lines.dart` — **منطق خالص** بلا Flutter ولا قاعدة. فيه `ServiceKind` (تسميات الخدمات الأربع `normalWash/urgentWash/normalIron/urgentIron` + `keyToLabel` + `priceColumn`) و`InvoiceLines` (`normalize` · `probe` · `merge` · `withQuantity` · `withPrice` · `lineTotal` · `quantityOfService` · **`applyAdd`** · **`applyUpdate`**).
+- 🚨 **هوية البند خمسة عناصر**: الصنف · الخدمة · سعر الوحدة · الملاحظة · الصورة. تطابق تامّ ⇒ **زيادة كمية** (`LineAddOutcome.merged`)؛ اختلاف أيٍّ منها ⇒ سطر مستقلّ **بسببه المُعلَن** (`separateByNote/Photo/Price`) لأن الدمج الصامت يُخفي بقعة أو سعرًا وافق عليه الزبون.
+- الأولوية عند اجتماع الأسباب: الملاحظة ثم الصورة ثم السعر.
+- 🚨 **`InvoiceLines.lineTotal` مصدر الإجمالي** (سعر × كمية مقرَّبًا)، لا `total_price` المخزَّن؛ ولا يُقرأ المخزَّن إلا إذا كان السعر صفرًا (فاتورة قديمة/بند مجاني).
+- **التعديل يعيد فحص التكرار** (`applyUpdate` + `ignoreIndex`): لو صار البند مطابقًا لبند آخر يُدمجان وتُحذف النسخة الزائدة (`mergedByEdit`) — وإلا بقي الباب الخلفي مفتوحًا لسطرين متطابقين. وخريطة تعديل ناقصة (بلا `count`/`price`) تحفظ القيمة القديمة.
+- **`setItems` (استعادة مسودة/فاتورة) لا يدمج** — المستند المستعاد صورة الماضي.
+- **الواجهة**: `customviewinvoice.dart` (عدّاد −/N/+ · تعديل · حذف بتأكيد) و`invoice_line_edit_dialog.dart` (خدمة · كمية · سعر · ملاحظة · إجمالي حيّ؛ تغيير الخدمة يُسعَّر من `priceColumn`) وشارة «في الفاتورة: N» في `home/dialog.dart`.
+- الحراسة: `tool/verify_invoice_lines.dart` (**123**): سلوك على قوائم حقيقية + ربط المتحكّم/الواجهة + منع تكرار تسميات الخدمات.
+
 ## 🧾 الضريبة (2026-10-01)
 - **خالص** في `services/tax/tax_service.dart`. **السعر شامل الضريبة**: `base = gross/(1+rate)` · `tax = gross − base`. **الترتيب: الخصم قبل الضريبة**.
 - **تُجمَّد لكل فاتورة**: `invoices.tax_amount` · `tax_rate` · `tax_base`.
@@ -87,11 +97,68 @@ Flutter POS مغاسل (عربي/RTL، offline، sqflite/GetX). البنية: `s
 - سجل واحد `services/settings/setting_option.dart` (خالص): `key` · `label` · `kind` · `defaultValue` · `min/max` · `group` · `enabledBy` + `normalizeValue` + `isTruthy` (**الغياب أو أي نص غير صريح = معطَّل**).
 - `app_settings_service.dart` (singleton): `settings` ← افتراضي السجل ← كاش SP (`cached_app_setting_<key>`)؛ `set()` تُطبّع + upsert + كاش + `logAudit('setting_update')`. يُحمَّل في `main.dart` قبل `license.start()`.
 - **افتراضي الدفع في نقطة البيع = شبكة (2026-10-26)**: `pos_default_payment_method` هو مصدر الحوار الوحيد؛ `posDefaultPaymentMethodDefault = 'card'`، و`_PaymentMethodDialogState._method` يقرأ الإعداد عند كل بناء (لا يورّث اختيار الجلسة السابقة) فيعود التحديد إلى «شبكة» كل فتح مع بقاء كاش/آجل/اشتراك قابلة للاختيار يدويًّا. القواعد القائمة تحمل `cash` المزروعة سابقًا، فترحيل `_migratePosDefaultPaymentToCard` يحوّلها مرة واحدة ويُعلَّم بـ`pos_default_payment_method_card_v1` كي لا يدهس اختيار المستخدم اللاحق. اختبار `test/pos_payment_default_test.dart` (4).
+- **عدد أعمدة شبكة الأصناف (2026-10-26)**: `home_grid_columns` (`auto` · `2`..`6` · افتراضي `auto`) في `SettingGroups.pos`؛ `AppSettingsService.homeGridColumns` يُرجع `0` للـ`auto`. الزرّ `view/widget/home/home_grid_columns_menu.dart` في شريط «الأصناف والخدمات» يقرأ خياراته من السجلّ ويكتب عبر `AddCategoryController.changeGridColumns` (حفظ **قبل** تحديث `RxInt gridColumns`). الصريح يُقصّ بسقف أمان `(maxWidth / 145).floor()` فلا تُصغَّر البطاقة حتى يفيض محتواها؛ «تلقائي» يبقي `(maxWidth / 210).floor()` القديم. 🚨 **تُقرأ `gridColumns.value` في جسم `Obx` قبل `LayoutBuilder`، لا داخل `builder`**: قراءتها داخل builder تقع في طور التخطيط بعد حسم الاشتراكات فلا تتغيّر الشبكة أبدًا. اختبار `test/home_grid_columns_menu_test.dart` (4) وحارس `tool/verify_grid_columns_wiring.dart` (23).
 - **الحذف التلقائي**: `invoice_auto_delete_enabled` معطَّل عند غيابه، و`invoice_retention_days` بحدّ أدنى `invoiceRetentionMinDays = 400`. الزرع غير مُتلِف (`ConflictAlgorithm.ignore`).
 - الواجهة: `settings_screen._systemOptionsSections` من السجل (ترتيب `SettingGroups.ordered`)؛ التابع لا يظهر إلا عند تفعيل `enabledBy`. ⚠️ العملة تُحفظ وتُضبط لكن الشاشات تكتب الرمز ثابتًا (104 موضعًا).
 - `SqlDB._seedDefaultUsers` من المواضع الثلاثة بـ`ConflictAlgorithm.ignore` على `username` ⇒ **لا يُعيد كلمة مرور حساب غيّرها صاحبه**. التشفير `sha256(utf8(password + salt))` ⇒ `"<salt>:<hash>"`.
 - `admin`/`laundry123456` · `manager`/`m123` · `accountant`/`accountant123456` · `user`/`123`. (صُحّحت 2026-10-13 مقابل `config/constants.dart` — الذاكرة كانت تذكر `manager123456`/`user123456` خطأً.)
 - دور `accountant`: يقرأ الدفاتر ويُمنع من السلطة التصحيحية (حذف فاتورة، إصلاح أرصدة، حدّ الائتمان، مستخدمين، إعدادات). لا تُمنح `manager`. اختبارات: `verify_setting_options.dart` (41) · `verify_settings_seed.py` (11) · `verify_default_users_seed.py` (14) · `verify_cleanup_and_guards.py`.
+
+## 🔐 إنفاذ الصلاحيات + المرتجعات (2026-10-30)
+
+### قاعدة الكتالوج الآن: **لا صلاحية بلا موضع إنفاذ**
+`verify_service_enforcement.dart` يُثبت 13 موضعًا حرجًا. من يضيف صلاحية جديدة
+يضيف معها سطر إنفاذ + سطرًا في `enforcedConsts` وإلا فشل الحارس.
+
+| المفتاح | موضع الإنفاذ |
+|---|---|
+| `invoice.create` | `printInvoicecontroller.printPDF` (أول سطر) |
+| `invoice.print` | `InvoiceOutputService.deliverBundle` + `printLaundrySlipOnly` |
+| `invoice.return` | `CreditNoteService.returnInvoice` |
+| `reports.profit` | `ReportController._guardMetrics` + بطاقة الربح (تقارير · لوحة) |
+| `reports.tax` | `_guardMetrics` + بطاقة الضريبة |
+| `customer.credit_limit_override` | `credit_guard` (بدل `SessionManager.isManager`) |
+| `subscription.usage_override` | `subscription_service` (بدل `isManager`) |
+
+- 🚨 **`invoice.print` تُفحص في نقطة الإخراج لا في شاشة البيع**: الفاتورة
+  **محفوظة قبل** `deliverBundle`، فغياب الصلاحية يمنع الورق ولا يُسقط بيعًا.
+- 🚨 **الحجب بـ`null` لا بالصفر**: الصفر رقم كاذب («ربحت صفرًا»). الواجهة
+  تُخفي البطاقة، والمتحكّم يُخرج `null` في الخريطة التي تصل إليها.
+- `invoice.delete` و`invoice.edit_issued` و`export.data` **حُذفت من الكتالوج**
+  (لا حذف فاتورة صادرة · لا تحرير بعد الإصدار · لا وظيفة تصدير أصلًا —
+  التصدير الوحيد النسخة الاحتياطية المحروسة بـ`backup.perform`).
+- `SqlDB._reconcilePermissionCatalog` (`permission_catalog_reconcile_v1`):
+  يمنح `subscription.usage_override` لـadmin/manager مرة واحدة (كي لا يُسحب
+  سلوك قائم من أيديهم)، ويحذف إسنادات المفاتيح المحذوفة من `role_permissions`
+  و`permission_overrides`.
+
+### المرتجعات: فاتورة عكسية سالبة لا حذف
+`services/invoice/credit_note_service.dart` — مرتجع **كامل فقط** (قرار المستخدم):
+1. صفّ في `credit_notes` (السجل القانوني الموجز).
+2. **فاتورة سالبة** (`invoice_number_text = 'CN-<id>'`, `credit_note_of = الأصل`,
+   `status = delivered`, `paid_amount` سالب عند الردّ نقدًا) ⇒ كل `SUM` قائم
+   (تقارير · وردية · صندوق) يصحّ **بلا إعادة كتابة استعلام واحد**.
+3. **بنود سالبة** في `invoice_items` ⇒ التكلفة تُلغى أيضًا. إلغاء الإيراد وحده
+   يُظهر الربح ناقصًا بقيمة تكلفة القطع.
+4. الأصل: `remaining_amount = 0` فقط — لا حذف ولا تعديل مبلغ ولا تاريخ.
+5. الردّ رصيدًا يمرّ من **`allocatePaymentFifo`** (يسدّد أقدم الذمم ثم يقيّد
+   الفائض سلفةً) لا من إضافة مباشرة إلى `customers.balance`: `syncBalance`
+   يشتقّ الحقل من الفواتير فيمحو الإضافة.
+6. حرس مزدوج داخل المعاملة ضد إشعارين لنفس الفاتورة.
+- الإشعار **مستبعد** من: `invoice_count` في التقارير/اللوحة/الوردية، ولوحة
+  المصنعية (`credit_note_of = 0`)، ولا ورقة مغسلة له، ويُطبع بعنوان
+  «إشعار دائن» عبر `docTexts[DocCatalog.kTitle]`.
+- حرّاس: `tool/verify_credit_notes.py` (22) · `tool/verify_processing_status.py` (10).
+
+### حذف الإعدادات الميتة
+`services/settings/legacy_setting_keys.dart` (50 مفتاحًا) +
+`SqlDB._cleanupLegacySettings` (`settings_cleanup_v1`): ينسخ القيم إلى
+`audit_log` (`settings_legacy_cleanup`) ثم يحذف بالمفاتيح فقط. القاعدة الحيّة
+كانت تحمل **50/50** منها. حارس `tool/verify_legacy_settings.py` (14) يُثبت
+أنه لا قارئ لأي مفتاح (لا بقيمته ولا بثابت `AppConstants`) وأن لا مفتاح منها
+مُسجَّل في `SettingOptions`.
+`label_paper_size` و`processing_print_item_tags` **بقيا** بنصّ صادق
+(«غير مفعّلة بعد») — لا طباعة ملصقات في النظام.
 
 ## النسخ الاحتياطي والاستعادة
 - **الصيغة**: ملف SQLite خام `.db` — لا ZIP ولا JSON. `backup_naming.dart` (خالص) · `backup_service.dart` · `/backup` (admin وحده).
@@ -106,11 +173,17 @@ Flutter POS مغاسل (عربي/RTL، offline، sqflite/GetX). البنية: `s
 - المواضع الثلاثة: `await Printing.layoutPdf(onLayout: (PdfPageFormat format) => pdfBytes);` في `printInvoicecontroller` · `previousinvoicecontroller` · `shift_controller`؛ والنمط `(_) => pdfBytes` مقصود.
 - **دروس**: `pw.MultiPage` يرفض الارتفاع اللانهائي وasserts معطّلة في `dart run` وفي نسخة الإصدار ⇒ `MediaBox` بارتفاع `Infinity` بلا استثناء · `roll57` عرضه 57mm · `Printing.layoutPdf` يتجاهل `onLayout` إن أعدتَ مستندًا جاهزًا.
 - **لقطة واحدة قبل الطباعة**: `onLayout` قد يُستدعى مرتين وسلة الفاتورة تُفرَّغ بعده ⇒ البناء داخل الـcallback يُنتج مستندًا فارغًا. تُبنى قبل النداء.
-- **نوع الدفع المطبوع عربي دائمًا (2026-10-26)**: `data['payment']` يمرّ في `PreparePDF.generatePdfData` عبر `PaymentMethods.arabicLabel` قبل رسم سطر «الدفع» — فلا تُطبع `cash`/`card` في الواجهة الإنجليزية. التسميات: كاش · شبكة · آجل · رصيد · اشتراك شهري · استرداد نقدي، والقيمة المجهولة تُترك كما هي. التحويل في المولّد يغطّي البيع وإعادة الطباعة والمشاركة بلا تكرار في كل حمولة.
-- **مقاس شعار الفاتورة (2026-10-26)**: إعداد `invoice_logo_size` في `SettingGroups.invoiceDisplay` بالمليمتر (10..120 · افتراضي **53 مم ≈ 150 نقطة** أي المقاس القديم نفسه) ويتبع `invoice_show_logo`. يُمرَّر `logoSizeMm` في `printInvoicecontroller` · `previousinvoicecontroller` · `invoice_share_service`، ويُحسم في `services/pdf/invoice_logo_size.dart` (`InvoiceLogoSize.resolvePoints`): تحويل مم⇒نقاط ثم قصّ على `availableWidth` فلا يخرج الشعار عن الحراري 58 مم. القيمة الشاذّة/الغائبة تعود للافتراضي بلا رمي.
+- **لغة المستندات مستقلة عن لغة الواجهة (2026-10-29)**: إعداد `doc_language` (`ar` افتراضي · `en`) في `SettingGroups.invoiceDisplay` هو **الحاكم الوحيد** للورق: الفاتورة · كشف الحساب · ملخص الوردية · ورقة المغسلة. لا يُشتقّ من `settings.language` ولا من `L10n`، فتبديل لغة الشاشة لا يغيّر مستندًا ماليًّا. `DocLanguage` (`services/i18n/doc_language.dart`) منطق خالص، و`DocTemplateService.transport` يختم `docLang` من الإعداد ويُرفق `docEnglish` للإنجليزية فقط. العربية هي المطلوبة نظامًا في الفاتورة الضريبية السعودية، والإنجليزية خيار تجاري. اختبار `test/doc_language_test.dart` (16) · `tool/verify_doc_language.dart` (39).
+- **نوع الدفع المطبوع بلغة المستند (2026-10-29)**: `data['payment']` يمرّ في `PreparePDF.generatePdfData` عبر `PaymentMethods.labelIn(raw, english: !isRtl)` — لا `L10n` ولا لغة واجهة. مستند عربي ⇒ كاش · شبكة · آجل · رصيد · اشتراك شهري · استرداد نقدي، ومستند إنجليزي ⇒ Cash · Card · Credit. القيمة المجهولة تُترك كما هي. التحويل في المولّد يغطّي البيع وإعادة الطباعة والمشاركة بلا تكرار في كل حمولة.
+- **مقاسات الشعار ورمز QR (2026-10-31 · بديل `invoice_logo_size`)**: ثلاثة مفاتيح في `SettingGroups.invoiceDisplay` بالمليمتر — `invoice_logo_width` (5..120 · افتراضي 53) · `invoice_logo_height` (5..120 · افتراضي 53) · `map_qr_size` (10..70 · افتراضي 30 ≈ 85 نقطة). **عرض وارتفاع مستقلّان** لأن الشعار المستطيل كان يُقصّ إلى مربّع فيضيع طرفاه. المنطق الخالص في `services/pdf/print_visual_size.dart`: `PrintVisualSize.logo/qr` يحوّل مم⇒نقاط ثم **يقصّ** على الورق (العرض = `availableWidth`، الارتفاع = **35%** من `availableHeight`) ويعيد `VisualBox{width, height, widthClamped, heightClamped, areaMm2}`، و`pageOf(PaperSize)` يحسب المساحة المطبوعة بنفس هوامش `PreparePDF` (حراري 2.5 مم/جهة · غيره 11.5) و`shareOfPage`/`verticalBudget` (تنبيه عند 60%). رمز QR يبقى **مربّعًا** بعد القصّ (أصغر البعدين) وإلا صار غير قابل للقراءة. المفتاح القديم `invoice_logo_size` لا يظهر في الإعدادات: يُرحَّل مرة واحدة (`_migrateLogoSizeToBox` + علامة `logo_size_box_v1`، **قبل** `_ensureDefaultSettings` وإلا كتب الزرع الافتراضي 53) ويبقى مقروءًا كحمولة قديمة (`legacyMm: data['logoSizeMm']`) فإعادة طباعة فاتورة سابقة تُخرج الشكل نفسه. الحمولة: `logoWidthMm` · `logoHeightMm` · `mapQrSizeMm` في `printInvoicecontroller` · `previousinvoicecontroller` · `invoice_share_service` (والكشف يقرأ `mapQrSizeMm`). الرسم: `pw.Image(..., fit: pw.BoxFit.contain)` — **مثبّت صراحةً** ضد تغيير سلوك المكتبة، ولذلك تقول البطاقة «المساحة **القصوى**» لأن المربّع في صندوق 80×30 يُطبع 30×30. الواجهة: `printSizesCard` في صفحتي «الفواتير» و«الطباعة» (حقول + «اجعل الشعار مربّعًا» + «القيم الافتراضية» + ثلاثة أسطر حساب حيّة + **إعلان القصّ**)، والمفاتيح الثلاثة **مستثناة** من `optionsSection` فلا تحكّمين لنفس المفتاح. الدليل: رمز 30 مم ⇒ مساحة رسم واحدة **85.04×85.04 نقطة = 30.00 مم**، ويُقرأ على الحراري عند 203 و150 dpi. حارس `tool/verify_print_sizes.dart` (63) · مسبار `tool/_probe_map_qr_pdf.dart`.
+- **عدد نسخ الفاتورة من حوار الدفع (2026-10-26)**: `InvoiceCopiesSelector` (`view/widget/invoice/invoice_copies_selector.dart`) يعرض 1..5 داخل حوار «طريقة الدفع» ويكتب `invoice_copies` **فورًا** — وهو المفتاح نفسه الذي تقرأه `InvoiceOutputService._invoiceCopies()` وتُكرّر عليه مهمة الطباعة (اسم المهمة `فاتورة #N (i/total)` عند أكثر من نسخة). لا مفتاح ثانٍ: مصدر حقيقة واحد للإعداد واختيار الحوار. `_PaymentMethodDialogState._confirm` ينتظر `_copiesSave` قبل الإصدار كي لا تُطبع القيمة القديمة عند نقر سريع. اختبار `test/invoice_copies_selector_test.dart` (5).
+- **عدد النسخ عند إعادة الطباعة من السجل (2026-10-26)**: زرّ «طباعة» في `previousinvoice.dart` يفتح `showInvoiceReprintCopiesDialog` (`view/widget/invoice/invoice_reprint_copies_dialog.dart`) الذي يستعمل `InvoiceCopiesSelector` نفسه ويبدأ من `invoice_copies`. العدد يعود إلى `PreviousInvoiceController.printInvoice(invoice, copies:)` ثم `InvoiceOutputService.deliverBundle(copies:)` الذي يقصّه على `1..5`؛ `null` = السلوك السابق. **الحوار لا يكتب الإعداد** كي لا تُغيّر إعادةُ طباعة عرَضية عدد نسخ الطباعة التلقائية، وورقة المغسلة تبقى نسخة واحدة. حرّاس: `test/invoice_reprint_copies_dialog_test.dart` (4) · `tool/verify_reprint_copies.dart` (18).
+- **نسخة الطباعة تتّبع ورقة الطابعة الفعلية (2026-10-26)**: الطبقة الأصلية في ويندوز (`printing/windows/print_job.cpp`) ترسم `FPDF_RenderPage(hDC, page, -marginLeft, -marginTop, bWidth, bHeight, ...)` أي بكامل عرض الورقة المادية من حدّها، بلا تصغير إلى المساحة القابلة للطباعة ⇒ يُقصّ أي محتوى في هامش العتاد، وفي RTL يُقصّ **يمين** الصفحة (بداية أسماء الأصناف)، ويضاعفه اختلاف مقاس تعريف الطابعة عن `invoice_paper_size`. الحل: `services/printer/print_layout.dart` (`PrintLayout`) يحمل مقاس الورقة الفعلية وهوامش العتاد بالنقاط؛ `PrinterService.printPdf({PdfRebuilder? rebuild})` يبني عبره داخل `onLayout` ويعود للبايتات الأصلية عند أي فشل. `PreparePDF.generatePdfData` و`LaundrySlipPdf.generateLaundrySlipPdf` يستعملان `PrintLayout.pageFormat` (هامش = `max(التصميم, العتاد + أمان)`؛ أمان 1.5 مم ورقي · 0.5 مم حراري · سقف 30% لكل جهة؛ الحراري يبقي ارتفاع التصميم). **بلا خريطة `printLayout` لا يتغيّر شيء** ⇒ تصدير PDF كما هو. اختبار `test/print_layout_test.dart` (7) + MediaBox في `test/doc_template_pdf_test.dart` + `tool/verify_grid_columns_wiring.dart §4`.
+- **رمز QR لموقع النشاط (2026-10-30)**: `business_location` كان يُحفظ من «معلومات النشاط» والإعداد الأولي ثم **لا يُقرأ في أي مستند** (`BusinessInfoService.location` يُحمَّل ويُكاش بلا مستهلك). الآن: `services/pdf/map_qr.dart` (منطق خالص) `resolve()` يطبّع الرابط — بلا بروتوكول ⇒ `https://` · `//` ⇒ `https:` · إحداثيات خام `24.7,46.6` ⇒ `https://www.google.com/maps?q=…` · المسافات تُحذف — ويَرفض الفراغ وغير `http/https` (`javascript:` · `tel:`) والمضيف بلا نقطة وما يزيد على **512** محرفًا (كثافة وحدات QR تكبر مع المحتوى والرمز بعرض ثابت ⇒ رمز لا يُقرأ). الحقل `DocCatalog.kMapQr = 'map_qr'` في `DocSections.footer` للفاتورة وكشف الحساب **فقط** (ورقة تُسلَّم للزبون؛ ملخّص الوردية وورقة المغسلة مستندان داخليان)، `hasText` فتسميته قابلة للتحرير، `defaultEnabled: true` ولا يُطبع شيء إن كان الرابط فارغًا. الرسم: `PreparePDF._mapQrSvg(data, doc)` (شرطان: الحقل مُفعَّل + `MapQr.resolve` غير فارغ) → `Barcode.qrCode().toSvg` → `pw.SvgImage` **بعد التذييل** بمقاس `PrintVisualSize.qr(sizeMm: data['mapQrSizeMm'], maxWidth: availableWidth, maxHeight: availableHeight)` (من الإعداد ثم مقصوص على الورق). الحمولة: `bizMapUrl` في `printInvoicecontroller` · `previousinvoicecontroller` · `invoice_share_service` · `customer_statement_controller`. **مُثبت بالقياس**: مساحة رسم واحدة 84.00×84.00 نقطة مركزها منتصف A4، ويُقرأ الرمز من الصفحة المصوّرة (OpenCV) عند 300 dpi، والنسخة الحرارية 41.1 نقطة تُقرأ عند 203 dpi و150 dpi. حارس `tool/verify_map_qr.dart` (51) · مسبار `tool/_probe_map_qr_pdf.dart`.
+- **حفظ PDF قرار لا أثر جانبي (2026-10-30)**: كل مستند يُكتب عبر `InvoiceOutputService.saveDocumentPdf(bytes, fileName:)` **وحده** — المجلد المختار (`invoice_pdf_directory`) أو `<المستندات>/فواتير` + `InvoicePdfNaming.dedupe` فلا كتابة فوق ملف. `savePdf` صار يبني الاسم ثم يُفوّض إليه (كتابة واحدة). **أُزيل `Directory.systemTemp` من كشف الحساب**: كان يُحفظ في مجلد مؤقّت عند فشل الطباعة فقط ⇒ رسالة «حُفظ الكشف في …\Temp\…» والملف يُمحى عند أول تنظيف. المسارات الصريحة: الأرشيف `PreviousInvoiceController.saveInvoicePdf` → `deliverBundle(print: false, savePdf: true, printSlip: false)` وزرّه محروس بـ`invoice.print` · الكشف `export(..., savePdfOnly: true)` · الوردية `ShiftController.saveShiftPdf` + مخرج ثالث في حوار الإقفال. التسمية الحرة: `InvoicePdfNaming.sanitizeStem` (محارف ويندوز · مسار ملصوق · طول 100 · فراغ ⇒ `document`) ثم `buildDocumentFileName` = `<الجذر>_<التاريخ>.pdf` — **لم** نُعِد استخدام `BackupNaming.sanitizeBackupName` لأنها تُلحق `.db`. الاستثناء المُعلَن: `invoice_share_service` يكتب في مجلد مؤقّت **ليُشارك** الملف فورًا (مستند عابر لا أرشيف). حارس `tool/verify_pdf_save_paths.dart` (33) يمنع عودة `systemTemp` وأي `writeAsBytes` في متحكّم.
 - **حجم الـPDF**: النص وحده سريع (28–41ms) والصور هي العنق الوحيد (`_compressToJpeg` فارغة): صورة كاملة 287ms/3.7MB مقابل 30ms/119KB عند تصغيرها إلى 160×160. الخط ليس سببًا. أندرويد: `printing` لا ترى طابعات البلوتوث ⇒ يلزم RawBT.
 - 🚨 **كل `pw.Text` عربي في أي PDF يحمل `textDirection: pw.TextDirection.rtl`** — حزمة `pdf` (3.11.3) لا تُشكّل العربية إلا بهذا الشرط: `final _textDirection = textDirection ?? Directionality.of(context);` ثم `useArabic && rtl ? arabic.convert(...) : useBidi && rtl ? bidi.logicalToVisual(...) : span.text`، و`options.dart` يجعل `useBidi=true` و`useArabic=false` افتراضيًا (ولا `--dart-define` في المشروع). بدون الاتجاه = **حروف مقطّعة ومعكوسة**.
-  - **الوقوعات**: `generatePdfData` (الفاتورة) تضبطه على 22 نصًّا ⇒ سليمة **بلا أي استثناء الآن**. `generateShiftSummaryPdf` تلتفّ بـ`pw.Directionality(rtl)` فيرث كل محتواها الاتجاه (بما فيه `_buildRow`) ⇒ سليمة. `generateCustomerStatementPdf` كانت **بلا أي ضبط** ⇒ كشف الحساب ظهر مقطّعًا (أُصلح 2026-10-03 بمُساعد `tx`). **أي دالة PDF جديدة: إما `Directionality` أب أو `rtl` على كل نصّ.**
+  - **الوقوعات**: `generatePdfData` (الفاتورة) تضبطه على 22 نصًّا ⇒ سليمة **بلا أي استثناء الآن**. `generateShiftSummaryPdf` تلتفّ بـ`pw.Directionality` **باتجاه لغة المستند** (`isRtl` من الحمولة) فيرث كل محتواها الاتجاه (بما فيه `_buildRow`) ⇒ سليمة عربيًّا وإنجليزيًّا. `generateCustomerStatementPdf` كانت **بلا أي ضبط** ⇒ كشف الحساب ظهر مقطّعًا (أُصلح 2026-10-03 بمُساعد `tx`، وصار الاتجاه والجداول يتبعان `docLang` في 2026-10-29). **أي دالة PDF جديدة: إما `Directionality` أب أو `rtl` على كل نصّ.**
   - ✅ **ازدواج المبلغ — مُصلَح 2026-10-03**: كان الفوتر يطبع `payable` **مرتين** (`'س.ر X'` 24pt بترتيب بصري يدوي + `'X ر.س'` 16pt). السطر 24pt كان بقية من تعديل سابق غير موجود في `HEAD`. حُذف، وبقي **سطر واحد كبير 24pt** بصيغة `'${_money(payable)} ر.س'` + `rtl` (أمر المستخدم: «سطر واحد كبير»). أُثبت بعرض الـPDF: مقطع واحد `size=24.0 '30.00ﺭ.ﺱ'` بدل مقطعين.
   - **الأصل في الحزمة**: `bidi.logicalToVisual` يُعيد الترتيب فقط؛ والتشكيل الفعلي (ابتدائي/وسطي/نهائي) في `arabic.convert` المُعطَّل افتراضيًا.
   - حرس: `tool/verify_statement_pdf.py` (**31**) — يمنع أي `pw.Text` عارية خارج `tx`، **ويرفض أي استثناء** (`ALLOWED_WITHOUT_RTL` صار فارغًا)، و[8] يمنع عودة ازدواج المبلغ (يفحص `'س.ر '` في الملف كله + عدد `pw.Text` التي تطبع `payable` = 1).
@@ -127,6 +200,7 @@ Flutter POS مغاسل (عربي/RTL، offline، sqflite/GetX). البنية: `s
 - `_resolve()` **يرفض** اختيارًا يدويًا يخالف النظام الفعلي ويطبع تحذيرًا (منع فتح قاعدة فارغة في مسار خاطئ).
 - **`pubspec`**: `sqflite_common_ffi ^2.3.7` (**ليس** ^2.4.0) + `sqlite3 ^2.9.4` + `sqlite3_flutter_libs ^0.5.24`. sqlite3 **v3** يستخدم build hooks / native assets ويفشل على ويندوز بـ`Target dart_build failed : Building native assets failed` ⇒ العلاج الرسمي هو الرجوع إلى v2.
 - **بناء من sandbox**: `env 'PROGRAMFILES(X86)=C:\Program Files (x86)' flutter build windows --debug` — لأن الصندوق لا يورّث المتغيّر (جهاز المستخدم عنده إياه). و`flutter doctor` يفشل في فحص ويندوز داخل الصندوق بسبب حجب `reg.exe` — ليس عيبًا حقيقيًا. تأكيد الأدوات: `vswhere.exe`.
+- **لوحة المفاتيح اللمسية لا تختفي (2026-10-31)**: على جهاز لمس تُظهر ويندوز لوحة المفاتيح عند التركيز على حقل ولا تُخفيها بعده — لأنها **عملية مستقلة** (`TabTip.exe` في ويندوز 10 · مضيف `TextInputHost` في ويندوز 11) لا يملكها Flutter، و`TextInput.hide` يبلّغ المحرّك فقط. الحل: قناة أصلية `laundry/touch_keyboard` بميثود `hide` في `windows/runner/flutter_window.cpp` (`FindWindowW("IPTip_Main_Window")` + `SC_CLOSE` · `FindWindowW("Windows.UI.Core.CoreWindow", "Microsoft Text Input Application")` + `SW_HIDE` · **لا `TerminateProcess`**) و`WM_ACTIVATE`/`WA_INACTIVE` يُخفيها عند الخروج من المقدّمة. في Dart: `core/platform/touch_keyboard.dart` — `TouchKeyboard.hide()` (ويندوز فقط عبر `defaultTargetPlatform` لا `dart:io` كي لا ينكسر الويب) و`hasTextFocus` (يصعد في شجرة الأسلاف لأن عقدة التركيز هي `Focus` **داخل** `EditableText`)، و`TouchKeyboardDismisser` يلفّ التطبيق في `main.dart` (تغيّر التركيز + `Listener.onPointerDown` — النقرة على خلفية **لا** تغيّر التركيز في Flutter — + دورة الحياة) ويفحص **بعد** `addPostFrameCallback` لا فورًا. عقد الاسم بين Dart وC++ يُثبته `verify_print_sizes [10]`.
 - **`discounts`** كانت ناقصة من `runPendingMigrations` (موجودة في `_onCreate`/`_onUpgrade` فقط) ⇒ أُضيف `IF NOT EXISTS "discounts"`. (اكتُشف بـ`grep -n "discounts" lib/sqldb.dart`.)
 
 > تفاصيل الأيام في `2026-09-17.md` · `2026-09-18.md` · `2026-09-19.md` · `2026-09-21.md` · `2026-10-01.md` · `2026-10-03.md`.
@@ -193,6 +267,9 @@ Flutter POS مغاسل (عربي/RTL، offline، sqflite/GetX). البنية: `s
 ### العقود الحاكمة
 - **`toTransport()` تُصدّر `docEnabled` + `docTexts` + `docStyles` بالتحديد** —
   هي ما يقرأه `DocTemplateView.of`. أي اسم آخر ⇒ القالب لا يُقرأ **بصمت**.
+- **اللغة ليست جزءًا من القالب**: `transport` يضيف `docLang` من إعداد
+  `doc_language` و`docEnglish` عند الإنجليزية فقط، فلا يتكرّر قرار اللغة في
+  أربعة قوالب ولا يتغيّر القالب عند تبديل لغة الشاشة.
 - **الفراغ = الافتراضي** (`textOf`): لإخفاء سطر يُعطَّل مفتاحه لا يُفرَّغ نصّه.
 - **الغياب = مُفعَّل** في `DocTemplate.isOn`، لكن `DocTemplateView.isOn`
   يعود **للسجلّ** عند غياب الخريطة (مسار قديم نسي تمرير القالب) — فلا مستند
@@ -224,15 +301,35 @@ Flutter POS مغاسل (عربي/RTL، offline، sqflite/GetX). البنية: `s
 ### التحقّق
 `tool/verify_doc_template.dart` (**329 فحصًا / 10 كتل**، مُختبَر بخمسة عيوب
 مزروعة: حجم افتراضي · `StackFit.loose` · `fontSize` مكتوب · نصّ عربي في
-المولّد · `letterSpacing`، وحدّ أعلى 48، ويحرس أيضًا مرور نوع الدفع بالعربية
-ومقاس الشعار من الإعداد) · `test/doc_template_pdf_test.dart`
-(11) · `test/doc_template_screen_test.dart` (9) · `test/laundry_slip_test.dart`
+المولّد · `letterSpacing`، وحدّ أعلى 48، ويحرس أيضًا مرور نوع الدفع بلغة
+المستند ومقاس الشعار من الإعداد) · `test/doc_template_pdf_test.dart`
+(13 — منها نسختان عربية/إنجليزية لكل مستند في `build/probe` للفحص البصري) ·
+`test/doc_language_test.dart` (16 — استقلال اللغة في الاتجاهين) ·
+`test/doc_template_screen_test.dart` (9) · `test/laundry_slip_test.dart`
 (24 — منها 8 لقوالب الورقة: نصوص · نمط · تعطيل · ارتفاع حراري · خلوّ مالي) ·
-`test/invoice_print_labels_test.dart` (8 — تسميات الدفع العربية وحدود مقاس الشعار).
+`test/invoice_print_labels_test.dart` (8 — تسميات الدفع وحدود مقاس الشعار).
+`tool/verify_doc_language.dart` (**39 / 7**) يحرس ختم اللغة في المسارات الأربعة.
 `tool/verify_statement_pdf.py` و`verify_statement_range.py` يقرآن من السجلّ
 لا من نصوص مكتوبة.
 
 ## 🌐 دعم اللغتين (2026-10-25)
+
+### 🖨️ لغة الطباعة — تحكّم صريح (2026-10-30)
+`doc_language` يحكم **كل** مستند يخرج من النظام (فاتورة · كشف حساب · ملخص
+وردية · ورقة مغسلة · مشاركة واتساب) وهو مستقلّ عن `language` (الواجهة).
+
+- **الواجهة**: `docLanguageCard(controller)` في `settings_sections.dart` —
+  زرّان (العربية / English) بنفس شكل أزرار «لغة النظام»، في صفحتي
+  «الفواتير والترقيم» و«الطباعة وإخراج الفاتورة».
+- 🚨 **لا سطر منسدل ثانٍ**: `optionsSection` يستبعد `settingDocLanguage`
+  (مثل `settingPrintFont`) كي لا يوجد تحكّمان لنفس المفتاح.
+- 🚨 **معاينة الفاتورة تتبع لغة الطباعة** لا لغة الواجهة: `doc()` / `docf()`
+  داخل `invoicePreviewCard` تمرّ من `kEnglish` نفسه الذي يمرّ منه الـPDF.
+  (كانت `tr()` أي لغة الشاشة ⇒ يبدّل الطباعة إلى الإنجليزية فيرى معاينة
+  عربية ويظنّ الزرّ لا يعمل.)
+- **حدّ معروف**: اللغة **غير مخزَّنة في صفّ الفاتورة** ⇒ إعادة طباعة فاتورة
+  قديمة تستخدم اللغة المختارة الآن. مكتوب في البطاقة نفسها.
+- الحارس: `tool/verify_doc_language.dart` قسم `[8]` (45 فحصًا).
 
 **الفكرة الحاكمة**: النصّ العربي هو **مفتاح** القاموس، و`tr('نصّ')` يُرجع
 الإنجليزية حين تكون الواجهة إنجليزية وإلا النصّ نفسه. السبب: 2,262 نصًّا في
@@ -244,6 +341,7 @@ Flutter POS مغاسل (عربي/RTL، offline، sqflite/GetX). البنية: `s
 | `services/i18n/app_language.dart` | `enum AppLanguage {ar, en, system}` + `resolve` |
 | `services/i18n/translations_en.dart` | `kEnglish` — 1,900+ مفتاحًا (عربي ⇒ إنجليزي) |
 | `services/i18n/l10n.dart` | المحرّك: `t` · `tf` · `localized` + `tr()`/`trf()`/`localized()` |
+| `services/i18n/doc_language.dart` | **لغة المستندات المطبوعة** (`ar`/`en`) — مستقلة عن لغة الواجهة، تُقرأ في `compute` |
 | `services/i18n/ui_direction.dart` | `appTextDirection` — الجسر الوحيد إلى `dart:ui` |
 | `controller/settings/locale_controller.dart` | القراءة/الكتابة + `Get.forceAppUpdate()` |
 | `services/payment/payment_method.dart` | طرق الدفع: مفاتيح تخزين + تسميات عرض |
@@ -256,13 +354,18 @@ Flutter POS مغاسل (عربي/RTL، offline، sqflite/GetX). البنية: `s
   (`_flatEnglish` تُبنى مرة واحدة). بدونها يفشل أي نصّ مكتوب على عدّة أسطر.
 - **لا `TextDirection.rtl` في أي ملف واجهة** — يُقرأ من `appTextDirection`.
   الحارس يفشل إن عادت. الاستثناءان: `ui_direction.dart` و`preparePDF.dart`.
-- **`pw.TextDirection` في PDF يتبع اللغة**، و`ArabicText.safe` للعربية فقط.
-- 🚨 **اللغة تُختم في الحمولة لا تُقرأ من `L10n`** (2026-10-25، بعد بلاغ
-  «الفاتورة تُطبع عربية دائمًا»): `PreparePDF.generatePdfData` يعمل داخل
-  `compute` — **عزل مستقلّ** لا يرى حالة `L10n` الساكنة، فيقرأ الافتراضي
-  (العربية) مهما بدّل المستخدم. الإصلاح: `DocTemplateService.transport()`
-  يكتب `data['docLang'] = L10n.language.code` على الخيط الرئيسي، والمولّد
-  يستعمل `_rtlOf(data)` و`DocTemplateView.of` يستعمل `isEnglishDoc`.
+- **`pw.TextDirection` في PDF يتبع لغة المستند** (`docLang`)، و`ArabicText.safe`
+  للعربية فقط.
+- 🚨 **لغة المستند قرار مستقلّ عن لغة الواجهة** (2026-10-29، بعد طلب صريح):
+  `DocLanguage {ar, en}` + مفتاح `doc_language` في «ما يظهر على الفاتورة»،
+  وافتراضيه **عربي** لأنه المطلوب نظامًا. `DocTemplateService.transport()`
+  يكتب `data['docLang'] = settings.docLanguage.code` (لا `L10n.language.code`)
+  ويُرفق `docEnglish` للإنجليزية فقط، والمولّد يستعمل `_rtlOf(data)` و
+  `DocTemplateView.of` يستعمل `isEnglishDoc`. `_rtlOf` يسقط للعربية عند غياب
+  `docLang`، لا للغة الشاشة — فلا يعيد مسار قديم ربط الورقة بالواجهة.
+  يغطّي الفاتورة · كشف الحساب · ملخص الوردية · ورقة المغسلة. تاريخ
+  `map_data` يُخزَّن محايد اللغة (`yyyy-MM-dd HH:mm:ss`) لأن إعادة الطباعة قد
+  تكون بلغة مختلفة، فلا تُطبع «ص» في نسخة إنجليزية.
   **قاعدة عامّة: كود `compute` لا يقرأ حالة عامّة — تُمرَّر له في الحمولة.**
 - **`DocTemplateView.text()`**: الإنجليزية **مشروطة** بـ`isEnglishDoc` —
   بدون الشرط تُطبع فاتورة عربية بالإنجليزية.
@@ -308,6 +411,13 @@ Flutter POS مغاسل (عربي/RTL، offline، sqflite/GetX). البنية: `s
 `tool/verify_i18n.dart` — **92 فحصًا / 9 كتل**: اللغة · المحرّك · سلامة القاموس
 (كل مفتاح عربي · لا ترجمة وهمية) · التركيب (`main` + `pubspec`) · الأعمدة ·
 الاتجاه والطباعة · القيم المخزَّنة · **السقف المتحرّك** · العملة والرسائل.
+
+`tool/verify_doc_language.dart` — **39 فحصًا / 7 كتل**: النوع الخالص ·
+تسجيل الإعداد وتطابق القيم · ختم `docLang` في `transport` بلا `L10n` ·
+المسارات الأربعة · خلوّ مسار الطباعة من لغة الواجهة · ثبات المفتاح ·
+**كل نصّ افتراضي في القوالب له ترجمة إنجليزية**.
+`test/doc_language_test.dart` (16) يثبت الاتجاهين: واجهة عربية + فاتورة
+إنجليزية، وواجهة إنجليزية + فاتورة عربية.
 
 - 🚨 **`kUntranslatedCeiling = 0`** (2026-10-25): 2,090 نصًّا · 2,086 مترجمًا ·
   **0 متبقٍّ**. أي نصّ واجهة جديد بلا ترجمة يُفشل الحارس فورًا.

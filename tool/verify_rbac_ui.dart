@@ -203,7 +203,13 @@ void main() {
   check('لا يقرأ القيمة المُعادة',
       !has(sheet, 'final ok = await Get.defaultDialog'));
   check('يمرّر Get.defaultDialog<void>', has(sheet, 'Get.defaultDialog<void>('));
-  check('يُغلق بفحص isDialogOpen', has(sheet, 'if (Get.isDialogOpen == true) Get.back();'));
+  // الإغلاق إمّا بالفحص المباشر أو عبر `dismissOpenDialog()` المشترك في
+  // `core/navigation/route_dismissal.dart` — وهو يفعل الفحص نفسه ثم
+  // `Get.close(1)` (يتجاوز فحص الـsnackbar في GetX 4.x).
+  check(
+      'يُغلق بفحص isDialogOpen',
+      has(sheet, 'if (Get.isDialogOpen == true) Get.back();') ||
+          has(sheet, 'dismissOpenDialog()'));
 
   // ── [13] الأدوار تُقرأ من القاعدة لا من قائمة مكتوبة ─────────────
   //

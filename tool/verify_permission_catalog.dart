@@ -214,9 +214,9 @@ void main() {
       PermissionCatalog.byKey.length == all.length);
 
   // ── [12] الخطر موسوم منطقيًا ─────────────────────────────────────
+  // `invoice.delete` و`invoice.edit_issued` أُزيلا من الكتالوج (لا حذف فاتورة
+  // صادرة ولا تحرير بعد الإصدار — التصحيح بإشعار دائن)، فلا يُدرَجان هنا.
   const mustBeDestructive = <String>[
-    'invoice.delete',
-    'invoice.edit_issued',
     'customer.delete',
     'debt.repair',
     'subscription.cancel',
@@ -253,8 +253,6 @@ void main() {
     PermissionKeys.invoicePrint,
     PermissionKeys.invoiceReprint,
     PermissionKeys.invoiceReturn,
-    PermissionKeys.invoiceEditIssued,
-    PermissionKeys.invoiceDelete,
     PermissionKeys.shiftOpen,
     PermissionKeys.shiftClose,
     PermissionKeys.cashView,
@@ -272,11 +270,11 @@ void main() {
     PermissionKeys.reportsProfit,
     PermissionKeys.reportsTax,
     PermissionKeys.auditView,
-    PermissionKeys.exportData,
     PermissionKeys.processingView,
     PermissionKeys.processingUpdate,
     PermissionKeys.subscriptionManage,
     PermissionKeys.subscriptionCancel,
+    PermissionKeys.subscriptionUsageOverride,
     PermissionKeys.categoryManage,
     PermissionKeys.discountManage,
     PermissionKeys.settingsManage,

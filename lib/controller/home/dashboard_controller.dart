@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
 import 'package:laundry/services/invoice/invoice_items_service.dart';
+import 'package:laundry/services/permission/permission_catalog.dart';
+import 'package:laundry/services/permission/permission_service.dart';
 import 'package:laundry/services/subscription/subscription_service.dart';
 import 'package:laundry/sqldb.dart';
 import 'package:intl/intl.dart';
@@ -109,11 +111,18 @@ class DashboardController extends GetxController {
       // **لا `.clamp`**: قصّ القيمة عند صفر كان يُخفي الأيام الخاسرة تمامًا،
       // فيرى المالك «0» بينما التقرير يعرض الرقم السالب بالأحمر — تناقض
       // يُخفي خسارة حقيقية. الواجهة تتكفّل بعرض السالب بلونه التحذيري.
+      //
+      // 🛡️ و`reports.profit` صار مُنفَّذًا هنا أيضًا: اللوحة تُعرض لحزمة
+      // «كاشير» (تملك `dashboard.view` ولا تملك `reports.profit`)، وكانت
+      // تعرض له **هامش الربح** خلافًا لنصّ الكتالوج نفسه. لا حساب ولا عرض
+      // بلا الصلاحية.
       todayProfit.value =
-          todaySales.value +
-          todaySubscriptionRevenue.value -
-          todayCost.value -
-          todaySubscriptionCost.value;
+          PermissionService.can(PermissionKeys.reportsProfit)
+              ? todaySales.value +
+                  todaySubscriptionRevenue.value -
+                  todayCost.value -
+                  todaySubscriptionCost.value
+              : 0.0;
     } catch (e) {
       debugPrint('Dashboard error: $e');
     } finally {
@@ -139,7 +148,11 @@ class DashboardController extends GetxController {
     final result = await _db.readData(
       // `subscription_id IS NULL`: بدونه يُقسم إجمالي المبيعات العادية على
       // عدد يشمل فواتير الاشتراك ⇒ متوسط الفاتورة أقل من الحقيقة دائمًا.
-      'SELECT COUNT(*) as count FROM invoices '
+      // و`credit_note_of IS NULL`: إشعار الدائن **مستند عكسي** لا فاتورة —
+      // عدّه يزيد عدد الفواتير ويخفض متوسطها، بينما مبلغه السالب يُحتسب في
+      // `SUM(final_amount)` أعلاه (وهو المطلوب: صافي المبيعات).
+      'SELECT COUNT(CASE WHEN COALESCE(credit_note_of, 0) = 0 THEN 1 END) as count '
+      'FROM invoices '
       "WHERE DATE(invoice_date) = ? AND subscription_id IS NULL",
       [today],
     );

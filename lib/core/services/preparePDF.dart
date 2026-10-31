@@ -5,17 +5,40 @@ import 'package:barcode/barcode.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:laundry/core/services/paper_size.dart';
+import 'package:laundry/services/i18n/doc_language.dart';
 import 'package:laundry/services/i18n/l10n.dart';
 import 'package:laundry/services/payment/payment_method.dart';
 import 'package:laundry/services/pdf/arabic_text.dart';
 import 'package:laundry/services/pdf/doc_template.dart';
-import 'package:laundry/services/pdf/invoice_logo_size.dart';
+import 'package:laundry/services/pdf/print_visual_size.dart';
+import 'package:laundry/services/pdf/map_qr.dart';
+import 'package:laundry/services/printer/print_layout.dart';
 import 'package:laundry/services/tax/tax_service.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:pdf/pdf.dart';
 import 'package:intl/intl.dart';
 
 class PreparePDF {
+  /// رمز QR لموقع النشاط — **SVG** جاهز أو `null` إن لم يُطبع.
+  ///
+  /// شرطان لا ثالث لهما: الحقل مُفعَّل في قالب المستند، والرابط صالح بعد
+  /// التطبيع ([MapQr.resolve]). غياب أحدهما يعني **لا رمز** لا رمزًا مكسورًا.
+  ///
+  /// الرمز يختلف عن QR الهيئة: ذاك للتحقّق الضريبي (TLV مُرمَّز بـBase64)،
+  /// وهذا رابط خرائط يُفتح بكاميرا الهاتف. لذلك لكلٍّ حقل مستقلّ في القالب.
+  static String? _mapQrSvg(Map<String, dynamic> data, DocTemplateView doc) {
+    if (!doc.isOn(DocCatalog.kMapQr)) return null;
+    final url = MapQr.resolve(data['bizMapUrl']);
+    if (url.isEmpty) return null;
+    try {
+      return Barcode.qrCode().toSvg(url, width: 120, height: 120);
+    } catch (e) {
+      // رابط أطول من سعة الرمز أو أي خطأ ترميز: الورقة تُطبع بلا رمز.
+      debugPrint('map QR error: $e');
+      return null;
+    }
+  }
+
   /// تنسيق مبلغ مالي بخانتين عشريتين.
   ///
   /// **إصلاح:** كان الكود يستعمل لصقًا نصيًا `"${value}0"` لإضافة خانة عشرية،
@@ -86,28 +109,26 @@ class PreparePDF {
   /// الحجم والعرض مُقيَّدان في [DocStyle] (6..36 نقطة · 80..140%). الحدّ
   /// الأعلى محسوب لا تعسّفي: فوقه يخرج أطول سطر لا يلتفّ عن الورقة، ولا
   /// يُصلَح بتصغير تلقائي (انظر [tx] أدناه) بل بمنع القيمة أصلًا.
-  /// محاذاة «نهاية السطر» في مستندات PDF — تتبع لغة الواجهة.
-  ///
-  /// كانت `pw.TextAlign.right` مكتوبة حرفيًّا، فتظهر الأرقام في
-  /// المستند الإنجليزي ملتصقة باليمين بلا سبب.
-  static pw.TextAlign get _endAlign => _endAlignOf(L10n.isRtl);
-
   /// محاذاة النهاية بلغة **صريحة** — تُستخدم داخل العزل حيث لا تُقرأ [L10n].
+  ///
+  /// كانت `pw.TextAlign.right` مكتوبة حرفيًّا، فتظهر الأرقام في المستند
+  /// الإنجليزي ملتصقة باليمين بلا سبب. والآن المصدر لغة المستند لا الواجهة.
   static pw.TextAlign _endAlignOf(bool isRtl) =>
       isRtl ? pw.TextAlign.right : pw.TextAlign.left;
 
-  /// هل المستند من اليمين لليسار؟ يُقرأ من `data['docLang']` لا من [L10n].
+  /// هل المستند من اليمين لليسار؟ يُقرأ من `data['docLang']`.
   ///
-  /// 🚨 **هذا هو سبب «الفاتورة تُطبع بالعربية دائمًا»**: مولّد الفاتورة يعمل
-  /// داخل `compute` — عزل مستقلّ لا يرى الحالة الساكنة لـ`L10n` — فكان
+  /// 🚨 **هذا هو سبب «الفاتورة تُطبع بالعربية دائمًا» سابقًا**: مولّد الفاتورة
+  /// يعمل داخل `compute` — عزل مستقلّ لا يرى الحالة الساكنة لـ`L10n` — فكان
   /// `L10n.isEnglish` يُرجع `false` دائمًا وكل النصوص تُرسم عربية.
   /// اللغة تُختم في `DocTemplateService.transport` (الخيط الرئيسي) وتُقرأ هنا.
   ///
-  /// عند غياب `docLang` (حمولة قديمة أو نداء مباشر من الاختبارات) نرجع
-  /// لـ[L10n] كي لا يتغيّر سلوك المسارات التي تعمل في الخيط الرئيسي.
+  /// عند غياب `docLang` (حمولة قديمة أو نداء مباشر من الاختبارات) نسقط
+  /// لافتراضي المستندات (**العربية**) لا لِلغة الواجهة: لغة الورقة قرار مالي
+  /// مستقلّ، ولا يجوز أن يغيّرها زرّ لغة الشاشة حتى في مسار قديم.
   static bool _rtlOf(Map<String, dynamic> data) {
     final code = '${data['docLang'] ?? ''}'.trim().toLowerCase();
-    if (code.isEmpty) return L10n.isRtl;
+    if (code.isEmpty) return DocLanguage.defaultLanguage.isRtl;
     return code != 'en';
   }
 
@@ -119,7 +140,7 @@ class PreparePDF {
     PdfColor? color,
     bool? isRtl,
   }) {
-    final rtl = isRtl ?? L10n.isRtl;
+    final rtl = isRtl ?? DocLanguage.defaultLanguage.isRtl;
     pw.Widget layer() => pw.Text(
       // إصلاح المسافة قبل «ا ل ا» يخصّ العربية وحدها؛ لا يُطبَّق على
       // الإنجليزية لأنه يُدخل مسافة مزدوجة بلا سبب.
@@ -173,7 +194,7 @@ class PreparePDF {
             style,
             font: font,
             color: color,
-            align: _endAlignOf(isRtl ?? L10n.isRtl),
+            align: _endAlignOf(isRtl ?? DocLanguage.defaultLanguage.isRtl),
             isRtl: isRtl,
           ),
         ],
@@ -192,29 +213,60 @@ class PreparePDF {
 
     // ─── مقاس الورق من الإعدادات (A4 · A5 · A6 · حراري 80/58 مم · ملصقات) ───
     // الحرارية ارتفاعها مفتوح فتُضبط لأطول صفحة، وهوامشها ضيقة.
+    //
+    // 🚨 عند الطباعة تمرّ خريطة `PrintLayout` من `onLayout` (هوامش العتاد
+    // الحقيقية ومقاس الورقة الفعلي). فنُولّد **نسخة الطباعة** داخل المساحة
+    // القابلة للطباعة: الطبقة الأصلية في ويندوز ترسم الصفحة بكامل عرض الورقة
+    // المادية، وأي محتوى يقع في هامش العتاد يُقصّ — وفي العربية يُقصّ يمين
+    // الصفحة أي بداية أسماء الأصناف. النسخة المصدَّرة إلى PDF تبقى بلا هذه
+    // الخريطة (هامش ١ سم كما كان).
     final paper = PaperSizes.resolve(data['paperSize'] as String?);
-    final pageFormat = PdfPageFormat(
-      PaperSizes.mmToPoints(paper.widthMm),
-      paper.isThermal
-          ? PdfPageFormat.a4.height
-          : PaperSizes.mmToPoints(paper.heightMm),
-      marginAll: paper.isThermal ? PaperSizes.mmToPoints(2) : PdfPageFormat.cm,
+    final printLayout = PrintLayout.fromData(data[PrintLayout.dataKey]);
+    final configuredWidth = PaperSizes.mmToPoints(paper.widthMm);
+    final configuredHeight =
+        paper.isThermal
+            ? PdfPageFormat.a4.height
+            : PaperSizes.mmToPoints(paper.heightMm);
+    final baseMargin =
+        paper.isThermal ? PaperSizes.mmToPoints(2) : PdfPageFormat.cm;
+    final safety = PaperSizes.mmToPoints(paper.isThermal ? 0.5 : 1.5);
+    final pageFormat = PrintLayout.pageFormat(
+      width: configuredWidth,
+      height: configuredHeight,
+      layout: printLayout,
+      baseMargin: baseMargin,
+      safety: safety,
+      // الحراري ورق متصل: يبقى ارتفاع الصفحة كما صُمّم (لا ارتفاع تعريف
+      // الطابعة) حتى لا تتحوّل الورقة القصيرة إلى صفحة طويلة.
+      keepHeight: paper.isThermal,
     );
 
-    // مقاس الشعار من الإعداد (مم) ثم يُقيَّد بعرض الورق — لا شعار يخرج عن
-    // الصفحة على الحراري 58 مم. القيمة الافتراضية 53 مم ≈ 150 نقطة، أي
-    // المقاس الثابت القديم نفسه.
-    final logoPoints = InvoiceLogoSize.resolvePoints(
-      data['logoSizeMm'],
+    // مقاس الشعار: عرض وارتفاع مستقلّان من الإعداد (مم)، ثم يُقيَّدان بالورق.
+    //
+    // **لا شعار يخرج عن الصفحة ولا شعار يأكل ثلثها**: `PrintVisualSize` يقصّ
+    // العرض على عرض الورق والارتفاع على سقف نسبي، ويعيد `clamped` — لكن
+    // القرار هنا لا يطبعه: القيمة المخزَّنة رغبة المستخدم، والمولّد يعلن
+    // التقييد في الإعدادات كي لا يظنّ أن مقاسه نُفِّذ.
+    //
+    // القيم القديمة (`logoSizeMm` من حمولة سابقة) تُقرأ كبديل للعرض
+    // والارتفاع معًا، فتبقى إعادة طباعة فاتورة قديمة بالشكل نفسه.
+    final logoBox = PrintVisualSize.logo(
+      widthMm: data['logoWidthMm'],
+      heightMm: data['logoHeightMm'],
+      legacyMm: data['logoSizeMm'],
       maxWidth: pageFormat.availableWidth,
+      maxHeight: pageFormat.availableHeight,
     );
 
-    // 🚨 نوع الدفع يُطبع **بالعربية دائمًا**، بغضّ النظر عن لغة الواجهة:
-    // الفاتورة قد تُطبع في وضع إنجليزي، وكانت تكتب `cash`/`card` بجانب
-    // «المدفوع». التسميات من `PaymentMethods` وحدها (كاش · شبكة · آجل ·
-    // رصيد · اشتراك شهري · استرداد نقدي)، والقيمة المجهولة تُترك كما هي
-    // بدل أن تُبتلع خلف تسمية مضلِّلة.
-    final paymentLabel = PaymentMethods.arabicLabel('${data['payment'] ?? ''}');
+    // 🚨 نوع الدفع يُطبع **بلغة المستند** لا بلغة الواجهة:
+    //   • مستند عربي ⇒ التسميات العربية من `PaymentMethods` (كاش · شبكة …)،
+    //     وهو سلوك مقصود سابقًا كي لا تظهر `cash` داخل فاتورة عربية.
+    //   • مستند إنجليزي ⇒ التسمية الإنجليزية من القاموس.
+    // القيمة المجهولة تُترك كما هي بدل أن تُبتلع خلف تسمية مضلِّلة.
+    final paymentLabel = PaymentMethods.labelIn(
+      '${data['payment'] ?? ''}',
+      english: !isRtl,
+    );
 
     final items = data['invoiceItems'] as List;
     final photoBytes = await _loadPhotoBytes(items);
@@ -321,6 +373,20 @@ class PreparePDF {
             : '';
     final footerText = doc.text(DocCatalog.kFooter, '').trim();
 
+    // ─── رمز QR لموقع النشاط (أسفل الورقة) ───
+    //
+    // `business_location` كان يُحفظ ولا يُقرأ في أي مستند. صار له مستهلك:
+    // الزبون يصوّر الرمز فيصل إلى الموقع بدل أن يسأل عن العنوان.
+    final mapQrSvg = _mapQrSvg(data, doc);
+    final mapQrCaption = doc.text(DocCatalog.kMapQr, '').trim();
+    // مقاس الرمز من الإعداد (مم) ثم يُقيَّد بالورق — لا رمز يخرج عن الورقة
+    // ولا رمز يزاحم الإجمالي. `clamped` يقرأه المستخدم في الإعدادات.
+    final mapQrBox = PrintVisualSize.qr(
+      sizeMm: data['mapQrSizeMm'],
+      maxWidth: pageFormat.availableWidth,
+      maxHeight: pageFormat.availableHeight,
+    );
+
     /// سطر «بادئة: قيمة» — يعيد لا شيء عندما تكون القيمة فارغة، فلا يبقى
     /// عنوان يتيم بلا قيمة (كان يطبع `اسم العميل: null`).
     pw.Widget? labelRow(String fieldKey, String value, {bool center = true}) {
@@ -347,8 +413,11 @@ class PreparePDF {
         pw.Center(
           child: pw.Image(
             pw.MemoryImage(logoBytes),
-            width: logoPoints,
-            height: logoPoints,
+            width: logoBox.width,
+            height: logoBox.height,
+            // `contain` افتراضيًّا في `pdf` — يُثبَّت صريحًا كي لا يتغيّر
+            // سلوك المكتبة في نسخة لاحقة فيُمدَّ الشعار ويشوَّه.
+            fit: pw.BoxFit.contain,
           ),
         ),
       if (doc.isOn(DocCatalog.kBusinessName)) ...[
@@ -674,6 +743,29 @@ class PreparePDF {
           child: tx(footerText, DocCatalog.kFooter, align: pw.TextAlign.center),
         ),
       ],
+      // ─── رمز QR لموقع النشاط — **آخر ما يُطبع** كما طلبه المستخدم ───
+      //
+      // بعد التذييل لا قبله: الرمز دعوة للتواصل، ومكانه ذيل الورقة.
+      if (mapQrSvg != null) ...[
+        pw.SizedBox(height: 8),
+        pw.Center(
+          child: pw.SvgImage(
+            svg: mapQrSvg,
+            width: mapQrBox.width,
+            height: mapQrBox.height,
+          ),
+        ),
+        if (mapQrCaption.isNotEmpty) ...[
+          pw.SizedBox(height: 4),
+          pw.Center(
+            child: tx(
+              mapQrCaption,
+              DocCatalog.kMapQr,
+              align: pw.TextAlign.center,
+            ),
+          ),
+        ],
+      ],
     ];
 
     pdf.addPage(
@@ -724,8 +816,19 @@ class PreparePDF {
 
     final doc = DocTemplateView.of(shiftData, DocKind.shift);
 
+    // 🚨 لغة الورقة من الحمولة (`docLang`) لا من `L10n` — الدالة تعمل داخل
+    // `compute` حيث الحالة العامة للترجمة غير موجودة. بلا هذا السطر يبقى
+    // اتجاه الورقة RTL ونصّها عربيًّا حتى لو اختار المستخدم الإنجليزية.
+    final isRtl = _rtlOf(shiftData);
+
     pw.Widget tx(String text, String key, {pw.TextAlign? align}) =>
-        _docText(text, doc.style(key), font: font, align: align);
+        _docText(
+          text,
+          doc.style(key),
+          font: font,
+          align: align,
+          isRtl: isRtl,
+        );
 
     final String startTime = DateFormat(
       'yyyy-MM-dd hh:mm a',
@@ -757,7 +860,7 @@ class PreparePDF {
         children: [
           tx(value, key),
           pw.Spacer(),
-          tx('${doc.text(key)}:', key, align: _endAlign),
+          tx('${doc.text(key)}:', key, align: _endAlignOf(isRtl)),
         ],
       ),
     );
@@ -772,7 +875,7 @@ class PreparePDF {
         build: (pw.Context context) {
           return pw.Directionality(
             textDirection:
-                L10n.isRtl ? pw.TextDirection.rtl : pw.TextDirection.ltr,
+                isRtl ? pw.TextDirection.rtl : pw.TextDirection.ltr,
             child: pw.Column(
               crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: [
@@ -877,6 +980,10 @@ class PreparePDF {
 
     // ─── قالب المستند — كل نصّ وقرار إظهار ونمط من `DocCatalog` ───
     final doc = DocTemplateView.of(data, DocKind.statement);
+
+    // لغة الكشف من الحمولة لا من `L10n` (الدالة تعمل أحيانًا في `compute`).
+    final isRtl = _rtlOf(data);
+
     final nameOverride = doc.text(DocCatalog.kBusinessName, '').trim();
     final addressOverride = doc.text(DocCatalog.kBusinessAddress, '').trim();
     final bizName = nameOverride.isNotEmpty ? nameOverride : bizNameRaw;
@@ -911,9 +1018,19 @@ class PreparePDF {
             ? ' ${doc.text(DocCatalog.kCurrency)}'
             : '';
 
-    /// كل نصّ في الكشف **بنمط حقله**، و**RTL صريح**.
+    /// رمز QR لموقع النشاط — يُطبع أسفل الكشف (ورقة تُسلَّم للزبون).
+    final mapQrSvg = _mapQrSvg(data, doc);
+    final mapQrCaption = doc.text(DocCatalog.kMapQr, '').trim();
+    // الكشف يُبنى دائمًا على A4 بهوامش ٢٤ نقطة — فالمتاح = المقاس ناقص ٤٨.
+    final mapQrBox = PrintVisualSize.qr(
+      sizeMm: data['mapQrSizeMm'],
+      maxWidth: PdfPageFormat.a4.availableWidth - 48,
+      maxHeight: PdfPageFormat.a4.availableHeight - 48,
+    );
+
+    /// كل نصّ في الكشف **بنمط حقله**، واتجاهه **بلغة المستند**.
     ///
-    /// 🚨 **لماذا RTL إلزامي؟** حزمة `pdf` لا تُشكّل العربية (اختيار الصورة
+    /// 🚨 **لماذا الاتجاه صريح؟** حزمة `pdf` لا تُشكّل العربية (اختيار الصورة
     /// الابتدائية/الوسطى/النهائية وترتيب الكلمات) إلا إذا كان
     /// `textDirection == pw.TextDirection.rtl` — انظر
     /// `pdf/src/widgets/text.dart`: `textDirection ?? Directionality.of(context)`،
@@ -921,22 +1038,24 @@ class PreparePDF {
     /// `_textDirection == TextDirection.rtl`. بدونها يُرسم النص بترتيبه
     /// المنطقي فتُقرأ الحروف **مقطّعة ومعكوسة**. (وهذا يفعله [_docText]
     /// لكل نصّ بلا استثناء.)
-    pw.Widget tx(String t, String key, {pw.TextAlign? align}) =>
-        _docText(t, doc.style(key), font: font, align: align);
-
-    /// سطر «عنوان … قيمة» — **العنوان يمينًا والقيمة يسارًا**.
     ///
-    /// 🚨 `pw.Row` في حزمة `pdf` يرصف من **اليسار** ولا يعكس الاتجاه (بخلاف
-    /// `Table` التي عكسناها صراحةً)، فكان ترتيب `[label, value]` يضع العنوان
-    /// في أقصى اليسار والقيمة في أقصى اليمين — أي أن قارئ العربية يبدأ
-    /// بالقيمة ثم يبحث عن عنوانها. أُصلح 2026-10-23 بترتيب `[value, label]`.
+    /// والنصّ الإنجليزي يأخذ `ltr` من اللغة نفسها، فلا تُقرأ كلماته معكوسة.
+    pw.Widget tx(String t, String key, {pw.TextAlign? align}) =>
+        _docText(t, doc.style(key), font: font, align: align, isRtl: isRtl);
+
+    /// سطر «عنوان … قيمة» — العنوان في جهة بداية السطر والقيمة في آخره.
+    ///
+    /// 🚨 `pw.Row` في حزمة `pdf` يرصف من **اليسار** ولا يعكس الاتجاه، فالترتيب
+    /// يتبع لغة المستند: عربي ⇒ `[value, label]`، إنجليزي ⇒ `[label, value]`.
     pw.Widget kv(
       String label,
       String value, {
       String key = DocCatalog.kTotals,
     }) => pw.Row(
       mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-      children: [tx(value, key), tx(label, key)],
+      children: isRtl
+          ? [tx(value, key), tx(label, key)]
+          : [tx(label, key), tx(value, key)],
     );
 
     pw.Widget sectionTitle(String text) => pw.Padding(
@@ -947,11 +1066,10 @@ class PreparePDF {
     // جدول بسيط بترويسة ملوّنة خفيفة — بلا أي اعتماد على TableHelper.
     // `widths` تسمح بتوزيع عرض الأعمدة بدل الاعتماد على الحجم التلقائي.
     //
-    // 🚨 **الترتيب RTL**: `pw.Table` يرصف الأبناء من **اليسار** ولا يعكس
-    // الاتجاه تلقائيًا، فلو مرّرنا الأعمدة بترتيبها المنطقي ظهر العمود الأول
-    // في أقصى اليسار — أي أن قارئ العربية يبدأ من آخر عمود. لذلك نعكس
-    // الترويسة وكل صف هنا فيصير العمود الأول (التاريخ مثلًا) في **أقصى
-    // اليمين**. ونعكس مفاتيح `widths` معها كي يبقى كل عرض على عموده.
+    // 🚨 **الترتيب يتبع لغة المستند**: `pw.Table` يرصف الأبناء من **اليسار**
+    // ولا يعكس الاتجاه تلقائيًا. في العربية نعكس الترويسة وكل صف فيصير العمود
+    // الأول (التاريخ مثلًا) في **أقصى اليمين**؛ وفي الإنجليزية نُبقي الترتيب
+    // المنطقي كما هو. ونعكس مفاتيح `widths` معها كي يبقى كل عرض على عموده.
     // ⇒ كل منادات `table()` تمرّر الأعمدة **بترتيبها المنطقي** بلا قلق.
     //
     // [styleKey] هو حقل الجدول نفسه (`kItemsTable` …) فيتحكّم في حجم خطّ
@@ -969,8 +1087,8 @@ class PreparePDF {
 
       final n = headers.length;
       final visualWidths =
-          widths == null
-              ? null
+          widths == null || !isRtl
+              ? widths
               : {for (final e in widths.entries) n - 1 - e.key: e.value};
 
       return pw.Table(
@@ -979,11 +1097,14 @@ class PreparePDF {
         children: [
           pw.TableRow(
             decoration: const pw.BoxDecoration(color: PdfColors.grey200),
-            children: headers.reversed.map((h) => cell(h, head: true)).toList(),
+            children: (isRtl ? headers.reversed : headers)
+                .map((h) => cell(h, head: true))
+                .toList(),
           ),
           ...rows.map(
-            (r) =>
-                pw.TableRow(children: r.reversed.map((c) => cell(c)).toList()),
+            (r) => pw.TableRow(
+              children: (isRtl ? r.reversed : r).map((c) => cell(c)).toList(),
+            ),
           ),
         ],
       );
@@ -1270,6 +1391,27 @@ class PreparePDF {
                                 align: pw.TextAlign.center,
                               ),
                             ),
+                          // رمز QR للموقع — آخر عنصر، وداخل الكتلة للسبب نفسه.
+                          if (mapQrSvg != null) ...[
+                            pw.SizedBox(height: 10),
+                            pw.Center(
+                              child: pw.SvgImage(
+                                svg: mapQrSvg,
+                                width: mapQrBox.width,
+                                height: mapQrBox.height,
+                              ),
+                            ),
+                            if (mapQrCaption.isNotEmpty) ...[
+                              pw.SizedBox(height: 4),
+                              pw.Center(
+                                child: tx(
+                                  mapQrCaption,
+                                  DocCatalog.kMapQr,
+                                  align: pw.TextAlign.center,
+                                ),
+                              ),
+                            ],
+                          ],
                         ],
                       ),
                     ),

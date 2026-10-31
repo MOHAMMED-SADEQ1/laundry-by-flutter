@@ -84,6 +84,37 @@ void main() {
       'dataDelete',
       'تنظيف الفواتير القديمة',
     ),
+    // ─── إنفاذ 2026-10-30: صلاحيات كانت **معلنة بلا إنفاذ** ───
+    (
+      'lib/controller/printInvoicecontroller.dart',
+      'invoiceCreate',
+      'إصدار فاتورة',
+    ),
+    (
+      'lib/services/invoice/invoice_output_service.dart',
+      'invoicePrint',
+      'طباعة/حفظ PDF الفاتورة وورقة المغسلة',
+    ),
+    (
+      'lib/services/invoice/credit_note_service.dart',
+      'invoiceReturn',
+      'إصدار إشعار دائن (مرتجع)',
+    ),
+    (
+      'lib/controller/reports/report_controller.dart',
+      'reportsProfit',
+      'حجب الربح والتكلفة عن غير المصرَّح',
+    ),
+    (
+      'lib/controller/reports/report_controller.dart',
+      'reportsTax',
+      'حجب الضريبة عن غير المصرَّح',
+    ),
+    (
+      'lib/controller/home/dashboard_controller.dart',
+      'reportsProfit',
+      'حجب ربح اليوم في لوحة التحكم',
+    ),
   ];
 
   for (final (file, constName, label) in critical) {
@@ -125,6 +156,11 @@ void main() {
     'lib/services/expense/expense_service.dart',
     'lib/controller/shift_controller.dart',
     'lib/sqldb.dart',
+    'lib/controller/printInvoicecontroller.dart',
+    'lib/services/invoice/invoice_output_service.dart',
+    'lib/services/invoice/credit_note_service.dart',
+    'lib/controller/reports/report_controller.dart',
+    'lib/controller/home/dashboard_controller.dart',
   ];
 
   final usedConsts = <String>{};
@@ -161,6 +197,11 @@ void main() {
     'shiftOpen',
     'shiftClose',
     'dataDelete',
+    'invoiceCreate',
+    'invoicePrint',
+    'invoiceReturn',
+    'reportsProfit',
+    'reportsTax',
   };
   final lost = enforcedConsts.difference(usedConsts);
   check('[4] كل الإنفاذ المُنجَز قائم', lost.isEmpty, lost.join(', '));

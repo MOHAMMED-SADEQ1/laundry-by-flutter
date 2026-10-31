@@ -137,8 +137,22 @@ const Map<String, String> kEnglish = <String, String>{
   'تشغيل صوت عند إتمام البيع.': 'Play a sound when the sale completes.',
   'الطريقة التي تُعرض بها بطاقات الأصناف عند البيع.':
       'How item cards are ordered on the sales screen.',
+  'عدد أعمدة الأصناف والخدمات': 'Items and services columns',
+  'عدد البطاقات في الصف الواحد في شبكة الأصناف والخدمات.':
+      'Number of cards per row in the items and services grid.',
+  'عدد الأعمدة': 'Column count',
+  'تلقائي': 'Auto',
+  'عمودان': 'Two columns',
+  '3 أعمدة': '3 columns',
+  '4 أعمدة': '4 columns',
+  '5 أعمدة': '5 columns',
+  '6 أعمدة': '6 columns',
+  'تعذّر حفظ عدد الأعمدة': 'Could not save the column count',
 
   // ═══ ما يظهر على الفاتورة ═══
+  'لغة الفاتورة والمستندات': 'Invoice & document language',
+  'لغة طباعة الفواتير والكشوف، مستقلة تمامًا عن لغة النظام. العربية هي المطلوبة نظامًا.':
+      'Language used for printed invoices and statements, independent of the system language. Arabic is the legally required language.',
   'عنوان الفاتورة': 'Invoice title',
   'إظهار الشعار': 'Show logo',
   'حجم شعار الفاتورة (مم)': 'Invoice logo size (mm)',
@@ -380,6 +394,31 @@ const Map<String, String> kEnglish = <String, String>{
   'تم تسليم الفاتورة رقم #{0}': 'Invoice #{0} delivered',
   'حذف البند': 'Delete item',
   'حذف البند؟': 'Delete item?',
+  // ═══ بنود الفاتورة: الدمج والتعديل (2026-10-31) ═══
+  'تعديل البند': 'Edit item',
+  'إجمالي البند': 'Line total',
+  'سعر الوحدة': 'Unit price',
+  'زيادة الكمية': 'Quantity increased',
+  '{0} — {1}: الكمية في الفاتورة صارت {2}':
+      '{0} — {1}: the invoice quantity is now {2}',
+  'أُضيف كبند منفصل': 'Added as a separate line',
+  '{0} — {1}: الملاحظة مختلفة عن البند الموجود، فبقيا سطرين.':
+      '{0} — {1}: the note differs from the existing line, so they stayed separate.',
+  '{0} — {1}: صورة البقعة مختلفة، فبقيا سطرين.':
+      '{0} — {1}: the stain photo differs, so they stayed separate.',
+  '{0} — {1}: سعر الوحدة مختلف عن البند الموجود.':
+      '{0} — {1}: the unit price differs from the existing line.',
+  'دُمج البندان': 'Lines merged',
+  '{0} — {1}: صار البند مطابقًا لبند موجود، فدُمجت الكميتان في سطر واحد ({2}).':
+      '{0} — {1}: this line now matches an existing one, so both quantities merged into a single line ({2}).',
+  'في الفاتورة: {0}': 'In invoice: {0}',
+  'الصنف غير موجود في قائمة الأسعار — عدّل السعر يدويًّا':
+      'Item not found in the price list — edit the price manually',
+  'سعر «{0}» من قائمة الأسعار: {1}': 'Price of "{0}" from the price list: {1}',
+  'الكمية يجب أن تكون بين {0} و{1}': 'Quantity must be between {0} and {1}',
+  'سعر غير صالح — اكتب رقمًا موجبًا': 'Invalid price — enter a positive number',
+  'بقع، تلف، قصّات… (اتركه فارغًا للحذف)':
+      'Stains, damage, cuts… (leave empty to remove)',
 
   // ═══ الأصناف ═══
   'اسم اللبس': 'Item name',
@@ -1742,6 +1781,8 @@ const Map<String, String> kEnglish = <String, String>{
       'A PDF copy of the invoice is saved as soon as the sale completes in the folder specified below. It is independent of printing: both can be combined or either can be enabled.',
   'المسار الكامل لمجلد الحفظ. يمكن كتابته هنا أو اختياره بالزر أدناه. فارغ = المجلد الافتراضي داخل «المستندات».':
       'The full save-folder path. You can type it here or choose it with the button below. Empty = the default folder inside “Documents”.',
+  'المسار الكامل لمجلد الحفظ. يمكن كتابته هنا أو اختياره بالزر أدناه. فارغ = المجلد الافتراضي داخل «المستندات». وهو المجلد نفسه الذي تُحفظ فيه كشوف الحساب وملخصات الورديات، فكل ما يُخرجه النظام تجده في مكان واحد.':
+      'The full save-folder path. You can type it here or choose it with the button below. Empty = the default folder inside “Documents”. It is the same folder used for account statements and shift summaries, so everything the system outputs sits in one place.',
   'المفتاح الأكبر: عند التفعيل تُحتسب الضريبة على كل فاتورة وتُخزَّن وتُطبع وتُخصم من الربح لأنها التزام لا إيراد. وعند التعطيل تُصفَّر في كل الوحدات ولا يُطبع QR ولا يُبنى أي إرسال للهيئة.':
       'The main switch: when enabled, tax is calculated on every invoice, stored, printed, and deducted from profit because it is a liability, not revenue. When disabled, it is zeroed across all modules, no QR is printed, and no submission to the authority is built.',
   'كنسبة عشرية: 0.15 = 15%. القيمة محصورة بين 0 و1. تُجمَّد النسبة في كل فاتورة عند إصدارها، فلا يُعيد تغييرها لاحقًا كتابة ضريبة فاتورة قديمة.':
@@ -3019,4 +3060,147 @@ const Map<String, String> kEnglish = <String, String>{
       '🧺 {0}\nHello {1},\nYour laundry is ready for pickup 💯\n📌 Invoice #{2}\n🔑 Pickup code: {3}\nSee you — {4} {5}',
   'رمز العملة المعروض في الواجهات والفواتير (مثال: ر.س). يُترجم الافتراضي إلى SAR في الوضع الإنجليزي، وأي رمز آخر يبقى كما تكتبه.':
       'The currency symbol shown across the interface and on invoices (e.g. SAR). The default is rendered as SAR in English mode; any other symbol you enter is kept as typed.',
+
+  // ═══ المرتجعات وإشعارات الدائن (2026-10-30) ═══
+  'إشعار دائن': 'Credit note',
+  'مُرجعة': 'Returned',
+  'تم الإرجاع': 'Returned',
+  'تعذّر الإرجاع': 'Could not return the invoice',
+  'إرجاع كامل': 'Full return',
+  'إرجاع الفاتورة / إشعار دائن': 'Return invoice / credit note',
+  'إرجاع الفاتورة #{0}': 'Return invoice #{0}',
+  'تأكيد الإرجاع': 'Confirm return',
+  'إجمالي الفاتورة': 'Invoice total',
+  'طريقة ردّ المبلغ': 'Refund method',
+  'رصيد للزبون (سلفة)': 'Customer credit (advance)',
+  'نقدًا من الصندوق': 'Cash from the drawer',
+  'لا تخرج نقدية من الدرج — يُخصم الرصيد من فواتيره القادمة.':
+      'No cash leaves the drawer — the credit is deducted from their next invoices.',
+  'يُخصم المبلغ من نقدية الوردية الحالية.':
+      'The amount is deducted from the current shift cash.',
+  'الفاتورة بلا زبون — لا حساب لتقييد الرصيد، فيُردّ المبلغ نقدًا من الصندوق.':
+      'The invoice has no customer — there is no account to post credit to, so the amount is refunded in cash from the drawer.',
+  'سبب الإرجاع (اختياري)': 'Return reason (optional)',
+  'سيُنشأ إشعار دائن سالب ويُبرَّأ ما تبقّى على الفاتورة. الفاتورة الأصلية لا تُحذف ولا تُعدَّل.':
+      'A negative credit note is created and the invoice remaining balance is cleared. The original invoice is neither deleted nor edited.',
+  'لا تملك صلاحية إصدار إشعار دائن — راجع مدير النظام.':
+      'You do not hold the “Issue credit note” permission — contact the system administrator.',
+  'الفاتورة غير موجودة.': 'Invoice not found.',
+  'هذا السجل إشعار دائن بذاته — لا يمكن إرجاعه.':
+      'This record is itself a credit note — it cannot be returned.',
+  'فاتورة اشتراك: صحّحها بإلغاء الاشتراك وتسويته، لا بإشعار دائن.':
+      'Subscription invoice: correct it by cancelling and settling the subscription, not with a credit note.',
+  'أُرجعت هذه الفاتورة مسبقًا.': 'This invoice has already been returned.',
+  'مبلغ الفاتورة غير صالح للإرجاع.':
+      'The invoice amount is not valid for a return.',
+  'تعذّر الوصول إلى قاعدة البيانات.': 'Could not reach the database.',
+  'تعذّر إصدار الإشعار: {0}': 'Could not issue the credit note: {0}',
+  'أُصدر إشعار دائن #{0} — وأُعيد {1} نقدًا من الصندوق.':
+      'Credit note #{0} issued — {1} refunded in cash from the drawer.',
+  'أُصدر إشعار دائن #{0} — وأُضيف {1} رصيدًا للزبون.':
+      'Credit note #{0} issued — {1} added to the customer credit.',
+
+  // ═══ إنفاذ الصلاحيات (2026-10-30) ═══
+  'إصدار الفواتير يحتاج صلاحية «إصدار فاتورة» — راجع مدير النظام.':
+      'Issuing invoices requires the “Create invoice” permission — contact the system administrator.',
+  'لا تملك صلاحية الطباعة — الفاتورة محفوظة، راجع مدير النظام.':
+      'You do not hold the print permission — the invoice is saved; contact the system administrator.',
+  'لا تملك صلاحية الطباعة — لم تُرسل ورقة المغسلة، راجع مدير النظام.':
+      'You do not hold the print permission — the laundry slip was not sent; contact the system administrator.',
+  'تجاوز سقف استخدام الاشتراك': 'Override subscription usage cap',
+  'السماح بإصدار فاتورة تتجاوز سقف قطع/قيمة الاشتراك. **مفتاح مستقلّ عن إدارة الاشتراكات**: التجاوز يُنقص هامش الاشتراك فعليًّا، ومن يدير الاشتراكات لا يلزم أن يملك إسقاط سقفها.':
+      'Allow an invoice that exceeds the subscription piece/value cap. A key independent of subscription management: overriding really reduces the subscription margin, and whoever manages subscriptions need not be allowed to lift its cap.',
+  'إتاحة طباعة ملصق لكل قطعة عند الاستلام — **غير مفعّلة بعد**، والإعداد محفوظ للمرحلة القادمة.':
+      'Allow printing one label per item on intake — **not enabled yet**; the setting is kept for the next phase.',
+  'مقاس ملصق تتبّع قطع الغسيل — **لا تُطبع ملصقات بعد**، والإعداد محفوظ للمرحلة القادمة.':
+      'The size of the garment tracking label — **labels are not printed yet**; the setting is kept for the next phase.',
+  // ═══ لغة الطباعة (2026-10-30) ═══
+  'لغة الطباعة': 'Print language',
+  'لغة كل مستند يخرج من النظام: الفاتورة · كشف الحساب · ملخص الوردية · ورقة المغسلة. لا تتبع لغة النظام.':
+      'The language of every document the system outputs: invoice · account statement · shift summary · laundry slip. It does not follow the interface language.',
+  'لغة النظام الآن: {0} — تغييرها لا يغيّر لغة الطباعة.':
+      'Interface language now: {0} — changing it does not change the print language.',
+  'تُطبَّق اللغة عند كل طباعة — إعادة طباعة فاتورة قديمة تستخدم اللغة المختارة الآن.':
+      'The language applies to every print — reprinting an old invoice uses the language selected now.',
+  'معاينة تمثيلية بلغة الطباعة المختارة — تتغير مع كل خيار إظهار، ولا تُحفظ ولا تُطبع.':
+      'A representative preview in the selected print language — it follows every visibility option and is neither saved nor printed.',
+  // ═══ رمز QR لموقع النشاط (2026-10-30) ═══
+  'رمز QR لموقع النشاط': 'Business location QR',
+  'امسح الرمز للوصول إلى موقعنا': 'Scan the code to reach our location',
+  'يُطبع أسفل الفاتورة ويفتح موقع النشاط على خرائط جوجل. يحتاج رابطًا في «معلومات النشاط ← رابط الموقع»، ولا يُطبع شيء إن كان الرابط فارغًا.':
+      'Printed at the bottom of the invoice and opens the business location on Google Maps. It needs a link under “Business information → Location link”; nothing is printed when the link is empty.',
+  'يُطبع أسفل الكشف ويفتح موقع النشاط على خرائط جوجل. يحتاج رابطًا في «معلومات النشاط ← رابط الموقع».':
+      'Printed at the bottom of the statement and opens the business location on Google Maps. It needs a link under “Business information → Location link”.',
+  'اختياري — يُطبع كرمز QR أسفل الفاتورة': 'Optional — printed as a QR code at the bottom of the invoice',
+  'رابط الموقع لا يصلح لرمز QR — يُقبل رابط http/https أو إحداثيات مثل 24.7136,46.6753.':
+      'The location link cannot be encoded as a QR — use an http/https link or coordinates such as 24.7136,46.6753.',
+  // ═══ حفظ PDF من كل مسارات الإخراج (2026-10-30) ═══
+  'حفظ PDF': 'Save PDF',
+  'حفظ نسخة PDF': 'Save a PDF copy',
+  'حفظ الكشف PDF': 'Save statement PDF',
+  'حفظ الملخص PDF': 'Save summary PDF',
+  'في مجلد حفظ المستندات — بلا طباعة':
+      'In the documents folder — without printing',
+  'فشل في حفظ ملخص الوردية: {0}': 'Failed to save the shift summary: {0}',
+  // ═══ حالة رابط الموقع (2026-10-30) ═══
+  'لا رمز QR — لم يُدخَل رابط موقع.':
+      'No QR — no location link has been entered.',
+  'لن يُطبع رمز QR: هذا ليس رابطًا. الصق رابطًا يبدأ بـ https:// أو إحداثيات مثل 24.7136,46.6753.':
+      'No QR will be printed: this is not a link. Paste a link starting with https:// or coordinates such as 24.7136,46.6753.',
+  'لن يُطبع رمز QR: الرابط بلا نطاق — يبدو رمز مشاركة فقط.':
+      'No QR will be printed: the link has no domain — it looks like a share code only.',
+  'سيُطبع رمز QR، لكن الرابط لا يبدو رابط خرائط جوجل — تأكّد أنه يفتح موقعك.':
+      'A QR will be printed, but the link does not look like a Google Maps link — make sure it opens your location.',
+  'سيُطبع رمز QR على الفاتورة وكشف الحساب، ويفتح موقعك على خرائط جوجل.':
+      'A QR will be printed on the invoice and the account statement, opening your location on Google Maps.',
+  'استخدام الصيغة الصحيحة: {0}': 'Use the correct form: {0}',
+  'رمز QR للموقع': 'Location QR',
+  'رابط الموقع بلا نطاق — لن يُطبع رمز QR. اضغط زرّ الإصلاح تحت الحقل، أو استخدم: {0}':
+      'The location link has no domain — no QR will be printed. Press the repair button under the field, or use: {0}',
+  'مقاسات الطباعة':
+      'Print sizes',
+  'عرض وارتفاع الشعار ورمز QR بالمليمتر — وتُحسب مساحتهما ونسبتهما من الورق، وتُقصّ القيم تلقائيًّا على مقاس الورق المختار.':
+      'The logo and QR size in millimetres — their area and share of the paper are computed, and both are trimmed to the selected paper size.',
+  'اجعل الشعار مربّعًا':
+      'Make the logo square',
+  'القيم الافتراضية':
+      'Default values',
+  'اكتب الرقم ثم اضغط Enter لتطبيقه.':
+      'Type the number and press Enter to apply it.',
+  'الشعار على الورق: {0} × {1} مم':
+      'Logo on paper: {0} × {1} mm',
+  'المساحة القصوى {0} مم² — {1}% من الورق':
+      'Up to {0} mm² — {1}% of the paper',
+  'رمز QR: {0} × {1} مم':
+      'QR code: {0} × {1} mm',
+  'لا يُطبع: لم يُسجَّل رابط موقع النشاط بعد.':
+      'Not printed: no business location link has been saved yet.',
+  'مجموع ارتفاعهما {0}% من ارتفاع الورق':
+      'Together they take {0}% of the paper height',
+  'النسبة كبيرة: الرأس والتذييل يأكلان أغلب الورقة. صغّر الشعار أو الرمز كي لا يتزاحم النصّ أو يُدفع إلى صفحة ثانية.':
+      'That is too much: the header and footer are eating most of the page. Shrink the logo or the QR so the text is not crowded or pushed to a second page.',
+  'الورق المختار: {0} — والمتاح للطباعة {1} مم عرضًا.':
+      'Selected paper: {0} — {1} mm available for printing.',
+  'الشعار سيُقصّ: طُلب أكبر من الورق ({0} مم عرضًا).':
+      'The logo will be trimmed: it was set wider than the paper ({0} mm).',
+  'سيُطبع {0} × {1} مم بدل المقاس المطلوب.':
+      'It will print at {0} × {1} mm instead of the requested size.',
+  'رمز QR سيُقصّ إلى {0} مم لأن الورق لا يتّسع أكثر.':
+      'The QR will be trimmed to {0} mm because the paper cannot fit more.',
+  'الأفضل اختيار مقاس أقلّ من ذلك صراحةً لتعرف ما سيُطبع.':
+      'It is better to choose a smaller size explicitly so you know what will print.',
+  'عرض الشعار (مم)':
+      'Logo width (mm)',
+  'عرض الشعار أعلى الفاتورة بالمليمتر. يُقصّ تلقائيًّا على عرض الورق إن تجاوزه.':
+      'The logo width at the top of the invoice, in millimetres. It is trimmed to the paper width if it exceeds it.',
+  'ارتفاع الشعار (مم)':
+      'Logo height (mm)',
+  'ارتفاع الشعار بالمليمتر. يُقيَّد بسقف الارتفاع كي لا يدفع أصناف الفاتورة إلى صفحة ثانية.':
+      'The logo height in millimetres. It is capped so it cannot push the invoice items onto a second page.',
+  'مقاس رمز QR للموقع (مم)':
+      'Location QR size (mm)',
+  'ضلع مربّع رمز الموقع أسفل الفاتورة بالمليمتر. الأكبر أسهل تصويرًا، ويُقصّ على عرض الورق.':
+      'The side of the location QR square at the bottom of the invoice, in millimetres. Bigger is easier to scan, and it is trimmed to the paper width.',
+  'لغة الطباعة · مقاسات الشعار ورمز QR · الطابعة الافتراضية · خطّ الطباعة · حفظ PDF':
+      'Print language · Logo and QR sizes · Default printer · Print font · Save PDF',
 };

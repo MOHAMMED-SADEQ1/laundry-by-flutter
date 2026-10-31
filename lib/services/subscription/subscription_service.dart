@@ -476,7 +476,10 @@ class SubscriptionService {
       );
     }
 
-    final canOverride = SessionManager.isManager;
+    // 🛡️ التجاوز **صلاحية** لا اسم دور — انظر `PermissionKeys.subscriptionUsageOverride`.
+    final canOverride = PermissionService.can(
+      PermissionKeys.subscriptionUsageOverride,
+    );
     final parts = <String>[];
     if (overP > 0) parts.add(trf('{0} قطعة', [overP]));
     if (overV > 0) {

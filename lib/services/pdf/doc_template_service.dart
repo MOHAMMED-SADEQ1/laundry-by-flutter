@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
-import 'package:laundry/services/i18n/l10n.dart';
+import 'package:laundry/services/i18n/doc_language.dart';
 import 'package:laundry/services/i18n/translations_en.dart';
 import 'package:laundry/services/pdf/doc_template.dart';
 import 'package:laundry/services/security/session_manager.dart';
@@ -44,17 +44,21 @@ class DocTemplateService {
 
   /// خريطة النقل إلى `compute` — أنواع أوّلية فقط.
   ///
-  /// تُرفق خريطة الترجمة عند الواجهة الإنجليزية، لأن العزل لا يرى حالة
-  /// [L10n] العامة. النصوص التي عدّلها المستخدم تبقى كما هي إن لم يكن لها
-  /// مقابل إنجليزي (السقوط للعربية).
-  Map<String, dynamic> transport(DocKind kind) {
+  /// **اللغة تُختم هنا من إعداد «لغة الفاتورة والمستندات»**، لا من لغة
+  /// الواجهة. سببان:
+  ///   1. العزل لا يرى `L10n` أصلًا، فأي قراءة لها هناك تعطي الافتراضي.
+  ///   2. لغة الورقة قرار مالي مستقلّ: تبديل لغة الشاشة لا يجوز أن يغيّر
+  ///      لغة الفاتورة الضريبية.
+  ///
+  /// [language] للاختبارات فقط؛ غيابه ⇒ الإعداد المحفوظ، ثم العربية.
+  Map<String, dynamic> transport(DocKind kind, {DocLanguage? language}) {
     final data = template(kind).toTransport();
-    // 🚨 **اللغة تُختم هنا** — لا داخل المولّد. المولّد قد يعمل في
-    // `compute` (عزل مستقلّ) لا يرى `L10n`، فكان يقرأ الافتراضي (العربية)
-    // ويُخرج فاتورة عربية حتى في الوضع الإنجليزي. `transport` يعمل دائمًا
-    // في الخيط الرئيسي حيث `L10n` صحيح.
-    data['docLang'] = L10n.language.code;
-    if (L10n.isEnglish) data['docEnglish'] = kEnglish;
+    final settings = AppSettingsService.instance;
+    final lang =
+        language ??
+        (settings.isLoaded ? settings.docLanguage : DocLanguage.defaultLanguage);
+    data['docLang'] = lang.code;
+    if (lang.isEnglish) data['docEnglish'] = kEnglish;
     return data;
   }
 

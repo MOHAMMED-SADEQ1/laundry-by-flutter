@@ -67,8 +67,11 @@ const Set<String> kNonUiLiterals = <String>{
   'deleteOldInvoices مرفوض: لا صلاحية data.delete',
   'أُزيل جدول غير مستخدم: \$table',
   'إصلاح مجموع \$repaired فاتورة كانت مخزَّنة بصفر',
-  'ترحيل حالات المصنعية: \$changed قيمة',
+  'تطبيع حالات المصنعية: \$changed صفًّا',
+  'تنظيف إعدادات قديمة: \${rows.length} مفتاحًا',
   'ترحيل طرق الدفع: \$changed قيمة',
+  'ترحيل مقاس الشعار: \$legacy مم ⇒ عرض × ارتفاع',
+  'PrinterService: تعذّرت إعادة توليد نسخة الطباعة — \$e',
   'تعبئة \$inserted بند في invoice_items من الفواتير القديمة',
   'تعذّر إزالة الجدول \$table: \$e',
   'تم إنشاء قاعدة البيانات! تم إنشاء الجداول بنجاح',
@@ -83,9 +86,17 @@ const Set<String> kNonUiLiterals = <String>{
   '۰۱۲۳۴۵۶۷۸۹',
   r'[,،\s]+',
   'آ', 'أ', 'إ', 'ا', 'ة', 'ه', 'ى', 'ي',
+  // حروف يحملها **جدول التطبيع** في `InvoiceLines` (توحيد الهمزات) — تُقارَن
+  // لا تُعرَض، وترجمتها تُعطّل المطابقة.
+  'ٱ', 'ئ', 'ؤ', 'و',
+  // نطاق الأرقام العربية/الهندية — يُقارَن لا يُعرَض.
+  '[٠-٩۰-۹]',
 
   // ─── أسماء ملفّات على القرص ───
   'كشف_حساب_\${st.customerId}.pdf',
+  'كشف_حساب_\$customerId',
+  'ملخص_الوردية',
+  'ملخص_الوردية_\$id',
 
   // ─── نصّ له شقيق `_en` في نفس الصفّ ───
   'استرداد قيمة أيام غير مُقدَّمة — \$custName '
@@ -405,8 +416,9 @@ void main() {
   );
   final pdf = File('lib/core/services/preparePDF.dart').readAsStringSync();
   check(
-    '[6] اتجاه PDF يتبع اللغة',
-    pdf.contains('L10n.isRtl ? pw.TextDirection.rtl : pw.TextDirection.ltr'),
+    '[6] اتجاه PDF يتبع لغة المستند',
+    pdf.contains('final isRtl = _rtlOf(data);') &&
+        pdf.contains('final isRtl = _rtlOf(shiftData);'),
     true,
   );
   final docTemplate =
@@ -424,9 +436,15 @@ void main() {
     'lib/services/pdf/doc_template_service.dart',
   ).readAsStringSync();
   check(
-    '[6] `transport` يختم لغة المستند',
-    docService.contains("data['docLang'] = L10n.language.code;"),
+    '[6] `transport` يختم لغة المستند من الإعداد',
+    docService.contains("data['docLang'] = lang.code;") &&
+        docService.contains('settings.docLanguage'),
     true,
+  );
+  check(
+    '[6] لغة المستند لا تُشتقّ من لغة الواجهة',
+    docService.contains('L10n.language') || docService.contains('L10n.isEnglish'),
+    false,
   );
   check(
     '[6] `DocTemplateView` يقرأ `docLang` لا `L10n`',

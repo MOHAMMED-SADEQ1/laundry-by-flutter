@@ -20,6 +20,7 @@ import 'package:laundry/core/services/paper_size.dart';
 import 'package:laundry/services/pdf/arabic_text.dart';
 import 'package:laundry/services/pdf/doc_template.dart';
 import 'package:laundry/services/pdf/laundry_slip.dart';
+import 'package:laundry/services/printer/print_layout.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
@@ -162,16 +163,30 @@ class LaundrySlipPdf {
     final font = data['arabicFont'] as pw.Font;
     final rtl = _rtlOf(data);
     final paper = paperForData(data);
-    final compact = paper.isThermal || paper.widthMm <= 105;
-    final narrow = paper.widthMm <= 58;
+    // نسخة الطباعة تتكيّف مع ورق الطابعة الفعلي وهوامشها (انظر PrintLayout).
+    // الشرح الكامل في `preparePDF.dart`؛ القاعدة نفسها: لا محتوى في هامش
+    // غير قابل للطباعة، ولا صفحة أعرض من الورق المادي.
+    final printLayout = PrintLayout.fromData(data[PrintLayout.dataKey]);
+    final pageWidth =
+        printLayout?.width ?? PaperSizes.mmToPoints(paper.widthMm);
+    final widthMm = pageWidth / PdfPageFormat.mm;
+    final compact = paper.isThermal || widthMm <= 105;
+    final narrow = widthMm <= 58;
 
     // 🚨 القالب هو مصدر النصّ والتفعيل والنمط — لا نصوص مكتوبة هنا.
     final doc = DocTemplateView.of(data, DocKind.laundrySlip);
 
-    final pdfFormat = PdfPageFormat(
-      PaperSizes.mmToPoints(paper.widthMm),
-      PaperSizes.mmToPoints(paper.heightMm),
-      marginAll: PaperSizes.mmToPoints(paper.isThermal ? 2 : (compact ? 7 : 12)),
+    final baseMargin = PaperSizes.mmToPoints(
+      paper.isThermal ? 2 : (compact ? 7 : 12),
+    );
+    final safety = PaperSizes.mmToPoints(paper.isThermal ? 0.5 : 1.0);
+    final pdfFormat = PrintLayout.pageFormat(
+      width: PaperSizes.mmToPoints(paper.widthMm),
+      height: PaperSizes.mmToPoints(paper.heightMm),
+      layout: printLayout,
+      baseMargin: baseMargin,
+      safety: safety,
+      keepHeight: paper.isThermal,
     );
 
     final items = _itemsOf(data);

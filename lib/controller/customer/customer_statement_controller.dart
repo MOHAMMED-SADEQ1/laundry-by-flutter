@@ -1,10 +1,10 @@
-import 'dart:io';
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
 import 'package:laundry/core/services/preparePDF.dart';
+import 'package:laundry/services/invoice/invoice_output_service.dart';
+import 'package:laundry/services/invoice/invoice_pdf_naming.dart';
 import 'package:laundry/services/pdf/doc_template.dart';
 import 'package:laundry/services/pdf/doc_template_service.dart';
 import 'package:laundry/core/theme/app_colors.dart';
@@ -36,13 +36,17 @@ class CustomerStatementController extends GetxController {
   /// ضبط الفترة (null = إلغاء التقييد).
   void setRange(DateTimeRange? range) => selectedRange.value = range;
 
-  /// يبني الكشف ويرسله للطباعة أو المشاركة.
+  /// يبني الكشف ويرسله للطباعة أو المشاركة أو يحفظه PDF.
   ///
   /// [share] = true → قائمة مشاركة النظام (واتساب)، وإلا → حوار الطباعة.
+  /// [savePdfOnly] = true → **حفظ فقط**: لا حوار طباعة ولا مشاركة. طُلب
+  /// صريحًا كي يكون للكشف مسار حفظ مستقلّ عن الطباعة، فلا يُضطر المستخدم
+  /// إلى إرسال ورقة إلى الطابعة ليحصل على ملف.
   /// [range] يتجاوز الفترة المخزَّنة إن مُرِّر.
   Future<void> export(
     int customerId, {
     bool share = false,
+    bool savePdfOnly = false,
     DateTimeRange? range,
   }) async {
     if (isBusy.value) return;
@@ -66,6 +70,11 @@ class CustomerStatementController extends GetxController {
       }
       final filename = 'كشف_حساب_${st.customerId}.pdf';
 
+      if (savePdfOnly) {
+        await _saveToDisk(bytes, st.customerId);
+        return;
+      }
+
       if (share) {
         await Printing.sharePdf(
           bytes: bytes,
@@ -86,7 +95,7 @@ class CustomerStatementController extends GetxController {
           // وإلا ظنّ المستخدم أن الكشف طُبع وهو لم يُطبع.
           final issue = PrinterService.instance.lastIssue;
           if (issue != null) _info(issue, AppColors.warning);
-          await _saveToDisk(bytes, filename, st.customerName);
+          await _saveToDisk(bytes, st.customerId);
         }
       }
     } catch (e) {
@@ -151,6 +160,8 @@ class CustomerStatementController extends GetxController {
       'bizName': biz.name,
       'bizPhone': biz.phone,
       'bizAddress': biz.address,
+      // رابط الموقع — يُرمَّز QR أسفل الكشف.
+      'bizMapUrl': biz.location,
       'customerName': st.customerName,
       'customerPhone': st.phone,
       'printedAt': DateFormat('yyyy-MM-dd hh:mm a').format(DateTime.now()),
@@ -233,16 +244,22 @@ class CustomerStatementController extends GetxController {
     return note.isEmpty ? base : '$base – $note';
   }
 
-  Future<void> _saveToDisk(
-    Uint8List bytes,
-    String filename,
-    String customerName,
-  ) async {
+  /// يحفظ الكشف في **مجلد إخراج المستندات** نفسه الذي تُحفظ فيه الفواتير.
+  ///
+  /// 🚨 **كان يُحفظ في مجلد مؤقّت** (`Directory.systemTemp.createTemp`) فتبدو
+  /// الرسالة نجاحًا («حُفظ الكشف في …\Temp\statementXXXX\…») والملف يمحوه
+  /// النظام عند أول تنظيف — أي أنه لا يُحفظ أصلًا. صار المسار من
+  /// [InvoiceOutputService] فمكان واحد لكل ما يخرج من النظام، والاسم فريد
+  /// بالتاريخ ([InvoicePdfNaming.buildDocumentFileName]) فلا يدهس كشفًا سابقًا.
+  Future<void> _saveToDisk(Uint8List bytes, int customerId) async {
     try {
-      final dir = await Directory.systemTemp.createTemp('statement');
-      final file = File('${dir.path}/$filename');
-      await file.writeAsBytes(bytes);
-      _info(trf('حُفظ الكشف في: {0}', [file.path]), AppColors.info);
+      final path = await InvoiceOutputService.instance.saveDocumentPdf(
+        bytes,
+        fileName: InvoicePdfNaming.buildDocumentFileName(
+          'كشف_حساب_$customerId',
+        ),
+      );
+      _info(trf('حُفظ الكشف في: {0}', [path]), AppColors.info);
     } catch (e) {
       debugPrint('saveStatement error: $e');
       _info(tr('تعذّر حفظ الكشف'), AppColors.danger);

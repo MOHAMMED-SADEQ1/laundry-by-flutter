@@ -226,6 +226,26 @@ class SettingOptions {
 
   // ─── ما يظهر على الفاتورة ──
 
+  /// لغة المستندات المطبوعة — **لا تتبع لغة الواجهة**.
+  ///
+  /// هذا الخيار هو الحاكم الوحيد للغة الورق: الفاتورة · كشف الحساب · ملخص
+  /// الوردية · ورقة المغسلة. تغيير لغة النظام لا يمسّه.
+  ///
+  /// ⚠️ **العربية هي المطلوبة نظامًا** في الفاتورة الضريبية السعودية؛
+  /// والإنجليزية خيار تجاري لمن يطبع نسخًا للزوّار، لا بديل عن العربية في
+  /// الالتزام النظامي.
+  static const SettingOption docLanguage = SettingOption(
+    key: AppConstants.settingDocLanguage,
+    label: 'لغة الفاتورة والمستندات',
+    description:
+        'لغة طباعة الفواتير والكشوف، مستقلة تمامًا عن لغة النظام. العربية هي المطلوبة نظامًا.',
+    kind: SettingKind.choice,
+    defaultValue: 'ar',
+    group: SettingGroups.invoiceDisplay,
+    choices: <String>['ar', 'en'],
+    choiceLabels: <String, String>{'ar': 'العربية', 'en': 'English'},
+  );
+
   static const SettingOption invoiceTitleText = SettingOption(
     key: AppConstants.settingInvoiceTitleText,
     label: 'عنوان الفاتورة',
@@ -244,17 +264,49 @@ class SettingOptions {
     group: SettingGroups.invoiceDisplay,
   );
 
-  static const SettingOption invoiceLogoSize = SettingOption(
-    key: AppConstants.settingInvoiceLogoSize,
-    label: 'حجم شعار الفاتورة (مم)',
+  /// عرض الشعار بالمليمتر.
+  ///
+  /// **لماذا عرض وارتفاع منفصلان؟** الشعار المستطيل (اسم النشاط + رسم، أو
+  /// شعار أفقي) كان يُرسم في مربّع فيضيع طرفاه أو يُترك فراغ. والمقاس
+  /// المربّع يبقى هو الافتراضي (53×53) فلا يتغيّر شكل أي فاتورة قائمة.
+  static const SettingOption invoiceLogoWidth = SettingOption(
+    key: AppConstants.settingInvoiceLogoWidth,
+    label: 'عرض الشعار (مم)',
     description:
-        'عرض الشعار المربّع أعلى الفاتورة بالمليمتر (53 = الحجم الافتراضي ≈ 5.3 سم).',
+        'عرض الشعار أعلى الفاتورة بالمليمتر. يُقصّ تلقائيًّا على عرض الورق إن تجاوزه.',
     kind: SettingKind.integer,
-    defaultValue: '${AppConstants.invoiceLogoSizeDefaultMm}',
-    min: AppConstants.invoiceLogoSizeMinMm,
-    max: AppConstants.invoiceLogoSizeMaxMm,
+    defaultValue: '${AppConstants.invoiceLogoWidthDefaultMm}',
+    min: AppConstants.invoiceLogoWidthMinMm,
+    max: AppConstants.invoiceLogoWidthMaxMm,
     group: SettingGroups.invoiceDisplay,
     enabledBy: AppConstants.settingInvoiceShowLogo,
+  );
+
+  static const SettingOption invoiceLogoHeight = SettingOption(
+    key: AppConstants.settingInvoiceLogoHeight,
+    label: 'ارتفاع الشعار (مم)',
+    description:
+        'ارتفاع الشعار بالمليمتر. يُقيَّد بسقف الارتفاع كي لا يدفع أصناف الفاتورة إلى صفحة ثانية.',
+    kind: SettingKind.integer,
+    defaultValue: '${AppConstants.invoiceLogoHeightDefaultMm}',
+    min: AppConstants.invoiceLogoHeightMinMm,
+    max: AppConstants.invoiceLogoHeightMaxMm,
+    group: SettingGroups.invoiceDisplay,
+    enabledBy: AppConstants.settingInvoiceShowLogo,
+  );
+
+  /// مقاس رمز QR لموقع النشاط — لا يظهر أثره إلا إذا كان الحقل مُفعَّلًا في
+  /// قالب الفاتورة وكان رابط الموقع صالحًا.
+  static const SettingOption mapQrSize = SettingOption(
+    key: AppConstants.settingMapQrSize,
+    label: 'مقاس رمز QR للموقع (مم)',
+    description:
+        'ضلع مربّع رمز الموقع أسفل الفاتورة بالمليمتر. الأكبر أسهل تصويرًا، ويُقصّ على عرض الورق.',
+    kind: SettingKind.integer,
+    defaultValue: '${AppConstants.mapQrSizeDefaultMm}',
+    min: AppConstants.mapQrSizeMinMm,
+    max: AppConstants.mapQrSizeMaxMm,
+    group: SettingGroups.invoiceDisplay,
   );
 
   static const SettingOption invoiceShowTaxNumber = SettingOption(
@@ -493,7 +545,8 @@ class SettingOptions {
   static const SettingOption labelPaperSize = SettingOption(
     key: AppConstants.settingLabelPaperSize,
     label: 'مقاس ملصق القطع',
-    description: 'مقاس ملصق تتبّع قطع الغسيل (يُطبع مع لوحة المصنعية).',
+    description:
+        'مقاس ملصق تتبّع قطع الغسيل — **لا تُطبع ملصقات بعد**، والإعداد محفوظ للمرحلة القادمة.',
     kind: SettingKind.choice,
     defaultValue: AppConstants.labelPaperSizeDefault,
     group: SettingGroups.printing,
@@ -619,7 +672,7 @@ class SettingOptions {
     key: AppConstants.settingInvoicePdfDirectory,
     label: 'مجلد حفظ الفواتير',
     description:
-        'المسار الكامل لمجلد الحفظ. يمكن كتابته هنا أو اختياره بالزر أدناه. فارغ = المجلد الافتراضي داخل «المستندات».',
+        'المسار الكامل لمجلد الحفظ. يمكن كتابته هنا أو اختياره بالزر أدناه. فارغ = المجلد الافتراضي داخل «المستندات». وهو المجلد نفسه الذي تُحفظ فيه كشوف الحساب وملخصات الورديات، فكل ما يُخرجه النظام تجده في مكان واحد.',
     kind: SettingKind.text,
     defaultValue: '',
     group: SettingGroups.invoiceOutput,
@@ -974,7 +1027,10 @@ class SettingOptions {
   static const SettingOption processingPrintItemTags = SettingOption(
     key: AppConstants.settingProcessingPrintItemTags,
     label: 'طباعة ملصقات القطع',
-    description: 'إتاحة طباعة ملصق لكل قطعة عند الاستلام.',
+    // صادق لا وعد: لا يوجد في النظام أي طباعة ملصقات بعد. إبقاء النصّ
+    // كأنه ميزة قائمة يجعل المستخدم يفعّله وينتظر ورقًا لا يأتي.
+    description:
+        'إتاحة طباعة ملصق لكل قطعة عند الاستلام — **غير مفعّلة بعد**، والإعداد محفوظ للمرحلة القادمة.',
     kind: SettingKind.boolean,
     defaultValue: '0',
     group: SettingGroups.processing,
@@ -1127,6 +1183,28 @@ class SettingOptions {
     },
   );
 
+  /// عدد أعمدة شبكة «الأصناف والخدمات» في الشاشة الرئيسية.
+  ///
+  /// `auto` يحافظ على السلوك المرن السابق (حسب عرض الشاشة)، والأرقام تثبّت
+  /// العدد الذي يختاره المستخدم من الشاشة الرئيسية أو من الإعدادات.
+  static const SettingOption homeGridColumns = SettingOption(
+    key: AppConstants.settingHomeGridColumns,
+    label: 'عدد أعمدة الأصناف والخدمات',
+    description: 'عدد البطاقات في الصف الواحد في شبكة الأصناف والخدمات.',
+    kind: SettingKind.choice,
+    defaultValue: AppConstants.homeGridColumnsDefault,
+    group: SettingGroups.pos,
+    choices: <String>['auto', '2', '3', '4', '5', '6'],
+    choiceLabels: <String, String>{
+      'auto': 'تلقائي',
+      '2': 'عمودان',
+      '3': '3 أعمدة',
+      '4': '4 أعمدة',
+      '5': '5 أعمدة',
+      '6': '6 أعمدة',
+    },
+  );
+
   // ─── الزبائن ───
 
   static const SettingOption customerRequirePhone = SettingOption(
@@ -1251,9 +1329,12 @@ class SettingOptions {
     invoiceAllowCredit,
     invoiceAllowDiscount,
     // ما يظهر على الفاتورة
+    docLanguage,
     invoiceTitleText,
     invoiceShowLogo,
-    invoiceLogoSize,
+    invoiceLogoWidth,
+    invoiceLogoHeight,
+    mapQrSize,
     invoiceShowTaxNumber,
     invoiceShowCrNumber,
     invoiceShowShortAddress,
@@ -1336,6 +1417,7 @@ class SettingOptions {
     posDefaultPaymentMethod,
     posSoundOnSale,
     clothingSort,
+    homeGridColumns,
     // الزبائن
     customerRequirePhone,
     customerDefaultTier,

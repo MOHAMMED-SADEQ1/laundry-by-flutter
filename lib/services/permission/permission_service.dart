@@ -260,7 +260,6 @@ class PermissionService {
   // تُحوَّل تدريجيًا إلى `can(PermissionKeys.x)` الصريح.
 
   static bool get canCreateInvoice => can('invoice.create');
-  static bool get canDeleteInvoice => can('invoice.delete');
   static bool get canManageCategories => can('category.manage');
   static bool get canManageCustomers => can('customer.manage');
   static bool get canManageUsers => can('users.manage');
@@ -276,6 +275,8 @@ class PermissionService {
   static bool get canApplyDiscount => can('invoice.discount_apply');
   static bool get canSellOnCredit => can('invoice.sell_on_credit');
   static bool get canOverrideCreditLimit => can('customer.credit_limit_override');
+  static bool get canOverrideSubscriptionUsage =>
+      can('subscription.usage_override');
   static bool get canSetCreditLimit => can('customer.credit_limit');
   static bool get canDeleteCustomer => can('customer.delete');
   static bool get canViewDebtReports => can('debt.view');

@@ -45,6 +45,11 @@ class AddCategoryController extends GetxController {
   /// القيمة المرجعية تبقى في `settings` (هذا انعكاس لها لا مصدر ثانٍ).
   final Rx<ClothingSort> sortMode = ClothingSort.byKey(null).obs;
 
+  /// عدد أعمدة شبكة «الأصناف والخدمات» — صفر = تلقائي حسب عرض الشاشة.
+  /// `Rx` لأن تغييره من زرّ الشاشة الرئيسية يجب أن يعيد بناء الشبكة فورًا.
+  final RxInt gridColumns =
+      AppSettingsService.instance.homeGridColumns.obs;
+
   @override
   void onInit() {
     super.onInit();
@@ -99,6 +104,25 @@ class AddCategoryController extends GetxController {
     } catch (e) {
       debugPrint('changeSort error: $e');
       messagefailer(tr('تعذّر حفظ ترتيب الأصناف'));
+    }
+  }
+
+  /// تغيير عدد أعمدة الشبكة من الشاشة الرئيسية.
+  ///
+  /// الحفظ **قبل** تحديث الحالة: لو فشل الحفظ لا نعرض عددًا لا يطابق الإعداد.
+  /// لا إعادة جلب — الأعمدة تخطيط واجهة لا استعلام قاعدة.
+  Future<void> changeGridColumns(int columns) async {
+    final safe = columns <= 0 ? 0 : columns.clamp(2, 6).toInt();
+    if (safe == gridColumns.value) return;
+    try {
+      await AppSettingsService.instance.set(
+        AppConstants.settingHomeGridColumns,
+        safe == 0 ? 'auto' : '$safe',
+      );
+      gridColumns.value = safe;
+    } catch (e) {
+      debugPrint('changeGridColumns error: $e');
+      messagefailer(tr('تعذّر حفظ عدد الأعمدة'));
     }
   }
 

@@ -4,6 +4,7 @@ import 'package:laundry/controller/invoicecontroller.dart';
 import 'package:laundry/controller/printInvoicecontroller.dart';
 import 'package:laundry/controller/shift_controller.dart';
 import 'package:laundry/controller/subscriptions_controller.dart';
+import 'package:laundry/config/constants.dart';
 import 'package:laundry/core/constant/routes.dart';
 import 'package:laundry/core/services/invoicecounterservice.dart';
 import 'package:laundry/core/theme/app_colors.dart';
@@ -18,6 +19,7 @@ import 'package:laundry/services/subscription/subscription_service.dart';
 import 'package:laundry/services/payment/payment_method.dart';
 import 'package:laundry/sqldb.dart';
 import 'package:laundry/view/widget/common/animation_wrappers.dart';
+import 'package:laundry/view/widget/invoice/invoice_copies_selector.dart';
 import 'package:laundry/services/permission/permission_catalog.dart';
 import 'package:laundry/services/i18n/ui_direction.dart';
 
@@ -77,12 +79,9 @@ class CustomPayInvoice extends StatelessWidget {
                   // المجموع يُحسب من البنود مباشرة (وليس من حقل مخزَّن)
                   total: invcontroller.totalValue(),
                   invoiceCustomerName: invcontroller.customername.text,
-                  // القطع تُمرَّر لأن الحوار يفحص سقف الاشتراك قبل الإصدار
-                  itemPieces: invcontroller.invoice.fold<int>(
-                    0,
-                    (s, it) =>
-                        s + (int.tryParse('${it['count'] ?? 0}') ?? 0),
-                  ),
+                  // القطع تُمرَّر لأن الحوار يفحص سقف الاشتراك قبل الإصدار.
+                  // تُقرأ من المتحكّم لا بجمع محلي — مصدر واحد للكمية.
+                  itemPieces: invcontroller.piecesCount(),
                 ),
                 barrierColor: Colors.black54,
               ).then((result) async {
@@ -286,6 +285,17 @@ class _PaymentMethodDialogState extends State<_PaymentMethodDialog> {
     fallback: PaymentMethod.card.key,
   );
   double _paid = 0;
+
+  /// عدد نسخ فاتورة العميل — يبدأ من الإعداد المحفوظ (1..5) ثم يعدّله
+  /// المستخدم من الحوار. الطباعة تقرأ الإعداد نفسه في `InvoiceOutputService`.
+  int _copies =
+      AppSettingsService.instance.isLoaded
+          ? AppSettingsService.instance.invoiceCopies
+          : 1;
+
+  /// آخر عملية حفظ لعدد النسخ — ننتظرها قبل تأكيد الإصدار كي تُطبَع النسخ
+  /// المختارة لا القيمة القديمة إن ضغط المستخدم بسرعة.
+  Future<void> _copiesSave = Future<void>.value();
   late final TextEditingController _paidCtrl;
   final SqlDB _db = SqlDB();
 
@@ -626,6 +636,30 @@ class _PaymentMethodDialogState extends State<_PaymentMethodDialog> {
     });
   }
 
+  /// يحدّد عدد النسخ ويحفظه فورًا في `settings.invoice_copies`.
+  ///
+  /// الحفظ الفوري مقصود: الإعداد يخصّ **الطباعة التلقائية** بعد الإصدار،
+  /// والطباعة تقرأه من الخدمة لا من نتيجة الحوار. و`_copiesSave` يجعل
+  /// `_confirm` ينتظر اكتماله إن ضغط المستخدم بسرعة.
+  void _setCopies(int next) {
+    final value = next < 1 ? 1 : (next > 5 ? 5 : next);
+    if (value == _copies) return;
+    setState(() => _copies = value);
+    _copiesSave = _saveCopies(value);
+  }
+
+  Future<void> _saveCopies(int value) async {
+    try {
+      await AppSettingsService.instance.set(
+        AppConstants.settingInvoiceCopies,
+        '$value',
+      );
+    } catch (e) {
+      // لا نُسقط الإصدار بسبب فشل حفظ التفضيل؛ القيمة الافتراضية تبقى صالحة.
+      debugPrint('save invoice copies error: $e');
+    }
+  }
+
   void _applyPaid(double value) {
     _paid = value.clamp(0.0, _payable);
     _paidCtrl.text = _paid.toStringAsFixed(2);
@@ -633,6 +667,10 @@ class _PaymentMethodDialogState extends State<_PaymentMethodDialog> {
   }
 
   Future<void> _confirm() async {
+    // انتظر حفظ عدد النسخ المختار قبل أي إخراج: الطباعة تقرأ الإعداد من
+    // `AppSettingsService`، فلو سبقت الكتابة لطُبعت القيمة القديمة.
+    await _copiesSave;
+
     // ─── البيع الآجل صلاحية مستقلّة (منح ائتمان = مخاطرة مالية) ───
     // نُمنع قبل أي فحص آخر حتى لا يُبني على أساس غير مصرّح به.
     if (_method == PaymentMethod.credit.key && !_isSubscription) {
@@ -1615,6 +1653,12 @@ class _PaymentMethodDialogState extends State<_PaymentMethodDialog> {
                   ),
                 ),
               ],
+            ),
+            const SizedBox(height: 8),
+            // ─── عدد نسخ الفاتورة (يُحفظ للإعداد ويُقرأ عند الطباعة) ───
+            InvoiceCopiesSelector(
+              value: _copies,
+              onChanged: _setCopies,
             ),
             const SizedBox(height: 14),
             // ─── عميل الفاتورة: إلزامي في الآجل والاشتراك، واختياري للكاش ───

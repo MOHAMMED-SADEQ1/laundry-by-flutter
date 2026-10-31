@@ -7,16 +7,20 @@ import 'package:laundry/controller/printInvoicecontroller.dart';
 import 'package:laundry/core/services/invoice_share_service.dart';
 import 'package:laundry/core/services/paper_size.dart';
 import 'package:laundry/core/services/preparePDF.dart';
+import 'package:laundry/core/theme/app_colors.dart';
 import 'package:laundry/services/business_info_service.dart';
 import 'package:laundry/services/i18n/l10n.dart';
 import 'package:laundry/services/invoice/invoice_items_service.dart';
+import 'package:laundry/services/invoice/credit_note_service.dart';
 import 'package:laundry/services/invoice/invoice_output_service.dart';
 import 'package:laundry/services/pdf/doc_template.dart';
 import 'package:laundry/services/pdf/doc_template_service.dart';
 import 'package:laundry/services/pdf/laundry_slip.dart';
 import 'package:laundry/services/pdf/laundry_slip_pdf.dart';
+import 'package:laundry/services/printer/print_layout.dart';
 import 'package:laundry/services/settings/app_settings_service.dart';
 import 'package:laundry/sqldb.dart';
+import 'package:laundry/view/widget/invoice/invoice_return_dialog.dart';
 
 class PreviousInvoiceController extends GetxController {
   final invoices = <Map<String, dynamic>>[].obs;
@@ -104,9 +108,14 @@ class PreviousInvoiceController extends GetxController {
       final pageSize = limit;
       final offset = (page - 1) * pageSize;
 
+      // `is_returned` يُحسب لكل صفّ في نفس الاستعلام — بلا استعلام فرعي
+      // لكل فاتورة في الواجهة (كان يعني N+1 على كل تمرير).
       return await db.readData('''
-        SELECT * FROM invoices
-        ORDER BY invoices_id DESC
+        SELECT i.*,
+               (SELECT COUNT(*) FROM "credit_notes" cn
+                 WHERE cn."invoice_id" = i."invoices_id") AS "is_returned"
+        FROM "invoices" i
+        ORDER BY i."invoices_id" DESC
         LIMIT $pageSize OFFSET $offset
       ''');
     } catch (e) {
@@ -146,7 +155,13 @@ class PreviousInvoiceController extends GetxController {
   ///
   /// الآن تُبنى الحمولة كاملة من `invoices` + لقطة `invoice_items` (أو
   /// `list_data` عند غيابها)، وتُقرأ مقاسات الورق من الإعدادات.
-  Future<void> printInvoice(Map<String, dynamic> invoice) async {
+  ///
+  /// [copies] = عدد نسخ الفاتورة لهذه الطباعة (1..5). `null` ⇒ `invoice_copies`
+  /// المحفوظ. الاختيار من سجل الفواتير لا يُكتب في الإعدادات.
+  Future<void> printInvoice(
+    Map<String, dynamic> invoice, {
+    int? copies,
+  }) async {
     try {
       final payload = await _invoicePayload(invoice);
       final invoiceNumber = _invoiceId(invoice);
@@ -158,7 +173,10 @@ class PreviousInvoiceController extends GetxController {
       // فاتورة العميل، بل يُبلَّغ عنه مع نتيجة الإخراج.
       _SlipBundle? slip;
       String? slipBuildError;
-      if (AppSettingsService.instance.invoicePrintLaundrySlip) {
+      // إشعار دائن لا ورقة مغسلة له: لا قطع تُتابَع، ولا رمز استلام يُطبع.
+      final isCreditNote = invoice['credit_note_of'] != null;
+      if (!isCreditNote &&
+          AppSettingsService.instance.invoicePrintLaundrySlip) {
         try {
           slip = await _slipBundle(invoice);
         } catch (e) {
@@ -167,21 +185,69 @@ class PreviousInvoiceController extends GetxController {
         }
       }
 
+      final slipBundle = slip;
       final output = await InvoiceOutputService.instance.deliverBundle(
         pdfBytes,
         invoiceNumber: invoiceNumber,
-        laundrySlipPdf: slip?.bytes,
+        laundrySlipPdf: slipBundle?.bytes,
         // إعادة الطباعة اليدوية: اطبع الآن مهما كان خيار «الطباعة عند البيع»،
         // ولا تحفظ نسخة PDF — الأرشفة تمّت وقت البيع.
         print: true,
         savePdf: false,
-        printSlip: slip != null,
+        printSlip: slipBundle != null,
+        copies: copies,
         invoicePaper: PaperSizes.resolve('${payload['paperSize'] ?? ''}'),
-        slipPaper: slip?.paper,
+        slipPaper: slipBundle?.paper,
+        rebuildInvoice:
+            (layout) => compute(
+              PreparePDF.generatePdfData,
+              PrintLayout.fromPdfPageFormat(layout).applyTo(payload),
+            ),
+        rebuildSlip:
+            slipBundle == null
+                ? null
+                : (layout) {
+                  final slipPayload = slipBundle.payload;
+                  return compute(
+                    LaundrySlipPdf.generateLaundrySlipPdf,
+                    PrintLayout.fromPdfPageFormat(layout).applyTo(slipPayload),
+                  );
+                },
       );
       _report(output, slipBuildError: slipBuildError);
     } catch (e) {
       debugPrint('PreviousInvoiceController.printInvoice error: $e');
+      Get.snackbar(tr('خطأ'), '$e', snackPosition: SnackPosition.BOTTOM);
+    }
+  }
+
+  /// يحفظ نسخة PDF من الأرشيف — **بلا طباعة**.
+  ///
+  /// ## لماذا زرّ مستقلّ؟
+  /// إعادة الطباعة كانت تُمرّر `savePdf: false` عن قصد («الأرشفة تمّت وقت
+  /// البيع»)، وذلك صحيح للطباعة لكنه يترك المستخدم بلا سبيل لأخذ نسخة
+  /// رقمية من فاتورة قديمة (لإرسالها بالبريد، أو لملفّ محاسبي، أو حين لا
+  /// طابعة متصلة). هذا المسار يفعل الحفظ وحده: لا يستهلك ورقًا ولا يغيّر
+  /// إعداد «الطباعة عند البيع».
+  ///
+  /// يمرّ من [InvoiceOutputService] لا من كتابة ملف مباشرة — فيرث فحص
+  /// `invoice.print`، والتسمية الفريدة، ومنع الكتابة فوق ملف قائم، ورسالة
+  /// الخطأ الحقيقية عند فشل القرص.
+  Future<void> saveInvoicePdf(Map<String, dynamic> invoice) async {
+    try {
+      final payload = await _invoicePayload(invoice);
+      final invoiceNumber = _invoiceId(invoice);
+      final pdfBytes = await compute(PreparePDF.generatePdfData, payload);
+      final output = await InvoiceOutputService.instance.deliverBundle(
+        pdfBytes,
+        invoiceNumber: invoiceNumber,
+        print: false,
+        savePdf: true,
+        printSlip: false,
+      );
+      _report(output);
+    } catch (e) {
+      debugPrint('PreviousInvoiceController.saveInvoicePdf error: $e');
       Get.snackbar(tr('خطأ'), '$e', snackPosition: SnackPosition.BOTTOM);
     }
   }
@@ -204,11 +270,49 @@ class PreviousInvoiceController extends GetxController {
         slip.bytes,
         invoiceNumber: _invoiceId(invoice),
         paper: slip.paper,
+        rebuild:
+            (layout) => compute(
+              LaundrySlipPdf.generateLaundrySlipPdf,
+              PrintLayout.fromPdfPageFormat(layout).applyTo(slip.payload),
+            ),
       );
       _report(output);
     } catch (e) {
       debugPrint('PreviousInvoiceController.printLaundrySlip error: $e');
       Get.snackbar(tr('خطأ'), '$e', snackPosition: SnackPosition.BOTTOM);
+    }
+  }
+
+  /// إرجاع الفاتورة كاملة بإشعار دائن.
+  ///
+  /// الواجهة تجمع القرار (سبب + طريقة الردّ)، و`CreditNoteService` تنفّذه في
+  /// معاملة واحدة. **لا منطق محاسبي هنا** — المتحكّم لا يحسب مبالغ ولا يكتب
+  /// صفوفًا، كي يبقى القرار في طبقة واحدة قابلة للاختبار.
+  Future<void> returnInvoice(Map<String, dynamic> invoice) async {
+    final choice = await showInvoiceReturnDialog(invoice: invoice);
+    if (choice == null) return;
+
+    final result = await CreditNoteService.instance.returnInvoice(
+      invoiceId: _invoiceId(invoice),
+      reason: choice.reason,
+      refundAsCredit: choice.refundAsCredit,
+    );
+
+    Get.snackbar(
+      result.ok ? tr('تم الإرجاع') : tr('تعذّر الإرجاع'),
+      result.message,
+      snackPosition: SnackPosition.BOTTOM,
+      backgroundColor: result.ok ? const Color(0xFF16A34A) : AppColors.danger,
+      colorText: Colors.white,
+      duration: Duration(seconds: result.ok ? 4 : 6),
+      icon: Icon(
+        result.ok ? Icons.assignment_turned_in : Icons.error_outline,
+        color: Colors.white,
+      ),
+    );
+
+    if (result.ok) {
+      await refreshData();
     }
   }
 
@@ -234,6 +338,17 @@ class PreviousInvoiceController extends GetxController {
             : (total - discount);
     final tax = _num(invoice['tax_amount']).toDouble();
 
+    final transport = DocTemplateService.instance.transport(DocKind.invoice);
+    // إشعار الدائن يُطبع بعنوانه لا بعنوان الفاتورة: القالب واحد والأرقام
+    // واحدة، لكن الورقة التي تُسلَّم للزبون يجب أن تقول «إشعار دائن» —
+    // ورقم سالب تحت كلمة «فاتورة ضريبية» مستند مضلِّل لا مجرّد شكل.
+    if (invoice['credit_note_of'] != null) {
+      transport['docTexts'] = <String, String>{
+        ...Map<String, String>.from(transport['docTexts'] as Map),
+        DocCatalog.kTitle: tr('إشعار دائن'),
+      };
+    }
+
     return <String, dynamic>{
       'payment': '${extra['payment'] ?? invoice['payment_method'] ?? ''}',
       'logoImage': PrintInvoiceController.logoImageBytes,
@@ -257,13 +372,18 @@ class PreviousInvoiceController extends GetxController {
       'bizTaxNumber': BusinessInfoService.instance.taxNumber,
       'bizCrNumber': BusinessInfoService.instance.crNumber,
       'bizShortAddress': BusinessInfoService.instance.shortAddress,
+      // رمز QR للموقع يُطبع أسفل نسخة إعادة الطباعة كذلك — وإلا اختلفت
+      // ورقتان لنفس الفاتورة في آخر سطر منها.
+      'bizMapUrl': BusinessInfoService.instance.location,
       'createdByName': '',
       // ─── خيارات العرض والطباعة (من الإعدادات الحالية) ───
       'paperSize': settings.invoicePaperSize,
       'invoiceTitle': settings.invoiceTitleText,
       'footerNote': settings.invoiceFooterNote,
       'showLogo': settings.invoiceShowLogo,
-      'logoSizeMm': settings.invoiceLogoSizeMm,
+      'logoWidthMm': settings.invoiceLogoWidthMm,
+      'logoHeightMm': settings.invoiceLogoHeightMm,
+      'mapQrSizeMm': settings.mapQrSizeMm,
       'showTaxNumber': settings.invoiceShowTaxNumber,
       'showCrNumber': settings.invoiceShowCrNumber,
       'showShortAddress': settings.invoiceShowShortAddress,
@@ -280,7 +400,7 @@ class PreviousInvoiceController extends GetxController {
       'paidAmount': _num(invoice['paid_amount']).toDouble(),
       'remainingAmount': _num(invoice['remaining_amount']).toDouble(),
       // ─── قالب المستند ───
-      ...DocTemplateService.instance.transport(DocKind.invoice),
+      ...transport,
     };
   }
 
@@ -302,7 +422,7 @@ class PreviousInvoiceController extends GetxController {
       bizName: BusinessInfoService.instance.name,
       bizPhone: BusinessInfoService.instance.phone,
       paperSize: settings.invoicePaperSize,
-      isRtl: L10n.isRtl,
+      isRtl: settings.docLanguage.isRtl,
     );
 
     final payload = <String, dynamic>{
@@ -317,6 +437,7 @@ class PreviousInvoiceController extends GetxController {
     return _SlipBundle(
       bytes: bytes,
       paper: LaundrySlipPdf.paperForData(payload),
+      payload: payload,
     );
   }
 
@@ -358,7 +479,11 @@ class PreviousInvoiceController extends GetxController {
         '${padding > 0 ? id.toString().padLeft(padding, '0') : id}';
   }
 
-  /// التاريخ المخزَّن كما ظهر على الفاتورة (map_data أدقّ من ISO).
+  /// التاريخ المخزَّن في `map_data` (محايد اللغة منذ 2026-10-29).
+  ///
+  /// الفواتير الأقدم قد تحمل لاحقة «ص/م» بلغة إصدارها؛ نُبقيها كما هي بدل
+  /// تخمين لغة نصّ مخزَّن. الفواتير الجديدة تُخزَّن `yyyy-MM-dd HH:mm:ss`
+  /// فيصلح إعادة طباعتها بالعربية أو الإنجليزية بلا خلط.
   String _dateText(Map<String, dynamic> invoice, Map<String, dynamic> extra) {
     final stored = '${extra['date'] ?? ''}'.trim();
     if (stored.isNotEmpty) return stored;
@@ -406,9 +531,16 @@ class PreviousInvoiceController extends GetxController {
   }
 }
 
-/// نتيجة تجهيز ورقة المغسلة: البايتات + مقاس مهمة الطباعة.
+/// نتيجة تجهيز ورقة المغسلة: البايتات + مقاس مهمة الطباعة + الحمولة.
 class _SlipBundle {
-  const _SlipBundle({required this.bytes, required this.paper});
+  const _SlipBundle({
+    required this.bytes,
+    required this.paper,
+    required this.payload,
+  });
   final Uint8List bytes;
   final PaperSize paper;
+
+  /// تُستخدم لإعادة التوليد بهوامش الطابعة عند الطباعة المباشرة.
+  final Map<String, dynamic> payload;
 }

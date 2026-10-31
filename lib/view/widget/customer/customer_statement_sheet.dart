@@ -134,6 +134,28 @@ Future<void> showCustomerStatementSheet(
                 stmt.export(customerId, share: true);
               },
             ),
+            // حفظ الكشف كملف — **بلا طباعة ولا مشاركة**.
+            //
+            // كان الحفظ يحدث كأثر جانبي لفشل الطباعة فقط، وفي مجلد مؤقّت.
+            // صار قرارًا صريحًا يكتب في مجلد المستندات الذي يختاره المستخدم.
+            ListTile(
+              leading: const Icon(
+                Icons.picture_as_pdf_outlined,
+                color: AppColors.primary,
+              ),
+              title: Text(
+                tr('حفظ الكشف PDF'),
+                style: const TextStyle(fontFamily: 'cairo'),
+              ),
+              subtitle: Text(
+                tr('في مجلد حفظ المستندات — بلا طباعة'),
+                style: const TextStyle(fontFamily: 'cairo', fontSize: 12),
+              ),
+              onTap: () {
+                Navigator.pop(ctx);
+                stmt.export(customerId, savePdfOnly: true);
+              },
+            ),
             ListTile(
               leading: const Icon(Icons.chat, color: AppColors.info),
               title: Text(

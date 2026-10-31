@@ -6,6 +6,8 @@ import 'package:laundry/config/constants.dart';
 import 'package:laundry/config/run_target.dart';
 import 'package:laundry/core/services/paper_size.dart';
 import 'package:laundry/services/invoice/invoice_pdf_naming.dart';
+import 'package:laundry/services/permission/permission_catalog.dart';
+import 'package:laundry/services/permission/permission_service.dart';
 import 'package:laundry/services/printer/printer_service.dart';
 import 'package:laundry/services/settings/app_settings_service.dart';
 import 'package:laundry/services/settings/setting_option.dart';
@@ -180,11 +182,7 @@ class InvoiceOutputService {
   Future<InvoiceOutputResult> deliver(
     Uint8List bytes, {
     required int invoiceNumber,
-  }) => deliverBundle(
-    bytes,
-    invoiceNumber: invoiceNumber,
-    printSlip: false,
-  );
+  }) => deliverBundle(bytes, invoiceNumber: invoiceNumber, printSlip: false);
 
   /// يُخرج **حزمة** من مستندين منفصلين: فاتورة العميل ثم ورقة المغسلة.
   ///
@@ -201,6 +199,11 @@ class InvoiceOutputService {
   /// [print] و[savePdf] و[printSlip] = `null` تعني «اقرأ الإعداد». تمرير
   /// قيمة صريحة يلزم لإعادة الطباعة اليدوية التي يجب أن تطبع حتى لو كان
   /// خيار الطباعة عند البيع معطَّلًا.
+  ///
+  /// [copies] = عدد نسخ **هذه الطباعة وحدها** (1..5). `null` ⇒ يقرأ
+  /// `invoice_copies` كالمعتاد. إعادة الطباعة من سجل الفواتير تختار عددًا
+  /// لمرة واحدة ولا تكتب الإعداد، فلا يتغيّر سلوك الطباعة التلقائية عند
+  /// البيع بسبب إعادة طباعة عرَضية.
   Future<InvoiceOutputResult> deliverBundle(
     Uint8List invoicePdf, {
     required int invoiceNumber,
@@ -210,10 +213,27 @@ class InvoiceOutputService {
     bool? printSlip,
     PaperSize? invoicePaper,
     PaperSize? slipPaper,
+    PdfRebuilder? rebuildInvoice,
+    PdfRebuilder? rebuildSlip,
+    int? copies,
   }) async {
     if (invoicePdf.isEmpty) {
       return const InvoiceOutputResult(
         error: 'ملف الفاتورة فارغ — لم تُطبَع ولم تُحفظ نسخة.',
+      );
+    }
+
+    // 🛡️ `invoice.print` كان **معلنًا بلا إنفاذ**: وصفه في الكتالوج «إخراج
+    // الفاتورة PDF وطباعتها أو مشاركتها»، ولم يكن يُفحص في أي موضع. الفحص
+    // هنا — في **نقطة الإخراج الوحيدة** التي تمرّ منها الطباعة والحفظ وإعادة
+    // الطباعة — لا في الواجهة وحدها، فلا يكفي إخفاء زرّ.
+    //
+    // **ولا يُسقط البيع**: هذه الدالة تُنادى بعد حفظ الفاتورة في القاعدة،
+    // فغياب الصلاحية يمنع الإخراج فقط ويعود برسالة مفهومة. الكاشير بلا
+    // صلاحية طباعة يبيع وتُحفظ فواتيره، ولا ورق يخرج.
+    if (!PermissionService.can(PermissionKeys.invoicePrint)) {
+      return InvoiceOutputResult(
+        error: tr('لا تملك صلاحية الطباعة — الفاتورة محفوظة، راجع مدير النظام.'),
       );
     }
 
@@ -247,15 +267,25 @@ class InvoiceOutputService {
     String? slipError;
 
     if (doPrint) {
-      final copies = _invoiceCopies();
-      for (var copy = 1; copy <= copies; copy++) {
+      // [copies] يتجاوز الإعداد لهذه المكالمة فقط (إعادة طباعة باختيار
+      // المستخدم). القيمة تُقصّ هنا أيضًا كي لا يعتمد الصحّة على الواجهة.
+      final copyCount =
+          copies == null ? _invoiceCopies() : copies.clamp(1, 5).toInt();
+      for (var copy = 1; copy <= copyCount; copy++) {
         final ok = await PrinterService.instance.printPdf(
           invoicePdf,
           jobName:
-              copies > 1
-                  ? trf('فاتورة #{0} ({1}/{2})', [invoiceNumber, copy, copies])
+              copyCount > 1
+                  ? trf('فاتورة #{0} ({1}/{2})', [
+                    invoiceNumber,
+                    copy,
+                    copyCount,
+                  ])
                   : trf('فاتورة #{0}', [invoiceNumber]),
           paper: paper,
+          // نسخة الطباعة تُبنى من نفس اللقطة لكن بهوامش الطابعة الفعلية —
+          // فلا يُقصّ يمين الورقة (بداية أسماء الأصناف في RTL).
+          rebuild: rebuildInvoice,
         );
         printed = printed || ok;
         // **لا فشل صامت**: الطباعة المباشرة قد تُقبل وتُسلَّم بلا ورق (تعريف
@@ -282,6 +312,7 @@ class InvoiceOutputService {
           slipBytes,
           jobName: trf('ورقة المغسلة #{0}', [invoiceNumber]),
           paper: slipPaper ?? paper,
+          rebuild: rebuildSlip,
         );
         slipPrinted = slipOk;
         if (!slipOk) {
@@ -321,16 +352,24 @@ class InvoiceOutputService {
     Uint8List bytes, {
     required int invoiceNumber,
     PaperSize? paper,
+    PdfRebuilder? rebuild,
   }) async {
     if (bytes.isEmpty) {
       return const InvoiceOutputResult(
         error: 'ملف ورقة المغسلة فارغ — لم يُرسَل شيء إلى الطابعة.',
       );
     }
+    // ورقة المغسلة مستند طباعة مثل الفاتورة ⇒ تحتاج `invoice.print` نفسها.
+    if (!PermissionService.can(PermissionKeys.invoicePrint)) {
+      return InvoiceOutputResult(
+        error: tr('لا تملك صلاحية الطباعة — لم تُرسل ورقة المغسلة، راجع مدير النظام.'),
+      );
+    }
     final ok = await PrinterService.instance.printPdf(
       bytes,
       jobName: trf('ورقة المغسلة #{0}', [invoiceNumber]),
       paper: paper,
+      rebuild: rebuild,
     );
     return InvoiceOutputResult(
       slipPrinted: ok,
@@ -358,9 +397,6 @@ class InvoiceOutputService {
     required int invoiceNumber,
     String suffix = '',
   }) async {
-    final dir = Directory(await effectiveDirectory());
-    if (!await dir.exists()) await dir.create(recursive: true);
-
     var base = InvoicePdfNaming.buildFileName(
       invoiceNumber: invoiceNumber,
       when: DateTime.now(),
@@ -372,9 +408,28 @@ class InvoiceOutputService {
         '$cleanSuffix.${InvoicePdfNaming.extension}',
       );
     }
+    return saveDocumentPdf(bytes, fileName: base);
+  }
 
-    final name = InvoicePdfNaming.dedupe(base, await _existingNames(dir));
+  /// يحفظ **أي** مستند PDF في مجلد الإخراج نفسه ويعيد مساره.
+  ///
+  /// ## لماذا دالة عامّة؟
+  /// كشف الحساب كان يُحفظ في **مجلد مؤقّت** (`Directory.systemTemp`) عند
+  /// فشل الطباعة: رسالة «حُفظ الكشف في …\Temp\statement1234\…» تبدو نجاحًا
+  /// وهو ملف يمحوه النظام عند أول تنظيف. صار كل مستند يُخرج من النظام يسكن
+  /// **المجلد الذي اختاره المستخدم** (أو `<المستندات>/فواتير` افتراضيًا)،
+  /// فمكان واحد يعرفه ويجده.
+  ///
+  /// [fileName] يُمرَّر جاهزًا (من [InvoicePdfNaming]) لا يُبنى هنا، لأن
+  /// تسمية كل نوع مستند تخصّه. والكتابة فوق ملف قائم ممنوعة ([dedupe]).
+  Future<String> saveDocumentPdf(
+    Uint8List bytes, {
+    required String fileName,
+  }) async {
+    final dir = Directory(await effectiveDirectory());
+    if (!await dir.exists()) await dir.create(recursive: true);
 
+    final name = InvoicePdfNaming.dedupe(fileName, await _existingNames(dir));
     final file = File(p.join(dir.path, name));
     await file.writeAsBytes(bytes, flush: true);
     return file.path;

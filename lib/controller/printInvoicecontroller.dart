@@ -19,8 +19,13 @@ import 'package:laundry/services/customer/customer_ledger_service.dart';
 import 'package:laundry/services/i18n/l10n.dart';
 import 'package:laundry/services/discount/discount_service.dart';
 import 'package:laundry/services/invoice/invoice_items_service.dart';
+import 'package:laundry/services/invoice/invoice_lines.dart';
+import 'package:laundry/services/invoice/processing_status.dart';
 import 'package:laundry/services/payment/payment_method.dart';
+import 'package:laundry/services/permission/permission_catalog.dart';
+import 'package:laundry/services/permission/permission_service.dart';
 import 'package:laundry/services/invoice/invoice_output_service.dart';
+import 'package:laundry/services/printer/print_layout.dart';
 import 'package:laundry/services/subscription/subscription_service.dart';
 import 'package:laundry/sqldb.dart';
 import 'package:laundry/services/business_info_service.dart';
@@ -119,18 +124,21 @@ class PrintInvoiceController extends GetxController {
     double? remainingAmount,
   }) async {
     await ensureAssets();
-    // 🚨 اللغة تُهيَّأ **بحسب الواجهة**: كانت `'ar'` مكتوبة حرفيًّا فيخرج
-    // التاريخ «٢:٠٥:٣٣ م» في فاتورة إنجليزية. `initializeDateFormatting`
-    // لكلا اللغتين رخيص (يُحمَّل مرة واحدة) ويجعل التبديل فوريًّا.
+    // 🚨 اللغة تُهيَّأ **بحسب لغة المستند** لا لغة الواجهة: كانت `'ar'`
+    // مكتوبة حرفيًّا فيخرج التاريخ «٢:٠٥:٣٣ م» في فاتورة إنجليزية. والآن
+    // قد تكون الواجهة عربية والفاتورة إنجليزية (أو العكس)، فالمصدر هو
+    // إعداد «لغة الفاتورة والمستندات». `initializeDateFormatting` لكلا
+    // اللغتين رخيص (يُحمَّل مرة واحدة) ويجعل التبديل فوريًّا.
     await initializeDateFormatting('ar', null);
     await initializeDateFormatting('en', null);
-    final dateLocale = L10n.isRtl ? 'ar' : 'en';
+    final settings = AppSettingsService.instance;
+    final docLang = settings.docLanguage;
+    final dateLocale = docLang.code;
     final today = DateTime.now();
     final formattedTime = DateFormat('hh:mm:ss a', dateLocale).format(today);
     // التاريخ الرقمي نفسه لا يتبع لغة (ISO) — يُترك كما هو ليبقى مقروءًا
     // في الأرشيف والبحث بغضّ النظر عن لغة الطباعة.
     // ─── خيارات العرض من الإعدادات (مركز واحد) ───
-    final settings = AppSettingsService.instance;
     final padding = settings.invoiceNumberPadding;
     final displayNumber =
         '${settings.invoiceNumberPrefix}${padding > 0 ? invoiceNumber.toString().padLeft(padding, '0') : invoiceNumber}';
@@ -156,6 +164,8 @@ class PrintInvoiceController extends GetxController {
       'bizTaxNumber': BusinessInfoService.instance.taxNumber,
       'bizCrNumber': BusinessInfoService.instance.crNumber,
       'bizShortAddress': BusinessInfoService.instance.shortAddress,
+      // رابط الموقع — يُرمَّز QR أسفل الورقة. فارغه = لا رمز (لا رابط مكسور).
+      'bizMapUrl': BusinessInfoService.instance.location,
       'createdByName': createdByName,
       // ─── خيارات العرض والطباعة (تتبع شاشة الإعدادات مباشرةً) ───
       'invoiceNumberText': displayNumber,
@@ -163,7 +173,9 @@ class PrintInvoiceController extends GetxController {
       'footerNote': settings.invoiceFooterNote,
       'paperSize': settings.invoicePaperSize,
       'showLogo': settings.invoiceShowLogo,
-      'logoSizeMm': settings.invoiceLogoSizeMm,
+      'logoWidthMm': settings.invoiceLogoWidthMm,
+      'logoHeightMm': settings.invoiceLogoHeightMm,
+      'mapQrSizeMm': settings.mapQrSizeMm,
       'showTaxNumber': settings.invoiceShowTaxNumber,
       'showCrNumber': settings.invoiceShowCrNumber,
       'showShortAddress': settings.invoiceShowShortAddress,
@@ -203,6 +215,23 @@ class PrintInvoiceController extends GetxController {
     String discountCode = '',
     int? discountId,
   }) async {
+    // 🛡️ `invoice.create` كان **معلنًا بلا إنفاذ**: أي مستخدم مسجّل يصل إلى
+    // شاشة البيع (وهي الرئيسية) فيستطيع إصدار فاتورة ولو أُسقطت عنه الصلاحية
+    // من شاشة الأدوار. الفحص هنا — في المسار الوحيد الذي يُصدر فاتورة —
+    // وليس في الواجهة وحدها.
+    if (!PermissionService.can(PermissionKeys.invoiceCreate)) {
+      Get.snackbar(
+        tr('لا تملك صلاحية'),
+        tr('إصدار الفواتير يحتاج صلاحية «إصدار فاتورة» — راجع مدير النظام.'),
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: const Color(0xFFDC2626),
+        colorText: Colors.white,
+        duration: const Duration(seconds: 5),
+        icon: const Icon(Icons.block, color: Colors.white),
+      );
+      return;
+    }
+
     final ShiftController shiftController = Get.find<ShiftController>();
 
     // المجموع **مشتق من البنود** لا من الحالة المخزَّنة: كان يُقرأ
@@ -243,20 +272,14 @@ class PrintInvoiceController extends GetxController {
     var usedValue = 0.0;
     if (isSubscriptionInvoice) {
       for (final it in invcontroller.invoice) {
-        final c = int.tryParse('${it['count'] ?? 0}') ?? 0;
-        usedPieces += c;
-        // قيمة البند = سعر الوحدة × الكمية.
+        // الكمية والإجمالي من `InvoiceLines` — مصدر واحد يقرأ `count`
+        // رقمًا كان أو نصًّا (ولو بأرقام عربية) ويقرّب المبلغ لقرشين.
         //
-        // **إصلاح:** كان يجمع `total_price + price × count` — أي يضيف
-        // الإجمالي **و** تفصيله معًا، فيضخّم القيمة إلى الضعف تقريبًا.
-        // هذا كان يجعل السقف المالي ينفد عند نصف الاستخدام الحقيقي.
-        // نعتمد `total_price` إن وُجد (هو الإجمالي المخزَّن)، وإلا نحسبه.
-        final lineTotal = double.tryParse('${it['total_price'] ?? ''}');
-        if (lineTotal != null) {
-          usedValue += lineTotal;
-        } else {
-          usedValue += (double.tryParse('${it['price'] ?? 0}') ?? 0) * c;
-        }
+        // **إصلاح سابق:** كان يجمع `total_price + price × count` — أي يضيف
+        // الإجمالي **و** تفصيله معًا، فيضخّم القيمة إلى الضعف تقريبًا،
+        // فينفد السقف المالي عند نصف الاستخدام الحقيقي.
+        usedPieces += InvoiceLines.quantityOf(it);
+        usedValue += InvoiceLines.lineTotal(it);
       }
       if (usedValue <= 0) usedValue = summation;
     }
@@ -397,14 +420,15 @@ class PrintInvoiceController extends GetxController {
       return;
     }
     // إنشاء map_data وحفظه
+    // 🚨 التاريخ المخزَّن **محايد اللغة** (`yyyy-MM-dd HH:mm:ss` بلا ص/م):
+    // الفاتورة قد تُعاد طباعتها لاحقًا بلغة مستند مختلفة، فحفظ «ص» أو «AM»
+    // يجعل النسخة الإنجليزية تحمل لاحقة عربية (أو العكس). العرض المطبوع
+    // نفسه يبقى بلغة المستند الحالية عبر `formattedTime`.
     final mapData = jsonEncode({
       'payment': payment,
       'summation': summation,
       'customername': name,
-      'date': DateFormat(
-        'yyyy-MM-dd hh:mm:ss a',
-        L10n.isRtl ? 'ar' : 'en',
-      ).format(DateTime.now()),
+      'date': DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now()),
     });
 
     try {
@@ -460,6 +484,14 @@ class PrintInvoiceController extends GetxController {
         'map_data': mapData,
         'pickup_code': pickupCode,
         'created_by': userId,
+        // 🚨 **الحالة تُكتب صريحةً ولا تُترك لافتراضي العمود.**
+        //
+        // القاعدة المُرقّاة تحمل `DEFAULT "تم الاستلام"` من ترحيل قديم، و
+        // `ALTER TABLE` لا يغيّر تعريف عمود قائم ⇒ العمود في القواعد القديمة
+        // يظل يكتب عربيًّا بينما `_onCreate` في التثبيت الجديد يكتب `received`.
+        // الاعتماد على الافتراضي كان يجعل سلوك النظام يعتمد على **تاريخ إنشاء
+        // القاعدة** لا على الكود. الآن القيمة واحدة في كل الحالات.
+        'status': ProcessingStatuses.received.key,
         if (isSubscriptionInvoice && subscriptionId != null)
           'subscription_id': subscriptionId,
       });
@@ -722,6 +754,7 @@ class PrintInvoiceController extends GetxController {
       // وبيع السلة كما هو — بدل أن يبقى الكارت ممتلئًا بلا طباعة.
       Uint8List? laundrySlipBytes;
       PaperSize? laundrySlipPaper;
+      Map<String, dynamic>? slipPayload;
       String? slipBuildError;
       if (settings.invoicePrintLaundrySlip) {
         try {
@@ -735,9 +768,9 @@ class PrintInvoiceController extends GetxController {
             bizName: BusinessInfoService.instance.name,
             bizPhone: BusinessInfoService.instance.phone,
             paperSize: settings.invoicePaperSize,
-            isRtl: L10n.isRtl,
+            isRtl: settings.docLanguage.isRtl,
           );
-          final slipPayload = <String, dynamic>{
+          final payload = <String, dynamic>{
             ...laundrySlipData.toMap(),
             // قالب ورقة المغسلة المستقلّ — نصوصه وتفعيلاته وأنماطه.
             ...DocTemplateService.instance.transport(DocKind.laundrySlip),
@@ -746,15 +779,17 @@ class PrintInvoiceController extends GetxController {
             'logoImage': logoImageBytes,
             'showLogo': settings.invoiceShowLogo,
           };
-          laundrySlipPaper = LaundrySlipPdf.paperForData(slipPayload);
+          slipPayload = payload;
+          laundrySlipPaper = LaundrySlipPdf.paperForData(payload);
           laundrySlipBytes = await compute(
             LaundrySlipPdf.generateLaundrySlipPdf,
-            slipPayload,
+            payload,
           );
         } catch (e) {
           debugPrint('Laundry slip build error: $e');
           laundrySlipBytes = null;
           laundrySlipPaper = null;
+          slipPayload = null;
           slipBuildError = trf('تعذّر تجهيز ورقة المغسلة: {0}', ['$e']);
         }
       }
@@ -766,12 +801,27 @@ class PrintInvoiceController extends GetxController {
       // وحفظ نسخة PDF في المجلد المختار. فتُغطّى الحالات الثلاث: طباعة فقط ·
       // PDF فقط (بلا ورق) · طباعة + أرشيف.
       final pdfBytes = await compute(PreparePDF.generatePdfData, snapshot);
+      final slipData = slipPayload;
       final output = await InvoiceOutputService.instance.deliverBundle(
         pdfBytes,
         invoiceNumber: invoiceNumber,
         laundrySlipPdf: laundrySlipBytes,
         printSlip: laundrySlipBytes != null,
         slipPaper: laundrySlipPaper,
+        // 🚨 إعادة التوليد عند الطباعة بهوامش الطابعة الفعلية. اللقطة ثابتة
+        // (بُنيت قبل الطباعة) فالنسخة الثانية لا تخرج فارغة بعد تفريغ السلة.
+        rebuildInvoice:
+            (layout) => compute(
+              PreparePDF.generatePdfData,
+              PrintLayout.fromPdfPageFormat(layout).applyTo(snapshot),
+            ),
+        rebuildSlip:
+            slipData == null
+                ? null
+                : (layout) => compute(
+                  LaundrySlipPdf.generateLaundrySlipPdf,
+                  PrintLayout.fromPdfPageFormat(layout).applyTo(slipData),
+                ),
       );
       _reportOutput(output, slipBuildError: slipBuildError);
 

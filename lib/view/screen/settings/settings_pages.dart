@@ -199,7 +199,14 @@ class SettingsInvoicePage extends StatelessWidget {
       SettingGroups.invoicing,
       SettingGroups.invoiceDisplay,
     ],
-    leading: (c, ctx) => [invoicePreviewCard(c)],
+    leading:
+        (c, ctx) => [
+          invoicePreviewCard(c),
+          // لغة الورق قرار مستقلّ عن لغة الشاشة — بطاقة صريحة لا سطر منسدل.
+          docLanguageCard(c),
+          // مقاسات الشعار ورمز QR مع حساب المساحة والتقييد — قيم تُرى لا تُكتب.
+          printSizesCard(c),
+        ],
   );
 }
 
@@ -211,10 +218,16 @@ class SettingsPrintingPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) => SettingsGroupsPage(
     title: tr('الطباعة وإخراج الفاتورة'),
-    subtitle: tr('الطابعة الافتراضية · خطّ الطباعة · الطباعة عند البيع · حفظ PDF'),
+    subtitle: tr(
+      'لغة الطباعة · مقاسات الشعار ورمز QR · الطابعة الافتراضية · خطّ الطباعة · حفظ PDF',
+    ),
     groups: const <String>[SettingGroups.printing],
     leading:
         (c, ctx) => [
+          // اللغة أولًا: قرار يغيّر شكل كل ورق يخرج من الطابعة تحته.
+          docLanguageCard(c),
+          // مقاس الورق هو الذي يُقاس عليه الشعار والرمز — فالبطاقة بعده.
+          printSizesCard(c),
           PrinterSection(controller: c),
           PrintFontCard(controller: c),
         ],

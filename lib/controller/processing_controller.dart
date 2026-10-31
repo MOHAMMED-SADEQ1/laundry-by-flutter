@@ -42,13 +42,35 @@ class ProcessingController extends GetxController {
   Future<void> loadInvoices() async {
     isLoading.value = true;
     try {
-      final rows = await db.safeRead(
-        'invoices',
-        where: 'status != ?',
-        whereArgs: [ProcessingStatuses.delivered.key],
-        orderBy: 'invoice_date DESC',
+      // 🚨 **الفلترة بقيمتين لا بقيمة واحدة.**
+      //
+      // القاعدة المُرقّاة تحمل `invoices.status` بقيمة افتراضية عربية
+      // (`"تم الاستلام"`) أُضيفت بترحيل قديم؛ و`_tryAlter` لا يغيّر تعريف
+      // عمود قائم. فكل فاتورة كُتبت قبل الترحيل الصريح للحالة كانت عربية.
+      // ولذلك:
+      //   1. «تم التسليم» العربية كانت **تظهر** في اللوحة (لأن `!= 'delivered'`
+      //      صحيحة عليها) — وهو عكس المقصود.
+      //   2. بقية الحالات العربية كانت تُستبعد من كل تبويب في [tabInvoices]
+      //      لأن المقارنة نصّية مع مفاتيح.
+      // الحل: استبعاد الحالتين في SQL، ثم **تطبيع** الحالة في الذاكرة قبل أي
+      // فلترة — فيصير كل ما بعد هذا السطر يعمل بالمفاتيح وحدها.
+      final rows = await db.readData(
+        'SELECT * FROM "invoices" '
+        'WHERE COALESCE("credit_note_of", 0) = 0 '
+        "  AND COALESCE(\"status\", '') NOT IN (?, ?) "
+        'ORDER BY "invoice_date" DESC',
+        [
+          ProcessingStatuses.delivered.key,
+          ProcessingStatuses.delivered.arabicLabel,
+        ],
       );
-      invoices.assignAll(rows);
+      invoices.assignAll(<Map<String, dynamic>>[
+        for (final row in rows)
+          <String, dynamic>{
+            ...row,
+            'status': ProcessingStatuses.keyOf(row['status'] as String?),
+          },
+      ]);
     } catch (e) {
       debugPrint('loadInvoices error: $e');
     } finally {
@@ -69,12 +91,17 @@ class ProcessingController extends GetxController {
 
   List<Map<String, dynamic>> get tabInvoices {
     return visibleInvoices.where((inv) {
-      final status = inv['status']?.toString() ?? ProcessingStatuses.received;
+      // `keyOf` يقبل المفتاح والعربي القديم معًا ⇒ التبويب لا يفرّق بين
+      // فاتورة كُتبت قبل الترحيل وأخرى بعده. (كانت المقارنة النصّية الخام
+      // تُخفي كل صفّ عربي عن جميع التبويبات.)
+      final status = ProcessingStatuses.keyOf(inv['status'] as String?);
       if (tab.value == 'unpicked') {
-        return status == ProcessingStatuses.ready && _overdueDays(inv) >= 1;
+        return status == ProcessingStatuses.ready.key &&
+            _overdueDays(inv) >= 1;
       }
       if (tab.value == 'overdue') {
-        return status != ProcessingStatuses.delivered && _overdueDays(inv) >= 3;
+        return status != ProcessingStatuses.delivered.key &&
+            _overdueDays(inv) >= 3;
       }
       return status == tab.value;
     }).toList();

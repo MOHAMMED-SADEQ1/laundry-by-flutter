@@ -673,20 +673,28 @@ void _checkGenerators() {
     '${'fontSize:'.allMatches(slip).length}',
   );
 
-  // 🚨 نوع الدفع المطبوع عربي دائمًا: لا تُطبع القيمة الخام (`cash`/`card`)
-  // بجانب «المدفوع» في وضع إنجليزي. التحويل في المولّد نفسه، فيغطّي البيع
-  // وإعادة الطباعة والمشاركة بلا تكرار في كل حمولة.
+  // نوع الدفع يُطبع **بلغة المستند** لا بلغة الواجهة: مستند عربي ⇒ «كاش»،
+  // ومستند إنجليزي ⇒ `Cash`. التحويل في المولّد نفسه، فيغطّي البيع وإعادة
+  // الطباعة والمشاركة بلا تكرار في كل حمولة.
   check(
-    '[7] نوع الدفع المطبوع يمرّ عبر PaymentMethods.arabicLabel',
-    pdf.contains('PaymentMethods.arabicLabel(') &&
+    '[7] نوع الدفع المطبوع يمرّ عبر PaymentMethods.labelIn',
+    pdf.contains('PaymentMethods.labelIn(') &&
+        pdf.contains('english: !isRtl') &&
         !pdf.contains("data['payment']}"),
   );
 
-  // مقاس الشعار من الإعداد لا ثابتًا في الكود (150 نقطة القديمة).
+  // مقاس الشعار من الإعداد لا ثابتًا في الكود (150 نقطة القديمة)،
+  // وعرضه وارتفاعه مستقلّان وكلاهما مقصوص على الورق.
   check(
-    '[7] مقاس الشعار يُقرأ من الإعداد',
-    pdf.contains('InvoiceLogoSize.resolvePoints(') &&
+    '[7] مقاس الشعار يُقرأ من الإعداد (عرض × ارتفاع)',
+    pdf.contains('PrintVisualSize.logo(') &&
+        pdf.contains("data['logoWidthMm']") &&
+        pdf.contains("data['logoHeightMm']") &&
         !pdf.contains('width: 150, height: 150'),
+  );
+  check(
+    '[7] مقاس رمز الموقع يُقرأ من الإعداد',
+    pdf.contains('PrintVisualSize.qr(') && pdf.contains("data['mapQrSizeMm']"),
   );
   // `fontWeight` بلا أثر مع وجه صريح (`text.dart:170`) — وجوده يعني نمطًا
   // يبدو مضبوطًا ولا يُرى في الورق.
@@ -749,13 +757,11 @@ void _checkGenerators() {
   check('[7] لا قرارات إظهار قديمة في المولّد', stale.isEmpty, '$stale');
 
   // 🚨 قاعدة المشروع: كل نصّ عربي في PDF يحمل RTL صريحًا.
-  // الاتجاه **يتبع اللغة**: عربي ⇒ rtl، إنجليزي ⇒ ltr. كتابته حرفيًّا
-  // كانت تجعل المستند الإنجليزي يُقرأ من آخر السطر.
+  // الاتجاه **يتبع لغة المستند** لا لغة الواجهة: عربي ⇒ rtl، إنجليزي ⇒ ltr.
+  // كتابته حرفيًّا كانت تجعل المستند الإنجليزي يُقرأ من آخر السطر.
   check(
-    '[7] الاتجاه يتبع اللغة في نقطة الرسم',
-    pdf.contains(
-      'L10n.isRtl ? pw.TextDirection.rtl : pw.TextDirection.ltr',
-    ),
+    '[7] الاتجاه يتبع لغة المستند في نقطة الرسم',
+    pdf.contains('isRtl ? pw.TextDirection.rtl : pw.TextDirection.ltr'),
   );
   check(
     '[7] ورقة المغسلة: الاتجاه يتبع لغة الحمولة',

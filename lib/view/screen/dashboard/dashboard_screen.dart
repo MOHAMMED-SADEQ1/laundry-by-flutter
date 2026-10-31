@@ -5,6 +5,8 @@ import 'package:laundry/controller/home/dashboard_controller.dart';
 import 'package:laundry/core/theme/app_colors.dart';
 import 'package:laundry/services/i18n/l10n.dart';
 import 'package:laundry/services/payment/payment_method.dart';
+import 'package:laundry/services/permission/permission_catalog.dart';
+import 'package:laundry/services/permission/permission_service.dart';
 import 'package:laundry/view/widget/common/animation_wrappers.dart';
 import 'package:laundry/view/widget/common/common_widgets.dart';
 
@@ -221,15 +223,19 @@ class DashboardScreen extends StatelessWidget {
         Icons.analytics,
         AppColors.amberGradient,
       ),
-      _KpiData(
-        tr('صافي الربح'),
-        c.todayProfit.value,
-        tr('ر.س'),
-        Icons.trending_up,
-        c.todayProfit.value >= 0
-            ? AppColors.successGradient
-            : AppColors.dangerGradient,
-      ),
+      // 🛡️ بطاقة الربح تظهر فقط بصلاحية `reports.profit` — كانت تُعرض
+      // للكاشير رغم أن الكتالوج يمنعها عنه صراحةً («من يقف على الصندوق لا
+      // يلزم أن يعرف كم يربح الصنف»).
+      if (PermissionService.can(PermissionKeys.reportsProfit))
+        _KpiData(
+          tr('صافي الربح'),
+          c.todayProfit.value,
+          tr('ر.س'),
+          Icons.trending_up,
+          c.todayProfit.value >= 0
+              ? AppColors.successGradient
+              : AppColors.dangerGradient,
+        ),
     ];
 
     return LayoutBuilder(

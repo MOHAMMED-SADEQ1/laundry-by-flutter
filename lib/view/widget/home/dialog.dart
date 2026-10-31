@@ -100,6 +100,10 @@ void dialog(Map<String, dynamic> data) {
                         price: data["normal_washing_and_ironing_price"],
                         color: AppColors.success,
                         icon: Icons.local_laundry_service,
+                        existing: controller.quantityInInvoice(
+                          data,
+                          "normalwashingironing",
+                        ),
                       ),
                       const SizedBox(width: 8),
                       _ServiceCard(
@@ -109,6 +113,10 @@ void dialog(Map<String, dynamic> data) {
                         price: data["urgent_washing_and_ironing_price"],
                         color: AppColors.warning,
                         icon: Icons.bolt,
+                        existing: controller.quantityInInvoice(
+                          data,
+                          "urgentwashingironing",
+                        ),
                       ),
                     ],
                   ),
@@ -122,6 +130,10 @@ void dialog(Map<String, dynamic> data) {
                         price: data["normal_ironing_price"],
                         color: AppColors.info,
                         icon: Icons.checkroom,
+                        existing: controller.quantityInInvoice(
+                          data,
+                          "normalironing",
+                        ),
                       ),
                       const SizedBox(width: 8),
                       _ServiceCard(
@@ -131,6 +143,10 @@ void dialog(Map<String, dynamic> data) {
                         price: data["urgent_ironing_price"],
                         color: AppColors.violet,
                         icon: Icons.local_fire_department,
+                        existing: controller.quantityInInvoice(
+                          data,
+                          "urgentironing",
+                        ),
                       ),
                     ],
                   ),
@@ -425,6 +441,12 @@ class _ServiceCard extends StatelessWidget {
   final Color color;
   final IconData icon;
 
+  /// كم قطعة من هذه الخدمة لهذا الصنف في الفاتورة **الآن**.
+  ///
+  /// يُعرض كشارة «في الفاتورة: N» لأن الكاشير يحتاج أن يعرف قبل الضغط أن
+  /// الضغط سيزيد الكمية لا يُضيف سطرًا — وهذا جوهر ما كان غائبًا.
+  final int existing;
+
   const _ServiceCard({
     required this.controller,
     required this.type,
@@ -432,6 +454,7 @@ class _ServiceCard extends StatelessWidget {
     required this.price,
     required this.color,
     required this.icon,
+    this.existing = 0,
   });
 
   @override
@@ -519,6 +542,33 @@ class _ServiceCard extends StatelessWidget {
                     const CustomImg(sizeImg: 13),
                 ],
               ),
+              // شارة «في الفاتورة: N» — تُخبر الكاشير أن الضغط سيزيد
+              // الكمية لا يُضيف سطرًا جديدًا (كان يجهلها فيضغط مرّتين).
+              if (existing > 0) ...[
+                const SizedBox(height: 3),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 1,
+                  ),
+                  decoration: BoxDecoration(
+                    color:
+                        selected
+                            ? Colors.white.withValues(alpha: 0.25)
+                            : AppColors.success.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(7),
+                  ),
+                  child: Text(
+                    trf('في الفاتورة: {0}', ['$existing']),
+                    style: TextStyle(
+                      fontFamily: 'cairo',
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.bold,
+                      color: selected ? Colors.white : AppColors.success,
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
         ),

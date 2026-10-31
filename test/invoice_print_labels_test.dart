@@ -6,7 +6,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:laundry/config/constants.dart';
 import 'package:laundry/services/payment/payment_method.dart';
-import 'package:laundry/services/pdf/invoice_logo_size.dart';
+import 'package:laundry/services/pdf/print_visual_size.dart';
 import 'package:laundry/services/settings/setting_option.dart';
 
 void main() {
@@ -44,63 +44,136 @@ void main() {
     });
   });
 
-  group('مقاس شعار الفاتورة', () {
+  group('مقاس الشعار ورمز الموقع', () {
     const double tolerance = 0.01;
 
     test('غياب الإعداد يعطي المقاس القديم (53 مم ≈ 150 نقطة)', () {
-      expect(
-        InvoiceLogoSize.resolvePoints(null, maxWidth: 500),
-        closeTo(150.24, tolerance),
-      );
-      expect(
-        InvoiceLogoSize.resolvePoints('غير رقم', maxWidth: 500),
-        closeTo(150.24, tolerance),
-      );
+      final box = PrintVisualSize.logo(maxWidth: 500, maxHeight: 700);
+      expect(box.width, closeTo(150.24, tolerance));
+      expect(box.height, closeTo(150.24, tolerance));
+      expect(box.clamped, isFalse);
     });
 
     test('القيمة تُقرأ من num أو نصّ (عبر عزل compute)', () {
-      expect(
-        InvoiceLogoSize.resolvePoints(80, maxWidth: 500),
-        closeTo(226.77, tolerance),
+      final fromNum = PrintVisualSize.logo(
+        widthMm: 80,
+        heightMm: 80,
+        maxWidth: 500,
+        maxHeight: 700,
       );
-      expect(
-        InvoiceLogoSize.resolvePoints('80', maxWidth: 500),
-        closeTo(226.77, tolerance),
+      final fromText = PrintVisualSize.logo(
+        widthMm: '80',
+        heightMm: '80',
+        maxWidth: 500,
+        maxHeight: 700,
       );
+      expect(fromNum.width, closeTo(226.77, tolerance));
+      expect(fromText.width, closeTo(226.77, tolerance));
+    });
+
+    test('العرض والارتفاع مستقلّان — الشعار المستطيل لا يُقصّ إلى مربّع', () {
+      final box = PrintVisualSize.logo(
+        widthMm: 80,
+        heightMm: 30,
+        maxWidth: 500,
+        maxHeight: 700,
+      );
+      expect(box.widthMm, closeTo(80, tolerance));
+      expect(box.heightMm, closeTo(30, tolerance));
+      // المساحة = العرض × الارتفاع (طلب المستخدم صريحًا).
+      expect(box.areaMm2, closeTo(2400, 0.5));
+      expect(box.isSquare, isFalse);
     });
 
     test('الحدود تُطبَّق فلا شعار ضئيل ولا شعار أوسع من الورق', () {
-      expect(
-        InvoiceLogoSize.resolvePoints(1, maxWidth: 500),
-        closeTo(28.35, tolerance),
+      final tiny = PrintVisualSize.logo(
+        widthMm: 1,
+        heightMm: 1,
+        maxWidth: 500,
+        maxHeight: 700,
       );
-      expect(
-        InvoiceLogoSize.resolvePoints(999, maxWidth: 500),
-        closeTo(340.16, tolerance),
+      expect(tiny.widthMm, closeTo(5, tolerance));
+
+      final huge = PrintVisualSize.logo(
+        widthMm: 999,
+        heightMm: 999,
+        maxWidth: 500,
+        maxHeight: 700,
       );
-      // ورقة حرارية ضيقة: العرض المتاح هو السقف الفعلي.
-      expect(
-        InvoiceLogoSize.resolvePoints(120, maxWidth: 152),
-        closeTo(152, tolerance),
+      expect(huge.width, closeTo(340.16, tolerance)); // 120 مم = الحدّ الأعلى
+      expect(huge.widthClamped, isFalse); // الحدّ الأعلى للمفتاح لا للورق
+    });
+
+    test('العرض المتاح هو السقف الفعلي ويُعلَن التقييد', () {
+      final box = PrintVisualSize.logo(
+        widthMm: 120,
+        heightMm: 120,
+        maxWidth: 152,
+        maxHeight: 700,
       );
+      expect(box.width, closeTo(152, tolerance));
+      expect(box.widthClamped, isTrue);
+    });
+
+    test('ارتفاع الشعار يُقيَّد كي لا يدفع الأصناف إلى صفحة ثانية', () {
+      final box = PrintVisualSize.logo(
+        widthMm: 60,
+        heightMm: 120,
+        maxWidth: 500,
+        maxHeight: 700,
+      );
+      expect(box.height, closeTo(700 * PrintVisualSize.logoMaxHeightShare, tolerance));
+      expect(box.heightClamped, isTrue);
     });
 
     test('العرض المتاح الشاذ لا ينتج مقاسًا سالبًا أو صفرًا', () {
-      expect(
-        InvoiceLogoSize.resolvePoints(53, maxWidth: 2),
-        InvoiceLogoSize.minPoints,
+      final box = PrintVisualSize.logo(
+        widthMm: 53,
+        heightMm: 53,
+        maxWidth: 2,
+        maxHeight: 2,
       );
+      expect(box.width, PrintVisualSize.minPoints);
+      expect(box.height, PrintVisualSize.minPoints);
     });
 
-    test('الإعداد مسجَّل ويتبع مفتاح إظهار الشعار', () {
-      final option = SettingOptions.byKey(AppConstants.settingInvoiceLogoSize);
-      expect(option, isNotNull);
-      expect(option!.isInteger, isTrue);
-      expect(option.defaultValue, '${AppConstants.invoiceLogoSizeDefaultMm}');
-      expect(option.min, AppConstants.invoiceLogoSizeMinMm);
-      expect(option.max, AppConstants.invoiceLogoSizeMaxMm);
-      expect(option.enabledBy, AppConstants.settingInvoiceShowLogo);
-      expect(SettingOptions.all.contains(option), isTrue);
+    test('رمز QR يبقى مربّعًا بعد التقييد', () {
+      final box = PrintVisualSize.qr(
+        sizeMm: 30,
+        maxWidth: 500,
+        maxHeight: 700,
+      );
+      expect(box.isSquare, isTrue);
+      expect(box.widthMm, closeTo(30, tolerance));
+
+      final narrow = PrintVisualSize.qr(
+        sizeMm: 70,
+        maxWidth: 137,
+        maxHeight: 700,
+      );
+      expect(narrow.isSquare, isTrue);
+      expect(narrow.width, closeTo(137, tolerance));
+      expect(narrow.widthClamped, isTrue);
+    });
+
+    test('الإعدادات مسجَّلة وتتبع مفتاح إظهار الشعار', () {
+      final width = SettingOptions.byKey(AppConstants.settingInvoiceLogoWidth);
+      final height = SettingOptions.byKey(AppConstants.settingInvoiceLogoHeight);
+      final qr = SettingOptions.byKey(AppConstants.settingMapQrSize);
+
+      expect(width, isNotNull);
+      expect(height, isNotNull);
+      expect(qr, isNotNull);
+      expect(width!.defaultValue, '${AppConstants.invoiceLogoWidthDefaultMm}');
+      expect(height!.defaultValue, '${AppConstants.invoiceLogoHeightDefaultMm}');
+      expect(qr!.defaultValue, '${AppConstants.mapQrSizeDefaultMm}');
+      expect(width.enabledBy, AppConstants.settingInvoiceShowLogo);
+      expect(height.enabledBy, AppConstants.settingInvoiceShowLogo);
+      expect(SettingOptions.all.contains(width), isTrue);
+      expect(SettingOptions.all.contains(height), isTrue);
+      expect(SettingOptions.all.contains(qr), isTrue);
+      // المفتاح القديم لم يبقَ خيارًا معروضًا — لا تحكّمين لنفس المقاس.
+      expect(SettingOptions.byKey(AppConstants.settingInvoiceLogoSize), isNull);
     });
   });
 }

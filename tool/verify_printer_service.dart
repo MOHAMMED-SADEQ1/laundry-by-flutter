@@ -76,10 +76,12 @@ void main() {
   check('[4] لا حجب مسبق باسم التعريف',
       !svc.contains('isTextOnlyDriver'),
       'الحجب المسبق يمنع طباعة تعمل فعلًا');
+  // الوسيط السادس `rebuild` اختياري (نسخة الطباعة بهوامش الطابعة)،
+  // فلا يُشترط وجوده لثبوت المحاولتين.
   check('[4] محاولتان: إعدادات التعريف ثم مقاس المستند',
-      RegExp(r'_attempt\(bytes, target, jobName, paper, true\)')
+      RegExp(r'_attempt\(\s*bytes,\s*target,\s*jobName,\s*paper,\s*true')
               .hasMatch(svc) &&
-          RegExp(r'_attempt\(bytes, target, jobName, paper, false\)')
+          RegExp(r'_attempt\(\s*bytes,\s*target,\s*jobName,\s*paper,\s*false')
               .hasMatch(svc),
       'تعريف يرفض DEVMODE يحتاج المحاولة الثانية');
 

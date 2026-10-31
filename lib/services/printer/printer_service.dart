@@ -31,6 +31,13 @@ import 'package:printing/printing.dart';
 /// ## الحذر
 /// إن حُذفت الطابعة المختارة من الجهاز (أو غاب معرّفها) نرجع تلقائيًا إلى
 /// حوار النظام — **لا فشل صامت ولا منع طباعة**.
+/// يعيد بناء مستند الطباعة حسب تخطيط الطابعة الفعلي.
+///
+/// يُستدعى من `onLayout` بعد أن يعرف تعريف الطابعة مقاس الورقة والهوامش غير
+/// القابلة للطباعة، فتُولَّد نسخة تنطبق على المساحة القابلة للطباعة بدل قصّ
+/// الجانب الأيمن من الورقة (بداية أسماء الأصناف في RTL).
+typedef PdfRebuilder = FutureOr<Uint8List> Function(PdfPageFormat layout);
+
 class PrinterService {
   PrinterService._();
   static final PrinterService instance = PrinterService._();
@@ -139,11 +146,16 @@ class PrinterService {
   /// [paper] مقاس المستند الفعلي. يُمرَّر لأن الافتراضي في الحزمة **A4**،
   /// فإيصال 80 مم كان يُرسَل إلى تعريف بقياس A4 (محتوى صغير في الزاوية).
   ///
+  /// [rebuild] يُعيد توليد المستند بعد أن تُبلّغ الطابعة عن مقاس الورقة
+  /// وهوامشها الحقيقية. بدونه تُطبع البايتات كما هي، وقد يُقصّ الجانب الأيمن
+  /// إن كان هامش الطابعة أوسع من هامش التصميم.
+  ///
   /// يرجع `true` إن أُرسل المستند للطباعة. ولا يرمي استثناءً.
   Future<bool> printPdf(
     Uint8List bytes, {
     String jobName = '',
     PaperSize? paper,
+    PdfRebuilder? rebuild,
   }) async {
     lastIssue = null;
     final effectiveJobName = jobName.trim().isEmpty ? tr('مستند') : jobName;
@@ -194,6 +206,7 @@ class PrinterService {
             target,
             effectiveJobName,
             paper,
+            rebuild,
           )) {
             return true;
           }
@@ -211,8 +224,27 @@ class PrinterService {
     // المسار الافتراضي: حوار طباعة النظام (كما كان قبل الميزة).
     return Printing.layoutPdf(
       name: effectiveJobName,
-      onLayout: (_) => bytes,
+      onLayout: _layoutCallback(bytes, rebuild),
     );
+  }
+
+  /// دالة `onLayout` الموحّدة: تُعيد نسخة الطباعة إن أمكن، وإلا الأصل.
+  ///
+  /// أي فشل في إعادة التوليد **لا يُسقط الطباعة**: نرجع الأصل بدل أن نفقد
+  /// الورقة كلها. الطبقة الأصلية تعتبر رمي استثناء هنا فشلًا للمهمة.
+  LayoutCallback _layoutCallback(
+    Uint8List bytes,
+    PdfRebuilder? rebuild,
+  ) {
+    return (PdfPageFormat format) async {
+      if (rebuild == null) return bytes;
+      try {
+        return await rebuild(format);
+      } catch (e) {
+        debugPrint('PrinterService: تعذّرت إعادة توليد نسخة الطباعة — $e');
+        return bytes;
+      }
+    };
   }
 
   /// الطباعة المباشرة — **محاولتان** لأن لكل تعريف مزاجه في ويندوز.
@@ -232,14 +264,19 @@ class PrinterService {
     Printer target,
     String jobName,
     PaperSize? paper,
+    PdfRebuilder? rebuild,
   ) async {
-    if (await _attempt(bytes, target, jobName, paper, true)) return true;
+    if (await _attempt(bytes, target, jobName, paper, true, rebuild)) {
+      return true;
+    }
     debugPrint(
       trf('PrinterService: المحاولة 1 (إعدادات التعريف) فشلت — {0}', [
         lastIssue ?? '',
       ]),
     );
-    if (await _attempt(bytes, target, jobName, paper, false)) return true;
+    if (await _attempt(bytes, target, jobName, paper, false, rebuild)) {
+      return true;
+    }
     debugPrint(
       trf('PrinterService: المحاولة 2 (مقاس المستند) فشلت — {0}', [
         lastIssue ?? '',
@@ -264,6 +301,7 @@ class PrinterService {
     String jobName,
     PaperSize? paper,
     bool usePrinterSettings,
+    PdfRebuilder? rebuild,
   ) async {
     try {
       // ⚠️ `directPrintPdf` ترجع **`FutureOr<bool>`** لا `Future<bool>`
@@ -274,10 +312,11 @@ class PrinterService {
           printer: target,
           name: jobName,
           format: formatFor(paper),
-          // المستند جاهز ومبنيّ مسبقًا ⇒ لا إعادة تخطيط.
+          // المستند جاهز ومبنيّ مسبقًا ⇒ لا إعادة تخطيط تلقائي، لكن
+          // الطابعة تُبلّغ عن ورقتها الفعلية فنُعيد بناء نسخة الطباعة.
           dynamicLayout: false,
           usePrinterSettings: usePrinterSettings,
-          onLayout: (_) => bytes,
+          onLayout: _layoutCallback(bytes, rebuild),
         ),
       );
       // ٨ ثوانٍ لكل محاولة: النجاح يعود فورًا بعد الإرسال للـspooler،

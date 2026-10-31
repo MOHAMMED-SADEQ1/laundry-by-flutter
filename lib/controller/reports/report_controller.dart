@@ -3,6 +3,8 @@ import 'package:get/get.dart';
 import 'package:intl/intl.dart';
 import 'package:laundry/services/expense/expense_service.dart';
 import 'package:laundry/services/invoice/invoice_items_service.dart';
+import 'package:laundry/services/permission/permission_catalog.dart';
+import 'package:laundry/services/permission/permission_service.dart';
 import 'package:laundry/services/tax/vat_return.dart';
 import 'package:laundry/services/subscription/subscription_service.dart';
 import 'package:laundry/sqldb.dart';
@@ -17,6 +19,30 @@ class ReportController extends GetxController {
   var customerReport = <String, dynamic>{}.obs;
   var itemReport = <String, dynamic>{}.obs;
   var isLoading = false.obs;
+
+  /// يُنقّي مقاييس التقرير بحسب الصلاحيات **قبل** أن تصل إلى الواجهة.
+  ///
+  /// 🛡️ `reports.profit` و`reports.tax` كانا **معلنَين بلا إنفاذ**: أي مستخدم
+  /// يفتح شاشة التقارير (`reports.view`) يرى هامش الربح والضريبة، ولو أُسقطت
+  /// عنه الصلاحيتان من شاشة الأدوار. حزمة «كاشير» لا تحمل `reports.profit`
+  /// أصلًا — لكن الفحص في الواجهة وحدها لا يكفي، فالتنقية هنا في المتحكّم:
+  /// القيمة **لا تُحسب في الخريطة** التي تصل إلى الشاشة إطلاقًا.
+  ///
+  /// الحجب بـ`null` لا بالصفر: الصفر رقم كاذب («ربحت صفرًا») و`null` يعني
+  /// «غير مصرَّح»، والواجهة تُخفي بطاقته كليًّا.
+  Map<String, dynamic> _guardMetrics(Map<String, dynamic> report) {
+    final out = Map<String, dynamic>.from(report);
+    if (!PermissionService.can(PermissionKeys.reportsProfit)) {
+      out['total_cost'] = null;
+      out['gross_profit'] = null;
+      out['net_profit'] = null;
+      out['expenses'] = null;
+    }
+    if (!PermissionService.can(PermissionKeys.reportsTax)) {
+      out['total_tax'] = null;
+    }
+    return out;
+  }
 
   /// تكلفة القطع المُغسلة في فترة محددة (تكلفة كل قطعة × كميتها)،
   /// بنفس منطق لوحة التحكم، وتُستخدم لخصمها من المبيعات لحساب صافي الربح.
@@ -273,12 +299,12 @@ class ReportController extends GetxController {
       final dateStr = DateFormat('yyyy-MM-dd').format(targetDate);
 
       final salesData = await _db.readData(
-        'SELECT COALESCE(SUM(final_amount), 0) AS total_sales, COALESCE(SUM(paid_amount), 0) AS total_paid, COALESCE(SUM(remaining_amount), 0) AS total_remaining, COUNT(*) AS invoice_count FROM invoices WHERE DATE(invoice_date) = ? AND subscription_id IS NULL',
+        'SELECT COALESCE(SUM(final_amount), 0) AS total_sales, COALESCE(SUM(paid_amount), 0) AS total_paid, COALESCE(SUM(remaining_amount), 0) AS total_remaining, COUNT(CASE WHEN COALESCE(credit_note_of, 0) = 0 THEN 1 END) AS invoice_count FROM invoices WHERE DATE(invoice_date) = ? AND subscription_id IS NULL',
         [dateStr],
       );
 
       final topItems = await _db.readData(
-        'SELECT c.clothing_name, COUNT(*) AS times_sold FROM invoices i, json_each(i.list_data) j, clothing c WHERE json_extract(j.value, \'\$.vestments\') = c.clothing_name AND DATE(i.invoice_date) = ? GROUP BY c.clothing_name ORDER BY times_sold DESC LIMIT 10',
+        'SELECT c.clothing_name, COUNT(*) AS times_sold FROM invoices i, json_each(i.list_data) j, clothing c WHERE json_extract(j.value, \'\$.vestments\') = c.clothing_name AND COALESCE(i.credit_note_of, 0) = 0 AND DATE(i.invoice_date) = ? GROUP BY c.clothing_name ORDER BY times_sold DESC LIMIT 10',
         [dateStr],
       );
 
@@ -339,8 +365,9 @@ class ReportController extends GetxController {
         'payment_breakdown': paymentBreakdown,
       };
 
-      dailyReport.value = report;
-      return report;
+      final guarded = _guardMetrics(report);
+      dailyReport.value = guarded;
+      return guarded;
     } finally {
       isLoading.value = false;
     }
@@ -359,12 +386,12 @@ class ReportController extends GetxController {
       final endStr = DateFormat('yyyy-MM-dd').format(targetEnd);
 
       final salesData = await _db.readData(
-        'SELECT COALESCE(SUM(final_amount), 0) AS total_sales, COALESCE(SUM(paid_amount), 0) AS total_paid, COALESCE(SUM(remaining_amount), 0) AS total_remaining, COUNT(*) AS invoice_count FROM invoices WHERE DATE(invoice_date) BETWEEN ? AND ? AND subscription_id IS NULL',
+        'SELECT COALESCE(SUM(final_amount), 0) AS total_sales, COALESCE(SUM(paid_amount), 0) AS total_paid, COALESCE(SUM(remaining_amount), 0) AS total_remaining, COUNT(CASE WHEN COALESCE(credit_note_of, 0) = 0 THEN 1 END) AS invoice_count FROM invoices WHERE DATE(invoice_date) BETWEEN ? AND ? AND subscription_id IS NULL',
         [startStr, endStr],
       );
 
       final dailyBreakdown = await _db.readData(
-        'SELECT DATE(invoice_date) AS day, COALESCE(SUM(final_amount), 0) AS sales, COUNT(*) AS invoices FROM invoices WHERE DATE(invoice_date) BETWEEN ? AND ? GROUP BY DATE(invoice_date) ORDER BY day',
+        'SELECT DATE(invoice_date) AS day, COALESCE(SUM(final_amount), 0) AS sales, COUNT(CASE WHEN COALESCE(credit_note_of, 0) = 0 THEN 1 END) AS invoices FROM invoices WHERE DATE(invoice_date) BETWEEN ? AND ? GROUP BY DATE(invoice_date) ORDER BY day',
         [startStr, endStr],
       );
 
@@ -410,8 +437,9 @@ class ReportController extends GetxController {
         'daily_breakdown': dailyBreakdown,
       };
 
-      weeklyReport.value = report;
-      return report;
+      final guarded = _guardMetrics(report);
+      weeklyReport.value = guarded;
+      return guarded;
     } finally {
       isLoading.value = false;
     }
@@ -434,17 +462,17 @@ class ReportController extends GetxController {
       ).format(DateTime(targetYear, targetMonth + 1));
 
       final salesData = await _db.readData(
-        'SELECT COALESCE(SUM(final_amount), 0) AS total_sales, COALESCE(SUM(paid_amount), 0) AS total_paid, COALESCE(SUM(remaining_amount), 0) AS total_remaining, COUNT(*) AS invoice_count FROM invoices WHERE DATE(invoice_date) >= ? AND DATE(invoice_date) < ? AND subscription_id IS NULL',
+        'SELECT COALESCE(SUM(final_amount), 0) AS total_sales, COALESCE(SUM(paid_amount), 0) AS total_paid, COALESCE(SUM(remaining_amount), 0) AS total_remaining, COUNT(CASE WHEN COALESCE(credit_note_of, 0) = 0 THEN 1 END) AS invoice_count FROM invoices WHERE DATE(invoice_date) >= ? AND DATE(invoice_date) < ? AND subscription_id IS NULL',
         ['$monthStr-01', '$nextMonth-01'],
       );
 
       final weeklyBreakdown = await _db.readData(
-        'SELECT strftime("%W", invoice_date) AS week, COALESCE(SUM(final_amount), 0) AS sales, COUNT(*) AS invoices FROM invoices WHERE DATE(invoice_date) >= ? AND DATE(invoice_date) < ? GROUP BY strftime("%W", invoice_date) ORDER BY week',
+        'SELECT strftime("%W", invoice_date) AS week, COALESCE(SUM(final_amount), 0) AS sales, COUNT(CASE WHEN COALESCE(credit_note_of, 0) = 0 THEN 1 END) AS invoices FROM invoices WHERE DATE(invoice_date) >= ? AND DATE(invoice_date) < ? GROUP BY strftime("%W", invoice_date) ORDER BY week',
         ['$monthStr-01', '$nextMonth-01'],
       );
 
       final topItems = await _db.readData(
-        'SELECT c.clothing_name, COUNT(*) AS times_sold FROM invoices i, json_each(i.list_data) j, clothing c WHERE json_extract(j.value, \'\$.vestments\') = c.clothing_name AND DATE(i.invoice_date) >= ? AND DATE(i.invoice_date) < ? GROUP BY c.clothing_name ORDER BY times_sold DESC LIMIT 10',
+        'SELECT c.clothing_name, COUNT(*) AS times_sold FROM invoices i, json_each(i.list_data) j, clothing c WHERE json_extract(j.value, \'\$.vestments\') = c.clothing_name AND COALESCE(i.credit_note_of, 0) = 0 AND DATE(i.invoice_date) >= ? AND DATE(i.invoice_date) < ? GROUP BY c.clothing_name ORDER BY times_sold DESC LIMIT 10',
         ['$monthStr-01', '$nextMonth-01'],
       );
 
@@ -508,8 +536,9 @@ class ReportController extends GetxController {
         'top_items': topItems,
       };
 
-      monthlyReport.value = report;
-      return report;
+      final guarded = _guardMetrics(report);
+      monthlyReport.value = guarded;
+      return guarded;
     } finally {
       isLoading.value = false;
     }
@@ -523,17 +552,17 @@ class ReportController extends GetxController {
       final endStr = '$targetYear-12-31';
 
       final salesData = await _db.readData(
-        'SELECT COALESCE(SUM(final_amount), 0) AS total_sales, COALESCE(SUM(paid_amount), 0) AS total_paid, COALESCE(SUM(remaining_amount), 0) AS total_remaining, COUNT(*) AS invoice_count FROM invoices WHERE DATE(invoice_date) BETWEEN ? AND ? AND subscription_id IS NULL',
+        'SELECT COALESCE(SUM(final_amount), 0) AS total_sales, COALESCE(SUM(paid_amount), 0) AS total_paid, COALESCE(SUM(remaining_amount), 0) AS total_remaining, COUNT(CASE WHEN COALESCE(credit_note_of, 0) = 0 THEN 1 END) AS invoice_count FROM invoices WHERE DATE(invoice_date) BETWEEN ? AND ? AND subscription_id IS NULL',
         [startStr, endStr],
       );
 
       final monthlyBreakdown = await _db.readData(
-        'SELECT strftime("%m", invoice_date) AS month, COALESCE(SUM(final_amount), 0) AS sales, COUNT(*) AS invoices FROM invoices WHERE DATE(invoice_date) BETWEEN ? AND ? GROUP BY strftime("%m", invoice_date) ORDER BY month',
+        'SELECT strftime("%m", invoice_date) AS month, COALESCE(SUM(final_amount), 0) AS sales, COUNT(CASE WHEN COALESCE(credit_note_of, 0) = 0 THEN 1 END) AS invoices FROM invoices WHERE DATE(invoice_date) BETWEEN ? AND ? GROUP BY strftime("%m", invoice_date) ORDER BY month',
         [startStr, endStr],
       );
 
       final topItems = await _db.readData(
-        'SELECT c.clothing_name, COUNT(*) AS times_sold FROM invoices i, json_each(i.list_data) j, clothing c WHERE json_extract(j.value, \'\$.vestments\') = c.clothing_name AND DATE(i.invoice_date) BETWEEN ? AND ? GROUP BY c.clothing_name ORDER BY times_sold DESC LIMIT 10',
+        'SELECT c.clothing_name, COUNT(*) AS times_sold FROM invoices i, json_each(i.list_data) j, clothing c WHERE json_extract(j.value, \'\$.vestments\') = c.clothing_name AND COALESCE(i.credit_note_of, 0) = 0 AND DATE(i.invoice_date) BETWEEN ? AND ? GROUP BY c.clothing_name ORDER BY times_sold DESC LIMIT 10',
         [startStr, endStr],
       );
 
@@ -582,8 +611,9 @@ class ReportController extends GetxController {
         'top_items': topItems,
       };
 
-      annualReport.value = report;
-      return report;
+      final guarded = _guardMetrics(report);
+      annualReport.value = guarded;
+      return guarded;
     } finally {
       isLoading.value = false;
     }
@@ -602,7 +632,7 @@ class ReportController extends GetxController {
       }
 
       final invoiceData = await _db.readData(
-        'SELECT COALESCE(SUM(final_amount), 0) AS total_spent, COUNT(*) AS invoice_count, COALESCE(SUM(remaining_amount), 0) AS total_remaining FROM invoices WHERE customer_id = ?',
+        'SELECT COALESCE(SUM(final_amount), 0) AS total_spent, COUNT(CASE WHEN COALESCE(credit_note_of, 0) = 0 THEN 1 END) AS invoice_count, COALESCE(SUM(remaining_amount), 0) AS total_remaining FROM invoices WHERE customer_id = ?',
         [customerId],
       );
 

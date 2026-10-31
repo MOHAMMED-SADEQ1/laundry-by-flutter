@@ -12,7 +12,9 @@ import 'dart:typed_data';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:laundry/core/services/preparePDF.dart';
+import 'package:laundry/services/i18n/translations_en.dart';
 import 'package:laundry/services/pdf/doc_template.dart';
+import 'package:laundry/services/printer/print_layout.dart';
 import 'package:pdf/widgets.dart' as pw;
 
 Future<Uint8List> _asset(String path) async {
@@ -199,11 +201,37 @@ void main() {
 
   test('الفاتورة: الافتراضي يُولّد ورقة سليمة', () async {
     final tpl = DocTemplate.defaults(DocKind.invoice);
-    final bytes = await PreparePDF.generatePdfData(
-      await _invoiceData(tpl),
-    );
+    final bytes = await PreparePDF.generatePdfData(await _invoiceData(tpl));
     expect(bytes.length, greaterThan(5000));
     File('build/probe/invoice_default.pdf').writeAsBytesSync(bytes);
+  });
+
+  test('الفاتورة: نسخة الطباعة تتّبع ورقة الطابعة الفعلية', () async {
+    // تُحاكي ما يُرسله `PrinterService` من `onLayout`: ورق مختلف عن المصمَّم
+    // (Letter) وهامش أيمن غير قابل للطباعة (20 نقطة) أوسع من هامش التصميم.
+    final tpl = DocTemplate.defaults(DocKind.invoice);
+    final layout = const PrintLayout(
+      width: 612,
+      height: 792,
+      left: 10,
+      top: 10,
+      right: 40,
+      bottom: 10,
+    );
+    final bytes = await PreparePDF.generatePdfData(
+      layout.applyTo(await _invoiceData(tpl)),
+    );
+    expect(bytes.length, greaterThan(5000));
+    File('build/probe/invoice_print_layout.pdf').writeAsBytesSync(bytes);
+
+    // الصفحة وُلدت بمقاس الطابعة الفعلي لا A4 المصمَّم — وإلا رُسمت أعرض
+    // من الورقة وقُصّ جانبها الأيمن.
+    final text = String.fromCharCodes(bytes);
+    expect(
+      RegExp(r'/MediaBox\[0 0 612(?:\.0+)? 792(?:\.0+)?\]').hasMatch(text),
+      isTrue,
+      reason: 'مقاس صفحة نسخة الطباعة لم يتبع ورقة الطابعة',
+    );
   });
 
   test('الفاتورة: تعطيل الكل يُخرج ورقة أصغر', () async {
@@ -216,15 +244,14 @@ void main() {
   });
 
   test('الفاتورة: نصوص مخصّصة + حقول جديدة مُفعَّلة', () async {
-    final tpl =
-        DocTemplate.defaults(DocKind.invoice)
-            .withField(DocCatalog.kReceiptNo, text: 'إيصال رقم')
-            .withField(DocCatalog.kCustomerName, text: 'الزبون')
-            .withField(DocCatalog.kRemaining, enabled: true)
-            .withField(DocCatalog.kPickupCode, enabled: true)
-            .withField(DocCatalog.kCustomerPhone, enabled: true)
-            .withField(DocCatalog.kTaxLine, text: 'ضريبة (15%)')
-            .withField(DocCatalog.kFooter, text: 'الاستلام خلال ٣ أيام');
+    final tpl = DocTemplate.defaults(DocKind.invoice)
+        .withField(DocCatalog.kReceiptNo, text: 'إيصال رقم')
+        .withField(DocCatalog.kCustomerName, text: 'الزبون')
+        .withField(DocCatalog.kRemaining, enabled: true)
+        .withField(DocCatalog.kPickupCode, enabled: true)
+        .withField(DocCatalog.kCustomerPhone, enabled: true)
+        .withField(DocCatalog.kTaxLine, text: 'ضريبة (15%)')
+        .withField(DocCatalog.kFooter, text: 'الاستلام خلال ٣ أيام');
     final bytes = await PreparePDF.generatePdfData(await _invoiceData(tpl));
     expect(bytes.length, greaterThan(5000));
     File('build/probe/invoice_custom.pdf').writeAsBytesSync(bytes);
@@ -324,5 +351,55 @@ void main() {
     final bytes = await PreparePDF.generatePdfData(await _invoiceData(wild));
     File('build/probe/invoice_extreme.pdf').writeAsBytesSync(bytes);
     expect(bytes.length, greaterThan(5000));
+  });
+
+  test('لغة المستند مستقلة: نسختان عربية وإنجليزية تُولَّدان', () async {
+    // الحمولة تحمل قرار اللغة صراحةً — كما يفعل `DocTemplateService.transport`
+    // بعد أن صار يقرأ إعداد «لغة الفاتورة والمستندات» لا لغة الواجهة.
+    final invoiceTpl = DocTemplate.defaults(DocKind.invoice);
+    final invoiceAr = await PreparePDF.generatePdfData({
+      ...await _invoiceData(invoiceTpl),
+      'payment': 'cash',
+      'docLang': 'ar',
+    });
+    final invoiceEn = await PreparePDF.generatePdfData({
+      ...await _invoiceData(invoiceTpl),
+      'payment': 'cash',
+      'docLang': 'en',
+      'docEnglish': kEnglish,
+    });
+    File('build/probe/invoice_doc_ar.pdf').writeAsBytesSync(invoiceAr);
+    File('build/probe/invoice_doc_en.pdf').writeAsBytesSync(invoiceEn);
+    expect(invoiceAr.length, greaterThan(5000));
+    expect(invoiceEn.length, greaterThan(5000));
+    expect(invoiceEn, isNot(equals(invoiceAr)));
+
+    final shiftTpl = DocTemplate.defaults(DocKind.shift);
+    final shiftAr = await PreparePDF.generateShiftSummaryPdf({
+      ..._shiftData(shiftTpl),
+      'docLang': 'ar',
+    });
+    final shiftEn = await PreparePDF.generateShiftSummaryPdf({
+      ..._shiftData(shiftTpl),
+      'docLang': 'en',
+      'docEnglish': kEnglish,
+    });
+    File('build/probe/shift_doc_ar.pdf').writeAsBytesSync(shiftAr);
+    File('build/probe/shift_doc_en.pdf').writeAsBytesSync(shiftEn);
+    expect(shiftEn, isNot(equals(shiftAr)));
+
+    final statementTpl = DocTemplate.defaults(DocKind.statement);
+    final statementAr = await PreparePDF.generateCustomerStatementPdf({
+      ..._statementData(tpl: statementTpl),
+      'docLang': 'ar',
+    });
+    final statementEn = await PreparePDF.generateCustomerStatementPdf({
+      ..._statementData(tpl: statementTpl),
+      'docLang': 'en',
+      'docEnglish': kEnglish,
+    });
+    File('build/probe/statement_doc_ar.pdf').writeAsBytesSync(statementAr);
+    File('build/probe/statement_doc_en.pdf').writeAsBytesSync(statementEn);
+    expect(statementEn, isNot(equals(statementAr)));
   });
 }

@@ -122,10 +122,14 @@ class InvoiceShareService {
       'bizName': BusinessInfoService.instance.name,
       'bizPhone': BusinessInfoService.instance.phone,
       'bizAddress': BusinessInfoService.instance.address,
+      // رابط الموقع — يُرمَّز QR أسفل الورقة المشتركة.
+      'bizMapUrl': BusinessInfoService.instance.location,
       'createdByName': '',
-      // حجم الشعار يتبع إعداد الفاتورة الحالي — إعادة المشاركة تُخرج الشكل
-      // نفسه الذي يراه المستخدم في المعاينة، لا مقاسًا ثابتًا في الكود.
-      'logoSizeMm': AppSettingsService.instance.invoiceLogoSizeMm,
+      // مقاس الشعار والرمز يتبع إعداد الفاتورة الحالي — إعادة المشاركة
+      // تُخرج الشكل نفسه الذي يراه المستخدم في المعاينة، لا مقاسًا ثابتًا.
+      'logoWidthMm': AppSettingsService.instance.invoiceLogoWidthMm,
+      'logoHeightMm': AppSettingsService.instance.invoiceLogoHeightMm,
+      'mapQrSizeMm': AppSettingsService.instance.mapQrSizeMm,
       // ─── قالب المستند (تفعيل ونصوص كل عنصر) ───
       ...DocTemplateService.instance.transport(DocKind.invoice),
     };

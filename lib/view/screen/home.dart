@@ -11,6 +11,7 @@ import 'package:laundry/view/widget/common/common_widgets.dart';
 import 'package:laundry/view/widget/home/customdrawer.dart';
 import 'package:laundry/view/widget/home/catalog_refresh_button.dart';
 import 'package:laundry/view/widget/home/clothing_sort_menu.dart';
+import 'package:laundry/view/widget/home/home_grid_columns_menu.dart';
 import 'package:laundry/view/widget/home/customshowdialog.dart';
 import 'package:laundry/services/permission/permission_service.dart';
 import 'package:laundry/view/widget/customer/customer_search_dialog.dart';
@@ -245,6 +246,9 @@ class _ItemsAreaState extends State<_ItemsArea> {
                 const SizedBox(width: 8),
                 // ─── ترتيب الأصناف (الفرز في القاعدة) ───
                 const ClothingSortMenu(),
+                const SizedBox(width: 8),
+                // ─── عدد الأعمدة (يُحفظ ويُطبَّق على الشبكة فورًا) ───
+                const HomeGridColumnsMenu(),
               ],
             ),
           ),
@@ -327,6 +331,12 @@ class _ItemsAreaState extends State<_ItemsArea> {
                   }
                 });
               }
+              // 🚨 تُقرأ **هنا** لا داخل `LayoutBuilder`: القراءة داخل
+              // `builder` تقع في طور التخطيط بعد أن يكون `Obx` قد حسم
+              // اشتراكاته، فلا تُسجَّل تبعية على `gridColumns` ولا تتغيّر
+              // الشبكة عند اختيار عدد أعمدة آخر. القراءة في جسم `Obx`
+              // تضمن إعادة بناء الشبكة فورًا.
+              final configuredColumns = catController.gridColumns.value;
               final data =
                   catController.clothing
                       .map((e) => Map<String, dynamic>.from(e))
@@ -388,7 +398,14 @@ class _ItemsAreaState extends State<_ItemsArea> {
 
               return LayoutBuilder(
                 builder: (context, cons) {
-                  final cols = (cons.maxWidth / 210).floor().clamp(2, 6);
+                  // «تلقائي» يحافظ على السلوك المرن السابق. الاختيار الصريح
+                  // يُحترم مع سقف أمان يمنع تصغير البطاقة لحدّ يفيض محتواها.
+                  final autoCols = (cons.maxWidth / 210).floor().clamp(2, 6);
+                  final maxSafe = (cons.maxWidth / 145).floor().clamp(2, 6);
+                  final cols =
+                      configuredColumns > 0
+                          ? configuredColumns.clamp(2, maxSafe).toInt()
+                          : autoCols;
                   return GridView.builder(
                     padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
                     gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(

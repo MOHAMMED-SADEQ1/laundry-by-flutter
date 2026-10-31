@@ -56,7 +56,9 @@ Set<String> compose({
 }
 
 void main() {
-  const invoiceDelete = PermissionKeys.invoiceDelete;
+  // مفتاح فحص حقيقي: الكاشير لا يملكه والمدير يملكه — و`invoice.delete`
+  // أُزيل من الكتالوج (لا حذف فاتورة صادرة) فلم يبقَ صالحًا كعيّنة.
+  const sellOnCredit = PermissionKeys.invoiceSellOnCredit;
   const discountApply = PermissionKeys.invoiceDiscountApply;
   const reportsProfit = PermissionKeys.reportsProfit;
 
@@ -65,20 +67,20 @@ void main() {
     roleKeys: PermissionCatalog.cashierBundle,
     overrides: const [],
   );
-  check('[1] الكاشير بلا تجاوز: لا حذف فاتورة', !base.contains(invoiceDelete));
+  check('[1] الكاشير بلا تجاوز: لا بيع آجل', !base.contains(sellOnCredit));
 
   final withGrant = compose(
     roleKeys: PermissionCatalog.cashierBundle,
-    overrides: const [(key: invoiceDelete, allow: true)],
+    overrides: const [(key: sellOnCredit, allow: true)],
   );
   check('[1] منح فردي يضيف ما لا يملكه الدور',
-      withGrant.contains(invoiceDelete));
+      withGrant.contains(sellOnCredit));
 
   final withDeny = compose(
     roleKeys: PermissionCatalog.managerBundle,
-    overrides: const [(key: invoiceDelete, allow: false)],
+    overrides: const [(key: sellOnCredit, allow: false)],
   );
-  check('[1] منع فردي يمحو ما يملكه الدور', !withDeny.contains(invoiceDelete));
+  check('[1] منع فردي يمحو ما يملكه الدور', !withDeny.contains(sellOnCredit));
   check('[1] المنع لا يمحو غير المستهدف',
       withDeny.contains(PermissionKeys.invoiceCreate) &&
           withDeny.contains(discountApply));
@@ -99,20 +101,20 @@ void main() {
   final lastWins = compose(
     roleKeys: PermissionCatalog.cashierBundle,
     overrides: const [
-      (key: invoiceDelete, allow: true),
-      (key: invoiceDelete, allow: false),
+      (key: sellOnCredit, allow: true),
+      (key: sellOnCredit, allow: false),
     ],
   );
-  check('[3] آخر تجاوز فائز (منح ثم منع)', !lastWins.contains(invoiceDelete));
+  check('[3] آخر تجاوز فائز (منح ثم منع)', !lastWins.contains(sellOnCredit));
 
   final lastWins2 = compose(
     roleKeys: PermissionCatalog.cashierBundle,
     overrides: const [
-      (key: invoiceDelete, allow: false),
-      (key: invoiceDelete, allow: true),
+      (key: sellOnCredit, allow: false),
+      (key: sellOnCredit, allow: true),
     ],
   );
-  check('[3] آخر تجاوز فائز (منع ثم منح)', lastWins2.contains(invoiceDelete));
+  check('[3] آخر تجاوز فائز (منع ثم منح)', lastWins2.contains(sellOnCredit));
 
   // ── [4] المفتاح المجهول يُهمَل ──────────────────────────────────
   final unknownRoleKey = compose(
@@ -176,7 +178,7 @@ void main() {
   final managerOnly = b['manager']!.difference(b['accountant']!);
   final accountantOnly = b['accountant']!.difference(b['manager']!);
   check('[7] للمدير صلاحيات تصحيحية لا يملكها المحاسب',
-      managerOnly.contains(PermissionKeys.invoiceDelete) &&
+      managerOnly.contains(PermissionKeys.customerCreditOverride) &&
           managerOnly.contains(PermissionKeys.debtRepair) &&
           managerOnly.contains(PermissionKeys.invoiceSellOnCredit));
   check('[7] المحاسب ⊆ المدير (لا يملك ما لا يملكه المدير)',
@@ -187,7 +189,7 @@ void main() {
           b['accountant']!.contains(PermissionKeys.reportsTax) &&
           b['accountant']!.contains(PermissionKeys.auditView));
   check('[7] المحاسب ممنوع من السلطة التصحيحية',
-      !b['accountant']!.contains(PermissionKeys.invoiceDelete) &&
+      !b['accountant']!.contains(PermissionKeys.customerCreditOverride) &&
           !b['accountant']!.contains(PermissionKeys.debtRepair) &&
           !b['accountant']!.contains(PermissionKeys.settingsManage) &&
           !b['accountant']!.contains(PermissionKeys.usersManage));

@@ -148,8 +148,13 @@ class PermissionKeys {
   static const String invoicePrint = 'invoice.print';
   static const String invoiceReprint = 'invoice.reprint';
   static const String invoiceReturn = 'invoice.return';
-  static const String invoiceEditIssued = 'invoice.edit_issued';
-  static const String invoiceDelete = 'invoice.delete';
+
+  // 🚨 `invoice.delete` و`invoice.edit_issued` **أُزيلا عمدًا** (2026-10-30):
+  // كانا معلنَين في الكتالوج وممنوحَين للإدارة بينما **لا يوجد في النظام كله
+  // مسار واحد** يحذف فاتورة صادرة أو يعدّلها. صلاحية بلا مسار تُوهم المراجع
+  // بأن السلطة موجودة، وتُفسد مصداقية شاشة الأدوار. التصحيح المحاسبي لهذا
+  // النظام هو **إشعار دائن** (`invoice.return`)، والحذف الجماعي للفواتير
+  // القديمة يحكمه `data.delete` وحده.
 
   // الصندوق والورديات
   static const String shiftOpen = 'shift.open';
@@ -173,13 +178,20 @@ class PermissionKeys {
   static const String reportsProfit = 'reports.profit';
   static const String reportsTax = 'reports.tax';
   static const String auditView = 'audit.view';
-  static const String exportData = 'export.data';
 
   // المصنعية والاشتراكات
   static const String processingView = 'processing.view';
   static const String processingUpdate = 'processing.update';
   static const String subscriptionManage = 'subscription.manage';
   static const String subscriptionCancel = 'subscription.cancel';
+
+  /// تجاوز سقف استخدام الاشتراك (القطع/القيمة) عند إصدار فاتورة.
+  ///
+  /// **لماذا مفتاح مستقلّ؟** لأن التجاوز كان مقيَّدًا بـ`SessionManager.isManager`
+  /// أي **باسم الدور لا بصلاحية**: دور مخصّص يملك `subscription.manage` لا
+  /// يستطيع التجاوز، ومن يحمل اسم `manager` يستطيعه ولو أُسقطت عنه الصلاحية.
+  /// المفتاح يفصل القرار عن اسم الدور (نفس مبدأ `customer.credit_limit_override`).
+  static const String subscriptionUsageOverride = 'subscription.usage_override';
 
   // الأصناف والنظام
   static const String categoryManage = 'category.manage';
@@ -264,23 +276,6 @@ class PermissionCatalog {
         'إصدار إشعار دائن لتصحيح فاتورة صادرة **بلا حذفها** — الطريق المحاسبي الصحيح للتصحيح.',
     group: PermissionGroups.invoices,
     risk: PermissionRisk.money,
-  );
-
-  static const PermissionItem invoiceDelete = PermissionItem(
-    key: 'invoice.delete',
-    label: 'حذف فاتورة',
-    description:
-        'محو فاتورة من السجل نهائيًا. عملية تصحيحية خطِرة تُفسد أثرًا محاسبيًا وتُخِلّ بالصندوق — تُمنح للإدارة وحدها.',
-    group: PermissionGroups.invoices,
-    risk: PermissionRisk.destructive,
-  );
-
-  static const PermissionItem invoiceEditIssued = PermissionItem(
-    key: 'invoice.edit_issued',
-    label: 'تعديل فاتورة صادرة',
-    description: 'تغيير بنود فاتورة صدرت أو مبلغها بعد إصدارها.',
-    group: PermissionGroups.invoices,
-    risk: PermissionRisk.destructive,
   );
 
   // ══════════════════════════════════════════════════════════════════
@@ -444,14 +439,6 @@ class PermissionCatalog {
     risk: PermissionRisk.security,
   );
 
-  static const PermissionItem exportView = PermissionItem(
-    key: 'export.data',
-    label: 'تصدير البيانات',
-    description: 'إخراج بيانات النظام إلى ملف للتحليل خارجيًا.',
-    group: PermissionGroups.books,
-    risk: PermissionRisk.security,
-  );
-
   // ══════════════════════════════════════════════════════════════════
   // ٥) المصنعية والاشتراكات
   // ══════════════════════════════════════════════════════════════════
@@ -488,6 +475,15 @@ class PermissionCatalog {
         'إلغاء الاشتراك واحتساب الاسترداد (يخفض ذمة الزبون أولًا). **فُصل عن الإدارة عمدًا**: الإلغاء يُرجع مالًا ويُكتب حركة `cancel_refund`، فهو تصحيح لا إدارة روتينية.',
     group: PermissionGroups.processing,
     risk: PermissionRisk.destructive,
+  );
+
+  static const PermissionItem subscriptionUsageOverride = PermissionItem(
+    key: 'subscription.usage_override',
+    label: 'تجاوز سقف استخدام الاشتراك',
+    description:
+        'السماح بإصدار فاتورة تتجاوز سقف قطع/قيمة الاشتراك. **مفتاح مستقلّ عن إدارة الاشتراكات**: التجاوز يُنقص هامش الاشتراك فعليًّا، ومن يدير الاشتراكات لا يلزم أن يملك إسقاط سقفها.',
+    group: PermissionGroups.processing,
+    risk: PermissionRisk.money,
   );
 
   // ══════════════════════════════════════════════════════════════════
@@ -589,8 +585,6 @@ class PermissionCatalog {
     invoicePrint,
     invoiceReprint,
     invoiceReturn,
-    invoiceEditIssued,
-    invoiceDelete,
     // الصندوق
     shiftOpen,
     shiftClose,
@@ -611,12 +605,12 @@ class PermissionCatalog {
     reportsProfit,
     reportsTax,
     auditView,
-    exportView,
     // المصنعية
     processingView,
     processingUpdate,
     subscriptionManage,
     subscriptionCancel,
+    subscriptionUsageOverride,
     // النظام
     categoryManage,
     discountManage,
@@ -643,8 +637,6 @@ class PermissionCatalog {
     'invoice.print': 'Print invoice',
     'invoice.reprint': 'Reprint previous invoice',
     'invoice.return': 'Credit note / return',
-    'invoice.delete': 'Delete invoice',
-    'invoice.edit_issued': 'Edit issued invoice',
     'shift.open': 'Open shift',
     'shift.close': 'Close and reconcile shift',
     'cash.view': 'View cash movement',
@@ -662,11 +654,11 @@ class PermissionCatalog {
     'reports.profit': 'View profit and cost',
     'reports.tax': 'View tax return',
     'audit.view': 'View change log',
-    'export.data': 'Export data',
     'processing.view': 'View processing board',
     'processing.update': 'Update processing status',
     'subscription.manage': 'Manage subscriptions',
     'subscription.cancel': 'Cancel and settle subscription',
+    'subscription.usage_override': 'Override subscription usage cap',
     'category.manage': 'Manage items and prices',
     'discount.manage': 'Manage discount codes',
     'settings.manage': 'Manage system settings',
@@ -687,8 +679,6 @@ class PermissionCatalog {
     'invoice.print': 'Output the invoice as PDF and print or share it.',
     'invoice.reprint': 'Open the invoice archive and print a copy of a past invoice.',
     'invoice.return': 'Issue a credit note to correct an issued invoice without deleting it.',
-    'invoice.delete': 'Permanently erase an invoice from the ledger. A dangerous correction that affects the cash box.',
-    'invoice.edit_issued': 'Change the items or amount of an already issued invoice.',
     'shift.open': 'Start a new shift and set its opening balance. No sales without an open shift.',
     'shift.close': 'Close the shift and record counted cash, the difference, and its reason.',
     'cash.view': 'View daily cash, shift movements, and reconciliation.',
@@ -706,11 +696,11 @@ class PermissionCatalog {
     'reports.profit': 'Show net profit and cost in reports — some of the business\'s most sensitive numbers.',
     'reports.tax': 'Extract output and input tax and the net amount due.',
     'audit.view': 'Audit log: who changed what and when (prices, debts, settings, roles).',
-    'export.data': 'Export system data to a file for external analysis.',
     'processing.view': 'Follow the status of invoices in the laundry line.',
     'processing.update': 'Move an invoice between washing, ironing, and delivery stages.',
     'subscription.manage': 'Create a monthly subscription and record its payments (deferred revenue).',
     'subscription.cancel': 'Cancel a subscription and calculate the refund (reduces the customer debt first).',
+    'subscription.usage_override': 'Allow an invoice that exceeds the subscription piece/value cap.',
     'category.manage': 'Add items, edit them, their four prices, and their cost. Changing cost_price affects future profit.',
     'discount.manage': 'Create discount codes, set their rate, usage cap, and disable them.',
     'settings.manage': 'Business info, tax, numbering, printing, and roles — the system control core.',
@@ -780,8 +770,6 @@ class PermissionCatalog {
     'invoice.print',
     'invoice.reprint',
     'invoice.return',
-    'invoice.edit_issued',
-    'invoice.delete',
     'shift.open',
     'shift.close',
     'cash.view',
@@ -799,11 +787,11 @@ class PermissionCatalog {
     'reports.profit',
     'reports.tax',
     'audit.view',
-    'export.data',
     'processing.view',
     'processing.update',
     'subscription.manage',
     'subscription.cancel',
+    'subscription.usage_override',
     'category.manage',
     'discount.manage',
   ];
@@ -850,7 +838,6 @@ class PermissionCatalog {
     'reports.profit',
     'reports.tax',
     'audit.view',
-    'export.data',
     'processing.view',
     'subscription.manage',
   ];

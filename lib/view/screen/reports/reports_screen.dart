@@ -5,6 +5,8 @@ import 'package:laundry/controller/reports/report_controller.dart';
 import 'package:laundry/core/constant/routes.dart';
 import 'package:laundry/core/theme/app_colors.dart';
 import 'package:laundry/services/i18n/l10n.dart';
+import 'package:laundry/services/permission/permission_catalog.dart';
+import 'package:laundry/services/permission/permission_service.dart';
 import 'package:laundry/view/widget/common/animation_wrappers.dart';
 import 'package:laundry/view/widget/common/common_widgets.dart';
 import 'package:laundry/view/widget/common/developer_credit.dart';
@@ -82,6 +84,8 @@ Widget _summaryCards({
   double expenses = 0,
   double grossProfit = 0,
   double tax = 0,
+  bool showProfit = true,
+  bool showTax = true,
 }) {
   final cards = [
     _ReportStat(
@@ -91,24 +95,26 @@ Widget _summaryCards({
       Icons.trending_up,
       AppColors.successGradient,
     ),
-    _ReportStat(
-      'صافي الربح',
-      profit,
-      'ر.س',
-      Icons.savings,
-      profit >= 0 ? AppColors.primaryGradient : AppColors.dangerGradient,
-      // نُفصّل الأساس حتى يُعرف من أين جاء الرقم: ربح مساهم − مصروفات
-      subtitle: expenses > 0
-          ? trf('مساهم {0} − مصروفات {1}', [
-              grossProfit.toStringAsFixed(2),
-              expenses.toStringAsFixed(2),
-            ])
-          : (cost > 0
-                ? trf('بعد خصم تكلفة {0} ر.س', [cost.toStringAsFixed(2)])
-                : null),
-    ),
+    // بطاقة الربح تُخفى كليًّا عمّن لا يملك `reports.profit` — لا تُعرض صفرًا.
+    if (showProfit)
+      _ReportStat(
+        'صافي الربح',
+        profit,
+        'ر.س',
+        Icons.savings,
+        profit >= 0 ? AppColors.primaryGradient : AppColors.dangerGradient,
+        // نُفصّل الأساس حتى يُعرف من أين جاء الرقم: ربح مساهم − مصروفات
+        subtitle: expenses > 0
+            ? trf('مساهم {0} − مصروفات {1}', [
+                grossProfit.toStringAsFixed(2),
+                expenses.toStringAsFixed(2),
+              ])
+            : (cost > 0
+                  ? trf('بعد خصم تكلفة {0} ر.س', [cost.toStringAsFixed(2)])
+                  : null),
+      ),
     // المصروفات التشغيلية — كانت لا تُسجَّل أصلًا ولا تُخصم من الربح
-    if (expenses > 0)
+    if (showProfit && expenses > 0)
       _ReportStat(
         'المصروفات',
         expenses,
@@ -155,8 +161,9 @@ Widget _summaryCards({
         AppColors.successGradient,
       ),
     // الضريبة المستحقة للهيئة — **ليست إيرادًا** بل التزام، وتُخصم من الربح.
-    // تظهر فقط عند تفعيل الضريبة، فلا تزدحم التقارير ببطاقة صفر.
-    if (tax > 0)
+    // تظهر فقط عند تفعيل الضريبة، فلا تزدحم التقارير ببطاقة صفر. وتُخفى عمّن
+    // لا يملك `reports.tax` — الرقم التزام ضريبي لا معلومة تشغيلية عامة.
+    if (showTax && tax > 0)
       _ReportStat(
         'ضريبة القيمة المضافة',
         tax,
@@ -653,6 +660,10 @@ class _DailyTabState extends State<_DailyTab> {
                 expenses: (report['expenses'] ?? 0).toDouble(),
                 grossProfit: (report['gross_profit'] ?? 0).toDouble(),
                 tax: (report['total_tax'] ?? 0).toDouble(),
+                // 🛡️ `reports.profit` / `reports.tax` صارا مُنفَّذين: البطاقة
+                // تُخفى هنا، والقيمة تُحجب في المتحكّم (`_guardMetrics`).
+                showProfit: PermissionService.can(PermissionKeys.reportsProfit),
+                showTax: PermissionService.can(PermissionKeys.reportsTax),
               ),
               const SizedBox(height: 12),
               _debtReportsLauncher(),
@@ -744,6 +755,10 @@ class _WeeklyTabState extends State<_WeeklyTab> {
                 expenses: (report['expenses'] ?? 0).toDouble(),
                 grossProfit: (report['gross_profit'] ?? 0).toDouble(),
                 tax: (report['total_tax'] ?? 0).toDouble(),
+                // 🛡️ `reports.profit` / `reports.tax` صارا مُنفَّذين: البطاقة
+                // تُخفى هنا، والقيمة تُحجب في المتحكّم (`_guardMetrics`).
+                showProfit: PermissionService.can(PermissionKeys.reportsProfit),
+                showTax: PermissionService.can(PermissionKeys.reportsTax),
               ),
               const SizedBox(height: 12),
               _breakdownTable(report, 'أسبوعي'),
@@ -845,6 +860,10 @@ class _MonthlyTabState extends State<_MonthlyTab> {
                 expenses: (report['expenses'] ?? 0).toDouble(),
                 grossProfit: (report['gross_profit'] ?? 0).toDouble(),
                 tax: (report['total_tax'] ?? 0).toDouble(),
+                // 🛡️ `reports.profit` / `reports.tax` صارا مُنفَّذين: البطاقة
+                // تُخفى هنا، والقيمة تُحجب في المتحكّم (`_guardMetrics`).
+                showProfit: PermissionService.can(PermissionKeys.reportsProfit),
+                showTax: PermissionService.can(PermissionKeys.reportsTax),
               ),
               const SizedBox(height: 12),
               _breakdownTable(report, 'شهري'),
@@ -933,6 +952,10 @@ class _AnnualTabState extends State<_AnnualTab> {
                 expenses: (report['expenses'] ?? 0).toDouble(),
                 grossProfit: (report['gross_profit'] ?? 0).toDouble(),
                 tax: (report['total_tax'] ?? 0).toDouble(),
+                // 🛡️ `reports.profit` / `reports.tax` صارا مُنفَّذين: البطاقة
+                // تُخفى هنا، والقيمة تُحجب في المتحكّم (`_guardMetrics`).
+                showProfit: PermissionService.can(PermissionKeys.reportsProfit),
+                showTax: PermissionService.can(PermissionKeys.reportsTax),
               ),
               const SizedBox(height: 12),
               _breakdownTable(report, 'سنوي'),
