@@ -1,33 +1,63 @@
-/// **لوحة المفاتيح اللمسية في ويندوز** — إخفاؤها عند مغادرة حقل الإدخال.
+/// **لوحة المفاتيح اللمسية في ويندوز** — إظهارها وإخفاؤها مع دورة حياة الحقل.
 ///
-/// ## المشكلة (بلاغ المستخدم)
-/// على جهاز ويندوز يعمل باللمس تظهر لوحة المفاتيح عند التركيز على أي حقل
-/// إدخال، **ولا تختفي** عند الانتهاء: تبقى طافية فوق الواجهة فتحجب نصف الشاشة،
-/// ويضطر المستخدم إلى إغلاقها من شريط المهام في كل مرّة.
+/// ════════════════════════════════════════════════════════════════════
+///  ⚠️ اقرأ هذا قبل أي تعديل: العيب كان يُجمّد ويندوز كاملًا
+/// ════════════════════════════════════════════════════════════════════
 ///
-/// ## السبب
-/// لوحة المفاتيح اللمسية في ويندوز **عملية مستقلة** (`TabTip.exe`، وفي
-/// ويندوز ١١ مضيف `TextInputHost`) تُدار من النظام لا من التطبيق. وFlutter
-/// يبلّغ محرّكه وحده عند زوال التركيز (`TextInput.hide`)، ولا يملك نافذة
-/// النظام تلك ولا يطلب إغلاقها — فتبقى ظاهرة.
+/// ## البلاغ (2026-11-07)
+/// على جهاز كاشير بشاشة لمس: الكيبورد لا تظهر · الجهاز يتعلّق · ويندوز
+/// يتجمّد كاملًا حتى تُعاد التهيئة.
 ///
-/// ## الحلّ
-/// إغلاقها من الجهة الأصلية عبر قناة `laundry/touch_keyboard` (انظر
-/// `windows/runner/flutter_window.cpp`)، ويُطلب ذلك **كلّما زال التركيز عن
-/// حقل نصّ**:
-///   • تغيّر التركيز (نقرة على زرّ أو خلفية أو إغلاق حوار).
-///   • أي لمسة على الشاشة انتهت بلا حقل نصّ في التركيز.
-///   • خروج التطبيق من المقدّمة أو من الشاشة.
+/// ## السبب الجذري (ليس في هذا الملف وحده)
+/// الطبقة الأصلية (`windows/runner/flutter_window.cpp`) كانت تستدعي
+/// `ShowWindow()` على نافذة تملكها **عملية أخرى** من داخل معالج الرسائل —
+/// وهو استدعاء **متزامن ينتظر**، فيحجب خيط واجهة Flutter ويُجمّد حزمة الإدخال
+/// اللمسي في النظام. الإصلاح هناك: `ShowWindowAsync` + `PostMessage` + خيط
+/// عامل. **لا تُعِد `ShowWindow` المتزامن ولا `ShellExecuteW` على خيط الواجهة.**
 ///
-/// ## لماذا لا يُغلق الحقل نفسه؟
-/// لأن الإغلاق قرار **الواجهة** لا الحقل: بعض الحقول تفتح حوارًا (تاريخ،
-/// منتقي عميل) فيجب ألّا تختفي اللوحة أثناءه. لذلك يُفحص **التركيز الفعلي**
-/// بعد استقرار اللمسة، لا مجرّد وقوعها.
+/// ## ما يفعله هذا الملف (ولماذا)
+///   • **لا طلب إطار** (`scheduleFrame`) ولا `addPostFrameCallback` لكل لمسة.
+///     كان ذلك يُجبر إعادة رسم متواصلة ⇒ استنزاف GPU ⇒ خطر TDR.
+///   • **debounce 200ms**: النقرة الواحدة تُولّد تغيّر تركيز ولمسة معًا،
+///     فلا نُرسل أمرين للطبقة الأصلية على نفس الحدث.
+///   • **قرار الانتقال لا الحالة**: نُظهر عند الانتقال «لا حقل ← حقل»،
+///     ونُخفي عند «حقل ← لا حقل». إعادة الإرسال على نفس الحالة تُرهق النظام
+///     بلا فائدة (الطبقة الأصلية فيها debounce 300ms أيضًا، دفاعًا مزدوجًا).
+///   • **إعداد `touch_keyboard_control`**: ثلاثة أوضاع ليتمكّن المشغّل من
+///     تعطيل التحكّم كليًّا على جهاز مشاكس بلا إعادة بناء.
 library;
+
+import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
+import 'package:laundry/services/settings/app_settings_service.dart';
+
+/// وضع التحكّم في لوحة المفاتيح اللمسية — يُقرأ من الإعدادات.
+enum TouchKeyboardMode {
+  /// إظهار عند دخول الحقل وإخفاء عند مغادرته (الافتراضي).
+  auto,
+
+  /// إخفاء فقط — الإظهار متروك لويندوز (بعض الأجهزة تُظهرها بنفسها).
+  hideOnly,
+
+  /// معطَّل — لا يتدخّل التطبيق إطلاقًا.
+  off;
+
+  /// يحوّل قيمة الإعداد المخزَّنة إلى وضع. أي قيمة غير معروفة ⇒ [auto]
+  /// (الفشل إلى السلوك الافتراضي لا إلى التعطيل).
+  static TouchKeyboardMode fromKey(String? key) {
+    switch (key) {
+      case 'hide_only':
+        return TouchKeyboardMode.hideOnly;
+      case 'off':
+        return TouchKeyboardMode.off;
+      default:
+        return TouchKeyboardMode.auto;
+    }
+  }
+}
 
 class TouchKeyboard {
   TouchKeyboard._();
@@ -38,6 +68,11 @@ class TouchKeyboard {
   /// هل النظام يدعم هذا التحكّم؟ (ويندوز فقط — أندرويد وiOS يتولّاهما النظام)
   static bool get isSupported =>
       !kIsWeb && defaultTargetPlatform == TargetPlatform.windows;
+
+  /// الوضع الحالي من الإعدادات.
+  static TouchKeyboardMode get mode => TouchKeyboardMode.fromKey(
+    AppSettingsService.instance.touchKeyboardControl,
+  );
 
   /// هل التركيز الحالي على حقل نصّ؟
   ///
@@ -60,12 +95,25 @@ class TouchKeyboard {
     return found;
   }
 
-  /// يطلب من ويندوز إخفاء لوحة المفاتيح اللمسية.
+  /// يطلب من ويندوز **إظهار** لوحة المفاتيح اللمسية.
   ///
-  /// **لا يرمي أبدًا**: فشل إخفاء لوحة المفاتيح لا يجوز أن يُسقِط تفاعلًا في
-  /// الواجهة. وعلى غير ويندوز لا يفعل شيئًا (النظام يتولّى الأمر).
+  /// **لا يرمي أبدًا**: فشل الإظهار لا يُسقِط تفاعلًا.
+  static Future<void> show() async {
+    if (!isSupported) return;
+    if (mode == TouchKeyboardMode.off) return;
+    try {
+      await _channel.invokeMethod<void>('show');
+    } catch (e) {
+      debugPrint('touch keyboard show skipped: $e');
+    }
+  }
+
+  /// يطلب من ويندوز **إخفاء** لوحة المفاتيح اللمسية.
+  ///
+  /// **لا يرمي أبدًا**: فشل الإخفاء لا يجوز أن يُسقِط تفاعلًا.
   static Future<void> hide() async {
     if (!isSupported) return;
+    if (mode == TouchKeyboardMode.off) return;
     try {
       await _channel.invokeMethod<void>('hide');
     } catch (e) {
@@ -74,11 +122,10 @@ class TouchKeyboard {
   }
 }
 
-/// يلفّ التطبيق كلّه فيراقب التركيز واللمس ويُخفي لوحة المفاتيح عند الحاجة.
+/// يلفّ التطبيق كلّه فيراقب التركيز ويُظهر/يُخفي لوحة المفاتيح عند الحاجة.
 ///
 /// يُوضع في `builder` الخاص بـ`GetMaterialApp` (فوق الـNavigator) كي يشمل
-/// **كل** الشاشات والحوارات — ولو وُضع في شاشة واحدة لبقي البلاغ قائمًا في
-/// البقية.
+/// **كل** الشاشات والحوارات.
 class TouchKeyboardDismisser extends StatefulWidget {
   const TouchKeyboardDismisser({super.key, required this.child});
 
@@ -90,55 +137,95 @@ class TouchKeyboardDismisser extends StatefulWidget {
 
 class _TouchKeyboardDismisserState extends State<TouchKeyboardDismisser>
     with WidgetsBindingObserver {
-  /// يمنع جدولة فحصين لنفس الحدث (التركيز واللمس يقعان معًا في النقرة).
-  bool _scheduled = false;
+  /// يجمّع الأحداث المتلاحقة (تغيّر تركيز + لمسة) في قرار واحد.
+  Timer? _debounce;
+
+  /// آخر حالة تركيز **طُبِّقت** — نقارن بها لنُرسل الانتقال وحده.
+  bool _wasTextFocus = false;
+
+  /// فاصل التجميع. 200ms أقل من إحساس المستخدم بالبطء وأكبر من الفجوة
+  /// بين تغيّر التركيز ولمسة الرفع في النقرة الواحدة.
+  static const Duration _settle = Duration(milliseconds: 200);
 
   @override
   void initState() {
     super.initState();
     FocusManager.instance.addListener(_onFocusChanged);
     WidgetsBinding.instance.addObserver(this);
+    // الحالة الابتدائية: قد تُفتح شاشة وفيها حقل في التركيز.
+    _wasTextFocus = TouchKeyboard.hasTextFocus;
   }
 
   @override
   void dispose() {
+    _debounce?.cancel();
     FocusManager.instance.removeListener(_onFocusChanged);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
-  void _onFocusChanged() => _scheduleCheck();
+  void _onFocusChanged() => _schedule();
 
-  /// يفحص **بعد** استقرار الحدث.
+  /// يُجمّع ثم يُطبّق بعد استقرار الحدث.
   ///
-  /// الفحص الفوري خاطئ: أثناء النقرة على حقل آخر لم يُنقل التركيز بعد، فنظنّ
-  /// أن لا حقل في التركيز فنُخفي اللوحة عن الحقل الذي يريده المستخدم.
-  /// و`scheduleFrame` تضمن تنفيذ الردّ ولو لم يكن هناك إطار معلّق.
-  void _scheduleCheck() {
-    if (!TouchKeyboard.isSupported || _scheduled) return;
-    _scheduled = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _scheduled = false;
-      if (!mounted) return;
-      if (!TouchKeyboard.hasTextFocus) TouchKeyboard.hide();
-    });
-    WidgetsBinding.instance.scheduleFrame();
+  /// ⚠️ **لا `scheduleFrame` ولا `addPostFrameCallback`**: كلاهما كان يفرض
+  /// إطارًا إضافيًا لكل لمسة، فيُعيد رسم الواجهة بلا تغيير ⇒ استنزاف GPU.
+  /// `Timer` لا يرسم شيئًا.
+  void _schedule() {
+    if (!TouchKeyboard.isSupported) return;
+    _debounce?.cancel();
+    _debounce = Timer(_settle, _apply);
+  }
+
+  /// يطبّق **الانتقال** فقط: لا يرسل أمرًا إن لم تتغيّر الحالة.
+  void _apply() {
+    if (!mounted || !TouchKeyboard.isSupported) return;
+
+    final mode = TouchKeyboard.mode;
+    if (mode == TouchKeyboardMode.off) {
+      _wasTextFocus = TouchKeyboard.hasTextFocus;
+      return;
+    }
+
+    final hasFocus = TouchKeyboard.hasTextFocus;
+    if (hasFocus == _wasTextFocus) return; // لا انتقال ⇒ لا أمر
+    _wasTextFocus = hasFocus;
+
+    if (hasFocus) {
+      // «إخفاء فقط»: الإظهار متروك لويندوز.
+      if (mode == TouchKeyboardMode.auto) TouchKeyboard.show();
+    } else {
+      TouchKeyboard.hide();
+    }
+  }
+
+  /// لمسة على منطقة بلا حقل نصّ.
+  ///
+  /// **ليس مصدر الطوفان**: نفحص قيمة منطقية واحدة فقط ولا نطلب إطارًا.
+  /// ولازم — فالنقرة على خلفية أو زرّ لا تُزيل التركيز في Flutter، وبلا هذا
+  /// تبقى اللوحة ظاهرة بعدها (وهو أصل البلاغ الأصلي).
+  void _onPointerSettled() {
+    if (!TouchKeyboard.isSupported) return;
+    if (TouchKeyboard.hasTextFocus) return; // حقل ما زال في التركيز
+    _schedule();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     // الخروج من الشاشة أو تصغير النافذة: لا معنى للوحة مفاتيح فوق لا شيء.
-    if (state != AppLifecycleState.resumed) TouchKeyboard.hide();
+    if (state != AppLifecycleState.resumed) {
+      _debounce?.cancel();
+      _wasTextFocus = false;
+      TouchKeyboard.hide();
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    // `Listener` لا يستهلك الإيماءة: يمرّرها للأبناء كما هي، ويكتفي بالعلم
-    // بها — فالنقرة على خلفية لا تغيّر التركيز في Flutter، وبلا هذا السطر
-    // تبقى اللوحة ظاهرة بعد النقر عليها (وهو أصل البلاغ).
+    // `Listener` لا يستهلك الإيماءة: يمرّرها للأبناء كما هي.
     return Listener(
       behavior: HitTestBehavior.translucent,
-      onPointerDown: (_) => _scheduleCheck(),
+      onPointerUp: (_) => _onPointerSettled(),
       child: widget.child,
     );
   }

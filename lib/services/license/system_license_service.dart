@@ -151,7 +151,25 @@ class SystemLicenseController extends GetxController
   static DateTime plainDate(DateTime d) => DateTime(d.year, d.month, d.day);
 
   /// إعادة التقييم الآن (يُستدعى عند العودة للمقدمة ويُتاح يدويًا).
-  Future<void> refreshNow() => _evaluate();
+  /// آخر إعادة تقييم — لخنق الطوفان (انظر [refreshNow]).
+  DateTime? _lastRefresh;
+
+  /// يعيد التقييم الآن.
+  ///
+  /// 🚨 **خانق ٥ ثوانٍ** (2026-11-07): على ويندوز يُطلق كل تغيّر تركيز للنافذة
+  /// `AppLifecycleState.resumed`، وهذا المستمع يستدعي هذا التابع. ولوحة
+  /// المفاتيح اللمسية تسرق التركيز مرارًا ⇒ استعلام قاعدة بيانات لكل نقرة،
+  /// فيُستنزف المعالج ويصير اللمس بطيئًا. الخانق يُبقي السلوك (فحص عند العودة)
+  /// ويُزيل الطوفان.
+  Future<void> refreshNow() async {
+    final now = DateTime.now();
+    final last = _lastRefresh;
+    if (last != null && now.difference(last) < const Duration(seconds: 5)) {
+      return;
+    }
+    _lastRefresh = now;
+    await _evaluate();
+  }
 
   /// تعيين تاريخ الانتهاء (أو تمرير `null` لجعله غير محدود).
   ///

@@ -208,7 +208,15 @@ Win32Window::MessageHandler(HWND hwnd,
     }
 
     case WM_ACTIVATE:
-      if (child_content_ != nullptr) {
+      // 🚨 `SetFocus` **فقط عند التنشيط** لا عند إلغائه.
+      //
+      // كان الشرط غائبًا، فيُعاد التركيز إلى محتوى Flutter حتى في حالة
+      // `WA_INACTIVE` — أي أننا **نسرق التركيز من النظام** في كل مرة يحاول
+      // فيها نزعه. وعلى جهاز لمسي تُنزع الأولوية كثيرًا (لوحة المفاتيح،
+      // لوحة النظام، أي نافذة منبثقة) ⇒ **معركة تركيز متبادلة**:
+      // WM_ACTIVATE متواصلة، وكل واحدة تُطلق مستمعي دورة الحياة في Dart
+      // (استعلامات قاعدة بيانات) ⇒ استنزاف المعالج وتجمّد الإحساس باللمس.
+      if (LOWORD(wparam) != WA_INACTIVE && child_content_ != nullptr) {
         SetFocus(child_content_);
       }
       return 0;

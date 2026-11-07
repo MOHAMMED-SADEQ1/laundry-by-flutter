@@ -941,4 +941,16 @@ void _checkArabicSanitizer() {
     tpl.contains("data['docLang']") && tpl.contains('this.isEnglishDoc = false'),
   );
   check('[10] الواجهة تقرأ النصّ الخام (لا تطبيع)', tpl.contains('String textOf(String key'));
+
+  // ─── نزع التشكيل (العلامات التوفيقية) ──────────────────────────────
+  // حزمة `pdf` لا تُعيد ترتيب العلامات التوفيقية (الشدّة/الفتحة/التنوين)
+  // بعد اختيار شكل الحرف، فتظهر كأحرف غريبة فوق الحروف.
+  check('[10] الشدّة تُنزَع', ArabicText.safe('الملخّص') == 'الملخص');
+  check('[10] الفتحة تُنزَع', ArabicText.safe('شكراً') == 'شكرا');
+  check('[10] الضمّة تُنزَع', ArabicText.safe('طُبع') == 'طبع');
+  check('[10] التنوين يُنزَع', ArabicText.safe('آليًا') == 'آليا');
+  check('[10] تشكيل مركّب يُنزَع', ArabicText.safe('الملخّص (تدفّقات)') == 'الملخص (تدفقات)');
+  check('[10] نصّ بلا تشكيل بلا تغيير', ArabicText.safe('المسدد') == 'المسدد');
+  check('[10] تشكيل + وصلة «لا» معًا', ArabicText.safe('ملخّص الاستلام') == 'ملخص  الاستلام');
+  check('[10] الإنجليزي بلا تغيير', ArabicText.safe('Summary') == 'Summary');
 }

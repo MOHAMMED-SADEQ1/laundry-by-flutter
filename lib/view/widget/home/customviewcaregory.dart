@@ -40,12 +40,23 @@ class _CustomViewCategoryState extends State<CustomViewCategory>
     super.dispose();
   }
 
+  /// آخر إعادة جلب عند العودة للمقدّمة — لخنق الطوفان.
+  DateTime? _lastResumeReload;
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     // العودة إلى التطبيق بعد تعديل خارجي/نسخ احتياطي ⇒ أعِد الجلب.
-    if (state == AppLifecycleState.resumed && mounted) {
-      _controller.loadClothing();
+    if (state != AppLifecycleState.resumed || !mounted) return;
+    // 🚨 خانق ٥ ثوانٍ: لوحة المفاتيح اللمسية تسرق التركيز مرارًا على أجهزة
+    // اللمس، وكل عودة تُطلق هذا المستمع ⇒ استعلام أصناف لكل نقرة. الخانق
+    // يُبقي الفائدة (إعادة جلب بعد تعديل خارجي) ويُزيل الاستعلامات المتلاحقة.
+    final now = DateTime.now();
+    final last = _lastResumeReload;
+    if (last != null && now.difference(last) < const Duration(seconds: 5)) {
+      return;
     }
+    _lastResumeReload = now;
+    _controller.loadClothing();
   }
 
   @override

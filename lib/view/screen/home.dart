@@ -6,7 +6,6 @@ import 'package:laundry/controller/shift_controller.dart';
 import 'package:laundry/core/theme/app_colors.dart';
 import 'package:laundry/services/business_info_service.dart';
 import 'package:laundry/view/screen/invoice.dart';
-import 'package:laundry/view/widget/common/animation_wrappers.dart';
 import 'package:laundry/view/widget/common/common_widgets.dart';
 import 'package:laundry/view/widget/home/customdrawer.dart';
 import 'package:laundry/view/widget/home/catalog_refresh_button.dart';
@@ -416,8 +415,12 @@ class _ItemsAreaState extends State<_ItemsArea> {
                     ),
                     itemCount: filtered.length,
                     itemBuilder: (context, index) {
-                      return FadeInUp(
-                        delayMs: (index % 12) * 40,
+                      // 🚀 لا حركة ظهور لكل بطاقة في الشبكة (2026-11-07):
+                      // تلاشي ثلاثين بطاقة = ثلاثون طبقة رسم في كل إطار على
+                      // كرت رسوميات مدمج ⇒ استنزاف GPU وخطر TDR. الشاشة
+                      // الرئيسية لنقطة بيع تحتاج سرعة لا زخرفة.
+                      // `RepaintBoundary` يعزل البطاقة عن الشبكة بدلًا من ذلك.
+                      return RepaintBoundary(
                         child: CustomShowDialog(data: filtered[index]),
                       );
                     },

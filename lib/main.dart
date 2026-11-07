@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:get/get.dart';
@@ -115,6 +116,27 @@ void main(List<String> args) async {
         backgroundColor: const Color(0xFFF59E0B),
         colorText: const Color(0xFFFFFFFF),
         icon: const Icon(Icons.build_circle_outlined, color: Color(0xFFFFFFFF)),
+      );
+    });
+  }
+
+  // ⚠️ تحذير وضع التصحيح على سطح المكتب.
+  //
+  // بناء `--debug` يعمل بـJIT بلا AOT وبكل التأكيدات — أبطأ من الإنتاج
+  // بمراتب. وعلى جهاز كاشير بشاشة لمس يُقرأ ذلك كـ«الجهاز يبطئ تمامًا»،
+  // فيُشخَّص خطأً كعيب في التطبيق. التحذير يجعل السبب معلنًا لا مخمَّنًا.
+  if (kDebugMode && AppPlatform.isDesktop) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Get.snackbar(
+        tr('وضع التصحيح'),
+        tr(
+          'هذا بناء تصحيحي — الأداء أبطأ بكثير من نسخة الإنتاج. وزّع نسخة release على أجهزة الكاشير.',
+        ),
+        snackPosition: SnackPosition.BOTTOM,
+        duration: const Duration(seconds: 10),
+        backgroundColor: const Color(0xFFDC2626),
+        colorText: const Color(0xFFFFFFFF),
+        icon: const Icon(Icons.speed_outlined, color: Color(0xFFFFFFFF)),
       );
     });
   }

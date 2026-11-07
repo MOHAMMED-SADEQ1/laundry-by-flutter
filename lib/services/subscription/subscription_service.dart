@@ -342,7 +342,8 @@ class SubscriptionService {
       if (p > 0 || v > 0) return (p, v);
 
       // مسار احتياطي: الفواتير القديمة بلا الأعمدة — اشتقّ من list_data
-      return _deriveUsageFromItems(subId, from, to);
+      // `await` ضروري: بدونه لا يلتقط `catch` أدناه خطأً غير متزامن.
+      return await _deriveUsageFromItems(subId, from, to);
     } catch (e) {
       debugPrint('usageForCycle error: $e');
       return (0, 0.0);

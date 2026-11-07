@@ -1,38 +1,149 @@
 #include "flutter_window.h"
 
+#include <windows.h>
+
+#include <atomic>
+#include <chrono>
+#include <cstdio>
 #include <optional>
+#include <string>
+#include <thread>
 
 #include "flutter/generated_plugin_registrant.h"
 
 namespace {
 
-// إخفاء **لوحة المفاتيح اللمسية** في ويندوز.
+// ════════════════════════════════════════════════════════════════════
+//  ⌨️  لوحة المفاتيح اللمسية — **نلمس TabTip فقط، ولا نلمس مضيف ويندوز ١١**
+// ════════════════════════════════════════════════════════════════════
 //
-// ## المشكلة التي يحلّها
-// على جهاز يعمل باللمس تُظهر ويندوز لوحة المفاتيح عند التركيز على حقل إدخال،
-// ولا تُخفيها عند الانتقال إلى أي مكان آخر: تبقى طافية فوق الواجهة فتحجب
-// نصف الشاشة، ويضطر المستخدم لإغلاقها يدويًّا من شريط المهام.
+// ## العيب الثاني والأخطر (مُثبَت 2026-11-07 — البلاغ الثاني)
 //
-// ## لماذا لا يكفي Flutter؟
-// لوحة المفاتيح عملية مستقلة (TabTip في ويندوز ١٠، ومضيف `TextInputHost`
-// في ويندوز ١١) وليست نافذةً داخل التطبيق، فلا يملك Flutter نافذتها ولا
-// يستطيع إغلاقها عبر `TextInput.hide` — ذاك يبلّغ المحرّك فقط.
+// كان الكود السابق يُخفي نافذة `Windows.UI.Core.CoreWindow` المسمّاة
+// «Microsoft Text Input Application» — أي **نافذة مضيف الإدخال اللمسي في
+// ويندوز ١١** (`TextInputHost.exe`)، وهو **عملية نظام مشتركة** لا تخصّنا.
 //
-// ## الحلّ
-// إغلاق نافذتها من الجهة الأصلية: TabTip تستجيب لـ`SC_CLOSE`، ومضيف ويندوز
-// ١١ يتجاهله فيُخفى بـ`SW_HIDE`. كلاهما **لا يقتل العملية**: النظام يعيد
-// إظهارها عند الحاجة، فلا يتعطّل الإدخال اللمسي لاحقًا.
-void HideTouchKeyboard() {
-  HWND tabtip = ::FindWindowW(L"IPTip_Main_Window", nullptr);
-  if (tabtip != nullptr && ::IsWindowVisible(tabtip)) {
-    ::PostMessageW(tabtip, WM_SYSCOMMAND, SC_CLOSE, 0);
-  }
+// وهذا خطأ فادح لسببين:
+//   1. **إطار UWP لا يعلم** أن نافذته أُخفيت بـ`ShowWindow`. فيبقى يظنّها
+//      ظاهرة، فلا يُظهرها مرة أخرى أبدًا ⇒ **لوحة المفاتيح لا تعود إلا
+//      بإعادة تشغيل ويندوز** — وهو ما بلّغ عنه المستخدم حرفيًا.
+//   2. إخفاء مضيف الإدخال أثناء عمله **يُربك خطّ الإدخال اللمسي في النظام
+//      كلّه** (`InputHost.dll` محمَّل في كل عملية). فيتوقف اللمس عن العمل في
+//      **كل التطبيقات**، ويبدو ويندوز معلّقًا — ويبقى كذلك **بعد إغلاق
+//      تطبيقنا**، لأن الضرر وقع على مكوّن نظام لا على عمليتنا.
+//
+// وهذا يفسّر البلاغ بدقّة: «يعمل دقيقة أو دقيقتين ثم تتعطّل اللمسة، والنظام
+// يعلق، ويبقى معلّقًا بعد الإغلاق».
+//
+// ## القاعدة الآن (لا تُخالَف)
+//   1. **لا `FindWindowW` على `Windows.UI.Core.CoreWindow` إطلاقًا** —
+//      ولا `ShowWindow` عليه. مضيف الإدخال اللمسي ليس ملكنا.
+//   2. نتعامل مع **`IPTip_Main_Window` وحده** (TabTip.exe) — نافذة Win32
+//      عادية، إخفاؤها وإظهارها آمنان ولا يُربكان إطار UWP.
+//   3. **لا `ShellExecuteW`** — كل نداء قد يُنشئ عملية TabTip جديدة فتتراكم
+//      العمليات وتُستنزف الذاكرة. نُظهر النافذة القائمة فقط، وإن لم توجد
+//      تركناه لويندوز.
+//   4. **لا استدعاء حاجب**: `ShowWindowAsync` لا تنتظر، والإخفاء من
+//      `WM_ACTIVATE` مؤجَّل بـ`PostMessage`.
 
-  HWND host = ::FindWindowW(L"Windows.UI.Core.CoreWindow",
-                            L"Microsoft Text Input Application");
-  if (host != nullptr && ::IsWindowVisible(host)) {
-    ::ShowWindow(host, SW_HIDE);
+/// رسالة خاصة (مسجَّلة نظاميًّا) تطلب إخفاء اللوحة **بعد** عودة حلقة الرسائل.
+UINT GetHideTouchKeyboardMessage() {
+  static const UINT message =
+      ::RegisterWindowMessageW(L"Laundry.HideTouchKeyboard");
+  return message;
+}
+
+/// مقبض TabTip وحده — لا شيء آخر.
+HWND g_tabtip = nullptr;
+
+/// فاصل منع التكرار لكل اتّجاه على حِدة.
+std::atomic<int64_t> g_last_show_ms{0};
+std::atomic<int64_t> g_last_hide_ms{0};
+
+constexpr int64_t kDebounceMs = 300;
+
+int64_t NowMs() {
+  return std::chrono::duration_cast<std::chrono::milliseconds>(
+             std::chrono::steady_clock::now().time_since_epoch())
+      .count();
+}
+
+bool Debounced(std::atomic<int64_t>& stamp) {
+  const int64_t now = NowMs();
+  if (now - stamp.load() < kDebounceMs) return true;
+  stamp.store(now);
+  return false;
+}
+
+/// يُحدّث مقبض TabTip عند فقدانه فقط.
+void RefreshTabTipHandle() {
+  if (g_tabtip == nullptr || !::IsWindow(g_tabtip)) {
+    g_tabtip = ::FindWindowW(L"IPTip_Main_Window", nullptr);
   }
+}
+
+/// يكتب سطرًا في `%LOCALAPPDATA%\laundry\hang.log`.
+void LogHangLine(const char* text) {
+  wchar_t buffer[MAX_PATH] = {0};
+  const DWORD len =
+      ::GetEnvironmentVariableW(L"LOCALAPPDATA", buffer, MAX_PATH);
+  if (len == 0 || len >= MAX_PATH) return;
+
+  std::wstring dir(buffer);
+  dir += L"\\laundry";
+  ::CreateDirectoryW(dir.c_str(), nullptr);
+
+  std::wstring file = dir + L"\\hang.log";
+  FILE* fp = nullptr;
+  if (::_wfopen_s(&fp, file.c_str(), L"a, ccs=UTF-8") != 0 || fp == nullptr) {
+    return;
+  }
+  std::fprintf(fp, "[%lld] %s\n", static_cast<long long>(NowMs()), text);
+  std::fclose(fp);
+}
+
+/// إخفاء TabTip — غير حاجب، ولا يمسّ أي عملية أخرى.
+void HideTouchKeyboardAsync() {
+  if (Debounced(g_last_hide_ms)) return;
+  RefreshTabTipHandle();
+  if (g_tabtip != nullptr && ::IsWindowVisible(g_tabtip)) {
+    ::ShowWindowAsync(g_tabtip, SW_HIDE);
+  }
+}
+
+/// إظهار TabTip — غير حاجب، وبلا إطلاق عملية جديدة.
+void ShowTouchKeyboardAsync() {
+  if (Debounced(g_last_show_ms)) return;
+  RefreshTabTipHandle();
+  if (g_tabtip != nullptr) {
+    ::ShowWindowAsync(g_tabtip, SW_SHOWNORMAL);
+  }
+  // إن لم تكن النافذة موجودة فلا نفعل شيئًا: ويندوز يُظهر لوحته بنفسه عند
+  // تركيز حقل إدخال. **ولا نُطلق TabTip.exe صراحةً** — التراكم أخطر من غياب
+  // الإظهار.
+}
+
+/// مراقب التعليق: يكشف حجب خيط الواجهة ويسجّله في `hang.log`.
+void StartHangWatchdog(HWND hwnd) {
+  std::thread([hwnd]() {
+    bool was_hung = false;
+    for (;;) {
+      ::Sleep(1000);
+      if (!::IsWindow(hwnd)) return;
+
+      DWORD_PTR result = 0;
+      const LRESULT ok = ::SendMessageTimeoutW(
+          hwnd, WM_NULL, 0, 0, SMTO_ABORTIFHUNG | SMTO_BLOCK, 1000, &result);
+      const bool hung = (ok == 0);
+
+      if (hung && !was_hung) {
+        LogHangLine("PLATFORM THREAD BLOCKED > 1s (window not responding)");
+      } else if (!hung && was_hung) {
+        LogHangLine("platform thread recovered");
+      }
+      was_hung = hung;
+    }
+  }).detach();
 }
 
 }  // namespace
@@ -59,10 +170,7 @@ bool FlutterWindow::OnCreate() {
   }
   RegisterPlugins(flutter_controller_->engine());
 
-  // قناة إخفاء لوحة المفاتيح اللمسية.
-  //
-  // تُسجَّل **بعد** `RegisterPlugins` كي لا تُستبدل بـ`BinaryMessenger` آخر،
-  // وقبل أول إطار كي تكون جاهزة قبل أن يلمس المستخدم أي حقل إدخال.
+  // قناة التحكّم في لوحة المفاتيح اللمسية (إظهار + إخفاء).
   touch_keyboard_channel_ =
       std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
           flutter_controller_->engine()->messenger(), "laundry/touch_keyboard",
@@ -71,8 +179,12 @@ bool FlutterWindow::OnCreate() {
       [](const flutter::MethodCall<flutter::EncodableValue>& call,
          std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>>
              result) {
+        // ⚠️ كل مسار هنا **غير حاجب**: معالج القناة يعمل على خيط الواجهة.
         if (call.method_name() == "hide") {
-          HideTouchKeyboard();
+          HideTouchKeyboardAsync();
+          result->Success();
+        } else if (call.method_name() == "show") {
+          ShowTouchKeyboardAsync();
           result->Success();
         } else {
           result->NotImplemented();
@@ -85,16 +197,14 @@ bool FlutterWindow::OnCreate() {
     this->Show();
   });
 
-  // Flutter can complete the first frame before the "show window" callback is
-  // registered. The following call ensures a frame is pending to ensure the
-  // window is shown. It is a no-op if the first frame hasn't completed yet.
   flutter_controller_->ForceRedraw();
+
+  StartHangWatchdog(GetHandle());
 
   return true;
 }
 
 void FlutterWindow::OnDestroy() {
-  // القناة تشير إلى محرّك النافذة — تُحرَّر قبله.
   touch_keyboard_channel_.reset();
   if (flutter_controller_) {
     flutter_controller_ = nullptr;
@@ -117,15 +227,21 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
     }
   }
 
+  // الإخفاء المؤجَّل: يُعالَج بعد أن تعود حلقة الرسائل، لا داخل `WM_ACTIVATE`.
+  if (message == GetHideTouchKeyboardMessage()) {
+    HideTouchKeyboardAsync();
+    return 0;
+  }
+
   switch (message) {
     case WM_FONTCHANGE:
       flutter_controller_->engine()->ReloadSystemFonts();
       break;
-    // خروج التطبيق من المقدّمة (نقرة على تطبيق آخر) يُنهي صلاحية لوحة
-    // المفاتيح: إبقاؤها ظاهرة فوق تطبيق آخر عيب نظام لا عيب واجهتنا.
+    // ⚠️ `PostMessage` لا استدعاء مباشر: هذا داخل معالج الرسائل، وأي عمل
+    // حاجب هنا يُجمّد النافذة.
     case WM_ACTIVATE:
       if (LOWORD(wparam) == WA_INACTIVE) {
-        HideTouchKeyboard();
+        ::PostMessageW(hwnd, GetHideTouchKeyboardMessage(), 0, 0);
       }
       break;
   }

@@ -127,6 +127,14 @@ class AppConstants {
   static const String settingInvoiceCopies = 'invoice_copies';
   static const String settingReceiptFooterNote = 'receipt_footer_note';
 
+  // ─── إخراج كشف الحساب ───
+  //
+  // مفتاح مستقلّ عن `invoice_pdf_export`: كشف الحساب ليس فاتورة بيع، فلا
+  // يُحفظ تلقائيًّا مع كل فاتورة. هذا المفتاح يُفعِّل الحفظ **عند إخراج
+  // الكشف** (طباعة أو مشاركة) — فيُحفظ نسخة PDF في مجلد المستندات كما
+  // تُحفظ الفاتورة، بلا الحاجة لاختيار «حفظ فقط» في كل مرة.
+  static const String settingStatementPdfExport = 'statement_pdf_export';
+
   // ─── خطّ الطباعة ───
   //
   // مفتاح واحد يحكم خطّ **كل** المستندات المطبوعة (فاتورة · كشف · وردية).
@@ -233,6 +241,16 @@ class AppConstants {
 
   /// عدد أعمدة شبكة «الأصناف والخدمات» في الشاشة الرئيسية.
   static const String settingHomeGridColumns = 'home_grid_columns';
+
+  /// 🖐️ تحكّم التطبيق في **لوحة المفاتيح اللمسية** على ويندوز.
+  ///
+  /// ثلاثة أوضاع: `auto` (إظهار وإخفاء) · `hide_only` (إخفاء فقط) · `off`.
+  /// على جهاز يتصرّف بشكل غريب يستطيع المشغّل تعطيل التحكّم كليًّا من
+  /// الإعدادات بلا إعادة بناء التطبيق.
+  static const String settingTouchKeyboardControl = 'touch_keyboard_control';
+
+  /// الوضع الافتراضي — تحكّم كامل (إظهار عند دخول الحقل وإخفاء عند مغادرته).
+  static const String touchKeyboardControlDefault = 'auto';
 
   // ─── الزبائن ───
   static const String settingCustomerRequirePhone = 'customer_require_phone';

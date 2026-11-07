@@ -865,8 +865,24 @@ class PreparePDF {
       ),
     );
 
-    // ملخص الوردية على A6 — المقاس قرار طباعة مستقلّ عن القالب.
-    final format = PdfPageFormat.a6;
+    // ─── مقاس الورق من الإعداد لا hardcoded A6 ───
+    //
+    // 🚨 كان `PdfPageFormat.a6` ثابتًا فلا يُراعى اختيار المستخدم مقاسًا
+    // آخر (حراري 80 مم مثلًا). صار يُقرأ من `shiftData['paperSize']` كما
+    // تُقرأ الفاتورة وكشف الحساب.
+    final shiftPaper = PaperSizes.resolve(shiftData['paperSize'] as String?);
+    final shiftWidth = PaperSizes.mmToPoints(shiftPaper.widthMm);
+    final shiftHeight =
+        shiftPaper.isThermal
+            ? PdfPageFormat.a4.height
+            : PaperSizes.mmToPoints(shiftPaper.heightMm);
+    final shiftMargin =
+        shiftPaper.isThermal ? PaperSizes.mmToPoints(2) : PdfPageFormat.cm;
+    final format = PdfPageFormat(
+      shiftWidth,
+      shiftHeight,
+      marginAll: shiftMargin,
+    );
 
     pdf.addPage(
       pw.Page(
@@ -1021,11 +1037,39 @@ class PreparePDF {
     /// رمز QR لموقع النشاط — يُطبع أسفل الكشف (ورقة تُسلَّم للزبون).
     final mapQrSvg = _mapQrSvg(data, doc);
     final mapQrCaption = doc.text(DocCatalog.kMapQr, '').trim();
-    // الكشف يُبنى دائمًا على A4 بهوامش ٢٤ نقطة — فالمتاح = المقاس ناقص ٤٨.
-    final mapQrBox = PrintVisualSize.qr(
+
+    // ─── مقاس الورق من الإعداد لا hardcoded A4 ───
+    //
+    // 🚨 **كان الكشف يُبنى دائمًا على A4** بصرف النظر عن إعداد المستخدم:
+    //   • `pageFormat: PdfPageFormat.a4` ثابت في `MultiPage`.
+    //   • QR box يُقيَّد على `PdfPageFormat.a4.availableWidth - 48`.
+    //   • الهامش `EdgeInsets.all(24)` ثابت لا يناسب الحراري.
+    //
+    // صار يُقرأ من `data['paperSize']` — تمامًا كما تقرأ الفاتورة — فيستجيب
+    // للحراري 80/58 مم (ورق متصل، هوامش ضيقة) و A5/A6/A4.
+    final stmtPaper = PaperSizes.resolve(data['paperSize'] as String?);
+    final stmtWidth = PaperSizes.mmToPoints(stmtPaper.widthMm);
+    final stmtHeight =
+        stmtPaper.isThermal
+            ? PdfPageFormat.a4.height
+            : PaperSizes.mmToPoints(stmtPaper.heightMm);
+    final stmtMargin =
+        stmtPaper.isThermal ? PaperSizes.mmToPoints(2) : PdfPageFormat.cm;
+    final stmtPageFormat = PdfPageFormat(
+      stmtWidth,
+      stmtHeight,
+      marginAll: stmtMargin,
+    );
+    final stmtMapQrBox = PrintVisualSize.qr(
       sizeMm: data['mapQrSizeMm'],
-      maxWidth: PdfPageFormat.a4.availableWidth - 48,
-      maxHeight: PdfPageFormat.a4.availableHeight - 48,
+      maxWidth: stmtPageFormat.availableWidth,
+      maxHeight: stmtPageFormat.availableHeight,
+    );
+    final stmtLogoBox = PrintVisualSize.logo(
+      widthMm: data['logoWidthMm'],
+      heightMm: data['logoHeightMm'],
+      maxWidth: stmtPageFormat.availableWidth,
+      maxHeight: stmtPageFormat.availableHeight,
     );
 
     /// كل نصّ في الكشف **بنمط حقله**، واتجاهه **بلغة المستند**.
@@ -1112,18 +1156,24 @@ class PreparePDF {
 
     pdf.addPage(
       pw.MultiPage(
-        pageFormat: PdfPageFormat.a4,
+        pageFormat: stmtPageFormat,
         theme: pw.ThemeData.withFont(base: font, bold: font),
-        margin: const pw.EdgeInsets.all(24),
+        margin: pw.EdgeInsets.all(stmtMargin),
         build:
             (pw.Context context) => [
               // ─── ترويسة النشاط ───
+              //
+              // 🚨 **الشعار بمقاس الإعداد لا ثابت 80×80**: كان ثابتًا لا يُقصّ
+              // على مقاس الورق، فحراري 58 مم يخرج الشعار بعرض 80 نقطة (28 مم)
+              // فيأخذ نصف العرض تقريبًا. صار يُقرأ من `PrintVisualSize.logo`
+              // كما في الفاتورة، فيُقيَّد على عرض الورق وارتفاعه.
               if (logoBytes != null)
                 pw.Center(
                   child: pw.Image(
                     pw.MemoryImage(logoBytes),
-                    width: 80,
-                    height: 80,
+                    width: stmtLogoBox.width,
+                    height: stmtLogoBox.height,
+                    fit: pw.BoxFit.contain,
                   ),
                 ),
               if (doc.isOn(DocCatalog.kBusinessName) && bizName.isNotEmpty)
@@ -1397,8 +1447,8 @@ class PreparePDF {
                             pw.Center(
                               child: pw.SvgImage(
                                 svg: mapQrSvg,
-                                width: mapQrBox.width,
-                                height: mapQrBox.height,
+                                width: stmtMapQrBox.width,
+                                height: stmtMapQrBox.height,
                               ),
                             ),
                             if (mapQrCaption.isNotEmpty) ...[

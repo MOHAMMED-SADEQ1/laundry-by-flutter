@@ -12,6 +12,7 @@ import 'package:laundry/services/business_info_service.dart';
 import 'package:laundry/services/customer/customer_statement_service.dart';
 import 'package:laundry/services/i18n/l10n.dart';
 import 'package:laundry/core/services/paper_size.dart';
+import 'package:laundry/services/settings/app_settings_service.dart';
 import 'package:laundry/services/printer/printer_service.dart';
 import 'package:printing/printing.dart';
 
@@ -42,11 +43,16 @@ class CustomerStatementController extends GetxController {
   /// [savePdfOnly] = true → **حفظ فقط**: لا حوار طباعة ولا مشاركة. طُلب
   /// صريحًا كي يكون للكشف مسار حفظ مستقلّ عن الطباعة، فلا يُضطر المستخدم
   /// إلى إرسال ورقة إلى الطابعة ليحصل على ملف.
+  /// [printAndSave] = true → **طباعة + حفظ PDF**: يطبع الكشف **و**يحفظ
+  /// نسخة PDF في مجلد المستندات في إجراء واحد — كنمط الفاتورة تمامًا.
+  /// ويُحترم فيه إعداد `statement_pdf_export`: إن كان مفعَّلًا يُحفظ
+  /// تلقائيًّا حتى لو لم يختر المستخدم هذا الخيار صراحةً.
   /// [range] يتجاوز الفترة المخزَّنة إن مُرِّر.
   Future<void> export(
     int customerId, {
     bool share = false,
     bool savePdfOnly = false,
+    bool printAndSave = false,
     DateTimeRange? range,
   }) async {
     if (isBusy.value) return;
@@ -70,33 +76,57 @@ class CustomerStatementController extends GetxController {
       }
       final filename = 'كشف_حساب_${st.customerId}.pdf';
 
+      // ─── حفظ فقط ───
       if (savePdfOnly) {
         await _saveToDisk(bytes, st.customerId);
         return;
       }
 
+      // ─── مشاركة (واتساب PDF) ───
       if (share) {
+        // إن كان إعداد الحفظ مفعَّلًا، نحفظ نسخة أيضًا قبل المشاركة.
+        if (AppSettingsService.instance.statementPdfExport) {
+          await _saveToDisk(bytes, st.customerId);
+        }
         await Printing.sharePdf(
           bytes: bytes,
           filename: filename,
           subject: trf('كشف حساب — {0}', [st.customerName]),
           body: summaryText(st),
         );
-      } else {
-        // الطابعة المختارة مباشرةً إن فُعِّل الخيار، وإلا حوار النظام؛ وإن لم
-        // يكتمل (سطح المكتب بلا طابعة) يُحفظ الملف على القرص.
-        final done = await PrinterService.instance.printPdf(
-          bytes,
-          jobName: filename,
-          paper: PaperSizes.a4,
-        );
-        if (!done) {
-          // سبب الفشل (تعريف نصّي · طابعة متوقفة · مهلة) يُعرض قبل الحفظ،
-          // وإلا ظنّ المستخدم أن الكشف طُبع وهو لم يُطبع.
-          final issue = PrinterService.instance.lastIssue;
-          if (issue != null) _info(issue, AppColors.warning);
-          await _saveToDisk(bytes, st.customerId);
-        }
+        return;
+      }
+
+      // ─── طباعة (وحفظ PDF إن طُلب أو إن كان الإعداد مفعَّلًا) ───
+      //
+      // 🚨 **مقاس الورق من الإعداد لا من hardcoded**: كان `PaperSizes.a4`
+      // ثابتًا فلا يُراعى اختيار المستخدم مقاسًا آخر من الإعدادات. صار يُقرأ
+      // من `statement_paper_size` فيستجيب للحراري 80/58 مم و A5/A6.
+      final settings = AppSettingsService.instance;
+      final paper = PaperSizes.resolve(settings.statementPaperSize);
+      final done = await PrinterService.instance.printPdf(
+        bytes,
+        jobName: filename,
+        paper: paper,
+      );
+      if (!done) {
+        // سبب الفشل (تعريف نصّي · طابعة متوقفة · مهلة) يُعرض قبل الحفظ،
+        // وإلا ظنّ المستخدم أن الكشف طُبع وهو لم يُطبع.
+        final issue = PrinterService.instance.lastIssue;
+        if (issue != null) _info(issue, AppColors.warning);
+      }
+
+      // الحفظ التلقائي: إن كان `printAndSave` صريحًا أو الإعداد مفعَّلًا.
+      //
+      // 🚨 كان الحفظ يحدث **كأثر جانبي لفشل الطباعة فقط** — وكأنه تعويض
+      // عن الفشل لا قرارًا. صار قرارًا صريحًا: إن أراد المستخدم الحفظ مع
+      // الطباعة (الخيار الصريح أو الإعداد) يُحفظ سواء نجحت الطباعة أم لا.
+      if (printAndSave || settings.statementPdfExport) {
+        await _saveToDisk(bytes, st.customerId);
+      } else if (!done) {
+        // الطباعة فشلت ولم يُطلب الحفظ ولا الإعداد مفعَّل: نحفظ كأمان
+        // حتى لا يضيع الكشف كليًّا.
+        await _saveToDisk(bytes, st.customerId);
       }
     } catch (e) {
       debugPrint('CustomerStatementController.export error: $e');
@@ -115,7 +145,7 @@ class CustomerStatementController extends GetxController {
     if (st.hasRange) b.writeln(trf('الفترة: {0}', [periodLabel(st)]));
     b.writeln('────────────────');
     b.writeln(trf('إجمالي المشتريات: {0} ريال', [_m(st.totalPurchases)]));
-    b.writeln(trf('المسدَّد: {0} ريال', [_m(st.totalPaidOnInvoices)]));
+    b.writeln(trf('المسدد: {0} ريال', [_m(st.totalPaidOnInvoices)]));
     if (st.hasDebt) {
       b.writeln(trf('الذمة المتبقية (عليه): {0} ريال', [_m(st.totalDebt)]));
       if (st.oldestDebtDate != null) {
@@ -156,12 +186,21 @@ class CustomerStatementController extends GetxController {
   /// خريطة البيانات التي يستهلكها مولّد الـPDF.
   Map<String, dynamic> buildPdfData(CustomerStatement st) {
     final biz = BusinessInfoService.instance;
+    final settings = AppSettingsService.instance;
     return {
       'bizName': biz.name,
       'bizPhone': biz.phone,
       'bizAddress': biz.address,
       // رابط الموقع — يُرمَّز QR أسفل الكشف.
       'bizMapUrl': biz.location,
+      // ─── مقاس الورق + مقاسات الشعار/QR — يقرأها المولّد لبناء الصفحة ───
+      // 🚨 كانت **مفقودة** فكان المولّد يبني الكشف دائمًا على A4 بصرف النظر
+      // عن إعداد المستخدم، وإعداد «مقاس كشف الحساب» في الإعدادات كان معطَّلًا
+      // فعليًّا: يُعرض ويُحفظ ولا يُقرأ. صار يُمرَّر كما يُمرَّر للفاتورة.
+      'paperSize': settings.statementPaperSize,
+      'logoWidthMm': settings.invoiceLogoWidthMm,
+      'logoHeightMm': settings.invoiceLogoHeightMm,
+      'mapQrSizeMm': settings.mapQrSizeMm,
       'customerName': st.customerName,
       'customerPhone': st.phone,
       'printedAt': DateFormat('yyyy-MM-dd hh:mm a').format(DateTime.now()),

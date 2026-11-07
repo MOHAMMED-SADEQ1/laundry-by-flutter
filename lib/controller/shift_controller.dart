@@ -16,6 +16,7 @@ import 'package:laundry/services/business_info_service.dart';
 import 'package:laundry/services/permission/permission_catalog.dart';
 import 'package:laundry/services/permission/permission_service.dart';
 import 'package:laundry/services/security/session_manager.dart';
+import 'package:laundry/services/settings/app_settings_service.dart';
 
 class ShiftController extends GetxController {
   final SqlDB _sqlDB = SqlDB();
@@ -396,11 +397,17 @@ class ShiftController extends GetxController {
       // ─── قالب المستند: تفعيل ونصوص ونمط كل سطر في ملخّص الوردية ───
       // كان الملخّص خارج نظام القوالب تمامًا (نصوصه وأحجامه في الكود).
       shiftData.addAll(DocTemplateService.instance.transport(DocKind.shift));
+      // 🚨 **مقاس الورق من الإعداد**: كان `PaperSizes.a6` ثابتًا في الطباعة
+      // وفي المولّد، فلا يُراعى اختيار المستخدم مقاسًا آخر. صار يُقرأ من
+      // `shift_paper_size` ويُمرَّر في البيانات كما تُمرَّر للفاتورة.
+      final settings = AppSettingsService.instance;
+      shiftData['paperSize'] = settings.shiftPaperSize;
+      final shiftPaper = PaperSizes.resolve(settings.shiftPaperSize);
       final pdfBytes = await PreparePDF.generateShiftSummaryPdf(shiftData);
       await PrinterService.instance.printPdf(
         pdfBytes,
         jobName: tr('ملخص الوردية'),
-        paper: PaperSizes.a6,
+        paper: shiftPaper,
       );
     } catch (e) {
       Get.snackbar(

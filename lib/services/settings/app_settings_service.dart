@@ -211,6 +211,7 @@ class AppSettingsService {
   String get invoicePaperSize => rawOf(SettingOptions.invoicePaperSize);
   String get shiftPaperSize => rawOf(SettingOptions.shiftPaperSize);
   String get statementPaperSize => rawOf(SettingOptions.statementPaperSize);
+  bool get statementPdfExport => isOn(SettingOptions.statementPdfExport);
   String get labelPaperSize => rawOf(SettingOptions.labelPaperSize);
   bool get printAskSizeEachTime => isOn(SettingOptions.printAskSizeEachTime);
   bool get printAutoAfterSale => isOn(SettingOptions.printAutoAfterSale);
@@ -310,6 +311,13 @@ class AppSettingsService {
   String get posDefaultPaymentMethod =>
       rawOf(SettingOptions.posDefaultPaymentMethod);
   bool get posSoundOnSale => isOn(SettingOptions.posSoundOnSale);
+
+  /// 🖐️ وضع التحكّم في لوحة المفاتيح اللمسية على ويندوز.
+  ///
+  /// `auto` · `hide_only` · `off`. أي قيمة غير معروفة تُعامَل كـ`auto`
+  /// (السلوك الافتراضي) — فلا يُعطّل خطأ في التخزين التحكّم كليًّا.
+  String get touchKeyboardControl =>
+      rawOf(SettingOptions.touchKeyboardControl);
 
   /// ترتيب بطاقات الأصناف في شاشة البيع (مفتاح من [ClothingSort]).
   ClothingSort get clothingSort =>

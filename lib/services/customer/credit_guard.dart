@@ -245,7 +245,8 @@ class CreditGuard {
       if (rows.isEmpty) return 0;
       final own = ((rows.first['lim'] ?? 0) as num).toDouble();
       if (own > 0) return own;
-      return _defaultLimit();
+      // `await` ضروري: بدونه لا يلتقط `catch` أدناه خطأً غير متزامن.
+      return await _defaultLimit();
     } catch (_) {
       return 0;
     }

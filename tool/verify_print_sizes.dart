@@ -303,21 +303,58 @@ void main() {
   );
 
   // ─── [10] لوحة المفاتيح: عقد Dart ⇄ C++ ─────────────────────────────
+  //
+  // 🚨 يحرس **سببَي تجميد ويندوز** (بلاغا 2026-11-04 و 2026-11-07):
+  //   (أ) `ShowWindow` متزامن على نافذة عملية أخرى من داخل معالج الرسائل.
+  //   (ب) إخفاء نافذة **مضيف الإدخال اللمسي** في ويندوز ١١ — وهو مكوّن نظام
+  //       مشترك؛ إخفاؤه يُربك خطّ اللمس في النظام كلّه ويُجمّده بعد الإغلاق.
   print('\n[10] لوحة المفاتيح اللمسية');
   final dartKb = _read('lib/core/platform/touch_keyboard.dart');
   final cpp = _read('windows/runner/flutter_window.cpp');
+  // نفحص **الكود** لا التعليقات: الشرح يذكر أسماء النوافذ الممنوعة نصًّا
+  // ليُعلّم القارئ سبب المنع.
+  final cppCode = _code('windows/runner/flutter_window.cpp');
 
   const channel = 'laundry/touch_keyboard';
   check('[10] القناة في Dart', dartKb.contains("'$channel'"), true);
   check('[10] القناة نفسها في C++', cpp.contains('"$channel"'), true);
+
+  // ── (ب) الأخطر: لا نلمس مضيف الإدخال اللمسي إطلاقًا ──
   check(
-    '[10] إخفاء TabTip (ويندوز ١٠)',
-    cpp.contains('IPTip_Main_Window') && cpp.contains('SC_CLOSE'),
+    '[10] لا لمس لمضيف الإدخال اللمسي (Windows.UI.Core.CoreWindow)',
+    !cppCode.contains('Windows.UI.Core.CoreWindow') &&
+        !cppCode.contains('Microsoft Text Input Application'),
     true,
   );
   check(
-    '[10] إخفاء مضيف ويندوز ١١',
-    cpp.contains('Microsoft Text Input Application') && cpp.contains('SW_HIDE'),
+    '[10] لا إطلاق عملية TabTip (تراكم عمليات)',
+    !cppCode.contains('ShellExecuteW') && !cppCode.contains('TabTip.exe'),
+    true,
+  );
+
+  // ── (أ) لا استدعاء حاجب ──
+  check(
+    '[10] لا ShowWindow متزامن (بل ShowWindowAsync)',
+    cppCode.contains('::ShowWindowAsync(') &&
+        !cppCode.contains('::ShowWindow('),
+    true,
+  );
+  check(
+    '[10] الإخفاء من WM_ACTIVATE مؤجَّل بـPostMessage لا مباشر',
+    cpp.contains('RegisterWindowMessageW') &&
+        cpp.contains('::PostMessageW(hwnd, GetHideTouchKeyboardMessage()'),
+    true,
+  );
+  check(
+    '[10] TabTip: إخفاء بـSW_HIDE لا إغلاق بـSC_CLOSE',
+    cpp.contains('IPTip_Main_Window') &&
+        cpp.contains('SW_HIDE') &&
+        !cpp.contains('WM_SYSCOMMAND, SC_CLOSE'),
+    true,
+  );
+  check(
+    '[10] القناة تستقبل show و hide',
+    cpp.contains('"show"') && cpp.contains('"hide"'),
     true,
   );
   check(
@@ -330,34 +367,78 @@ void main() {
     cpp.contains('TerminateProcess'),
     false,
   );
+  check(
+    '[10] مراقب التعليق يسجّل حجب خيط الواجهة',
+    cpp.contains('StartHangWatchdog') && cpp.contains('SMTO_ABORTIFHUNG'),
+    true,
+  );
+
+  // ── معركة التركيز في النافذة الأصلية ──
+  final win32 = _read('windows/runner/win32_window.cpp');
+  check(
+    '[10] لا SetFocus عند WA_INACTIVE (معركة تركيز)',
+    win32.contains('LOWORD(wparam) != WA_INACTIVE'),
+    true,
+  );
+
+  // ── وضع الأمان (رسم برمجي) ──
+  final runnerMain = _read('windows/runner/main.cpp');
+  check(
+    '[10] وضع الأمان متاح (safe_mode.txt ⇒ رسم برمجي)',
+    runnerMain.contains('EnableSafeModeIfRequested') &&
+        runnerMain.contains('enable-software-rendering'),
+    true,
+  );
 
   final main = _read('lib/main.dart');
-  check('[10] المراقب يلفّ التطبيق كلّه', main.contains('TouchKeyboardDismisser('), true);
+  check('[10] المراقب يلفّ التطبيق كلّه',
+      main.contains('TouchKeyboardDismisser('), true);
   check(
-    '[10] يُخفي فقط إذا لم يبقَ حقل نصّ في التركيز',
-    dartKb.contains('if (!TouchKeyboard.hasTextFocus) TouchKeyboard.hide();'),
+    '[10] يُخفي عند مغادرة الحقل (انتقال من حقل إلى لا-حقل)',
+    dartKb.contains('TouchKeyboard.hide()') && dartKb.contains('_wasTextFocus'),
     true,
   );
   check(
-    '[10] يفحص بعد استقرار اللمسة لا أثناءها',
-    dartKb.contains('addPostFrameCallback'),
+    '[10] يُظهر عند دخول الحقل (انتقال من لا-حقل إلى حقل)',
+    dartKb.contains('TouchKeyboard.show()'),
     true,
   );
   check(
-    '[10] يغطّي اللمس على الخلفية (لا تغيير تركيز)',
-    dartKb.contains('onPointerDown'),
+    '[10] لا طلب إطار لكل لمسة (كان يستنزف GPU)',
+    !dartKb.contains('WidgetsBinding.instance.scheduleFrame') &&
+        !dartKb.contains('WidgetsBinding.instance.addPostFrameCallback'),
+    true,
+  );
+  check(
+    '[10] debounce يجمّع أحداث النقرة الواحدة',
+    dartKb.contains('Timer(') && dartKb.contains('_debounce'),
+    true,
+  );
+  check(
+    '[10] إعداد touch_keyboard_control بثلاثة أوضاع',
+    dartKb.contains('TouchKeyboardMode') &&
+        dartKb.contains("'hide_only'") &&
+        dartKb.contains("'off'"),
+    true,
+  );
+  check(
+    '[10] «معطَّل» يمنع النداء قبل وصوله للقناة',
+    dartKb.contains('if (mode == TouchKeyboardMode.off) return;'),
+    true,
+  );
+  check(
+    '[10] يفحص عند انتهاء اللمسة لا بدايتها',
+    dartKb.contains('onPointerUp:') && !dartKb.contains('onPointerDown:'),
     true,
   );
   check(
     '[10] ويندوز فقط — لا تعطيل للأندرويد',
-    dartKb.contains('TargetPlatform.windows') && !dartKb.contains('Platform.isWindows'),
+    dartKb.contains('TargetPlatform.windows') &&
+        !dartKb.contains('Platform.isWindows'),
     true,
   );
-  check(
-    '[10] لا يرمي عند غياب القناة',
-    dartKb.contains('catch (e)'),
-    true,
-  );
+  check('[10] لا يرمي عند غياب القناة', dartKb.contains('catch (e)'), true);
+
 
   print('\n' + '═' * 68);
   print(_fail == 0 ? '✓ كل الفحوص ناجحة ($_ok)' : '✗ فشل $_fail من ${_ok + _fail}');

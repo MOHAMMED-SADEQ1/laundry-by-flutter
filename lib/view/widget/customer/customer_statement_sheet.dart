@@ -100,6 +100,7 @@ Future<void> showCustomerStatementSheet(
                   onQuickView();
                 },
               ),
+            // ─── طباعة ───
             ListTile(
               leading: const Icon(Icons.print, color: AppColors.primary),
               title: Text(
@@ -117,8 +118,35 @@ Future<void> showCustomerStatementSheet(
                 stmt.export(customerId);
               },
             ),
+            // ─── طباعة + حفظ PDF ───
+            //
+            // خيار مدمج كنمط الفاتورة: يطبع **و**يحفظ نسخة PDF في إجراء واحد.
+            // الفصل بين «طباعة» و«حفظ» كان يجعل الكاشير يطبع ثم يعيد فتح
+            // القائمة ليحفظ — بينما الفاتورة تفعل الأمرين معًا.
             ListTile(
-              leading: const Icon(Icons.share, color: AppColors.success),
+              leading: const Icon(
+                Icons.print_outlined,
+                color: AppColors.violet,
+              ),
+              title: Text(
+                tr('طباعة + حفظ PDF'),
+                style: const TextStyle(fontFamily: 'cairo'),
+              ),
+              subtitle: Text(
+                tr('يطبع الكشف ويحفظ نسخة PDF في المجلد'),
+                style: const TextStyle(fontFamily: 'cairo', fontSize: 12),
+              ),
+              onTap: () {
+                Navigator.pop(ctx);
+                stmt.export(customerId, printAndSave: true);
+              },
+            ),
+            // ─── إرسال PDF عبر واتساب ───
+            ListTile(
+              leading: const Icon(
+                Icons.picture_as_pdf,
+                color: AppColors.danger,
+              ),
               title: Text(
                 tr('إرسال الكشف PDF (واتساب)'),
                 style: const TextStyle(fontFamily: 'cairo'),
@@ -134,7 +162,7 @@ Future<void> showCustomerStatementSheet(
                 stmt.export(customerId, share: true);
               },
             ),
-            // حفظ الكشف كملف — **بلا طباعة ولا مشاركة**.
+            // ─── حفظ الكشف كملف PDF ───
             //
             // كان الحفظ يحدث كأثر جانبي لفشل الطباعة فقط، وفي مجلد مؤقّت.
             // صار قرارًا صريحًا يكتب في مجلد المستندات الذي يختاره المستخدم.
@@ -156,11 +184,16 @@ Future<void> showCustomerStatementSheet(
                 stmt.export(customerId, savePdfOnly: true);
               },
             ),
+            // ─── إرسال ملخّص نصّي عبر واتساب ───
             ListTile(
               leading: const Icon(Icons.chat, color: AppColors.info),
               title: Text(
-                tr('إرسال ملخّص نصّي'),
+                tr('إرسال ملخّص نصّي (واتساب)'),
                 style: const TextStyle(fontFamily: 'cairo'),
+              ),
+              subtitle: Text(
+                tr('رسالة نصّية بلا ملف مرفق'),
+                style: const TextStyle(fontFamily: 'cairo', fontSize: 12),
               ),
               onTap: () async {
                 Navigator.pop(ctx);

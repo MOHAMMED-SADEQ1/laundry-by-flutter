@@ -203,7 +203,7 @@ def main():
     print("\n[4] الدفعات — فصل النقدي عن التسويات")
     cash = sum(r[1] for r in pays if is_cash(r))
     credit_used = sum(r[1] for r in pays if (r[3] or "") == "credit_use")
-    check("عدد الدفعات المسجَّلة", len(pays), 3)
+    check("عدد الدفعات المسجلة", len(pays), 3)
     check("المسدَّد نقدًا (150 فقط: تُستثنى credit_use وطريقة رصيد)", cash, 150.0)
     check("استهلاك السلفة (50)", credit_used, 50.0)
     check("اسم المُسجِّل يُقرأ من users", pays[0][6], "المهندس/ محمد صادق")

@@ -394,6 +394,16 @@ const Map<String, String> kEnglish = <String, String>{
   'تم تسليم الفاتورة رقم #{0}': 'Invoice #{0} delivered',
   'حذف البند': 'Delete item',
   'حذف البند؟': 'Delete item?',
+  // ═══ كشف الحساب: خيارات الإخراج (2026-11-04) ═══
+  'طباعة + حفظ PDF': 'Print + Save PDF',
+  'يطبع الكشف ويحفظ نسخة PDF في المجلد':
+      'Prints the statement and saves a PDF copy to the folder',
+  'إرسال ملخّص نصّي (واتساب)': 'Send text summary (WhatsApp)',
+  'رسالة نصّية بلا ملف مرفق': 'Text message without an attached file',
+  'حفظ نسخة PDF عند إخراج كشف الحساب':
+      'Save a PDF copy when exporting the account statement',
+  'تُحفَظ نسخة PDF من كشف الحساب في مجلد المستندات عند طباعته أو إرساله. مستقلّ عن خيار الحفظ اليدوي.':
+      'A PDF copy of the statement is saved to the documents folder when printing or sending it. Independent from the manual save option.',
   // ═══ بنود الفاتورة: الدمج والتعديل (2026-10-31) ═══
   'تعديل البند': 'Edit item',
   'إجمالي البند': 'Line total',
@@ -402,6 +412,18 @@ const Map<String, String> kEnglish = <String, String>{
   '{0} — {1}: الكمية في الفاتورة صارت {2}':
       '{0} — {1}: the invoice quantity is now {2}',
   'أُضيف كبند منفصل': 'Added as a separate line',
+  // ═══ لوحة المفاتيح اللمسية + تحذير وضع التصحيح (2026-11-07) ═══
+  'التحكّم في لوحة المفاتيح اللمسية': 'Touch keyboard control',
+  'على أجهزة ويندوز اللمسية: «تلقائي» يُظهر اللوحة عند دخول الحقل ويُخفيها عند مغادرته، '
+      'و«إخفاء فقط» يترك الإظهار لويندوز، و«معطَّل» يُلغي أي تدخّل من التطبيق.':
+      'On Windows touch devices: "Auto" shows the keyboard when a field gains focus and hides it when focus leaves, '
+          '"Hide only" leaves showing to Windows, and "Disabled" cancels any app intervention.',
+  'تلقائي (إظهار وإخفاء)': 'Auto (show and hide)',
+  'إخفاء فقط': 'Hide only',
+  // «معطَّل» موجودة أصلًا في القاموس (Disabled) — لا تُكرَّر.
+  'وضع التصحيح': 'Debug build',
+  'هذا بناء تصحيحي — الأداء أبطأ بكثير من نسخة الإنتاج. وزّع نسخة release على أجهزة الكاشير.':
+      'This is a debug build — performance is far slower than a production build. Deploy a release build to cashier devices.',
   '{0} — {1}: الملاحظة مختلفة عن البند الموجود، فبقيا سطرين.':
       '{0} — {1}: the note differs from the existing line, so they stayed separate.',
   '{0} — {1}: صورة البقعة مختلفة، فبقيا سطرين.':
@@ -1231,7 +1253,7 @@ const Map<String, String> kEnglish = <String, String>{
   '{0} زبون لهم ذمة أو رصيد — الأكثر فرقًا أولًا':
       '{0} customers with debt or balance — largest difference first',
   '؟': '?',
-  'آمن تمامًا: لا يُحذف ولا يُعدَّل أي مبلغ في الفواتير، ولا يُمسّ الدفعات المسجّلة. العملية تُصحّح حقل الرصيد فقط.':
+  'آمن تمامًا: لا يُحذف ولا يُعدَّل أي مبلغ في الفواتير، ولا يُمسّ الدفعات المسجلة. العملية تُصحّح حقل الرصيد فقط.':
       'Completely safe: no invoice amount is deleted or changed, and recorded payments are untouched. Only the balance field is corrected.',
   'إصدار فاتورة آجلة': 'Issue a credit invoice',
   'إصلاح الآن': 'Repair now',
@@ -1240,7 +1262,7 @@ const Map<String, String> kEnglish = <String, String>{
   'إصلاح كل الأرصدة ({0} زبون)': 'Repair all balances ({0} customers)',
   'اختر زبونًا': 'Choose a customer',
   'استخدام رصيد على فاتورة': 'Use balance on an invoice',
-  'الدفعات المسجّلة. العملية تُصحّح حقل الرصيد فقط.':
+  'الدفعات المسجلة. العملية تُصحّح حقل الرصيد فقط.':
       'recorded payments. The operation corrects only the balance field.',
   'الرصيد المخزَّن': 'Stored balance',
   'الرصيد المخزَّن لكل زبون يساوي ذمته المحتسبة من الفواتير. لا خلل في الكتابة.':
@@ -1264,7 +1286,7 @@ const Map<String, String> kEnglish = <String, String>{
   'سلف الزبائن': 'Customer credit',
   'سلفة': 'Credit',
   'سلفة {0}': 'Credit {0}',
-  'سيُعاد اشتقاق رصيد {0} زبون من فواتيره الفعلية، فتصبح الأرصدة مطابقة للفواتير تمامًا.\n\nآمن تمامًا: لا يُحذف ولا يُعدَّل أي مبلغ في الفواتير، ولا يُمسّ الدفعات المسجّلة. العملية تُصحّح حقل الرصيد فقط.':
+  'سيُعاد اشتقاق رصيد {0} زبون من فواتيره الفعلية، فتصبح الأرصدة مطابقة للفواتير تمامًا.\n\nآمن تمامًا: لا يُحذف ولا يُعدَّل أي مبلغ في الفواتير، ولا يُمسّ الدفعات المسجلة. العملية تُصحّح حقل الرصيد فقط.':
       'The balance of {0} customers will be re-derived from their actual invoices, making balances exactly match the invoices.\n\nCompletely safe: no invoice amount is deleted or changed, and recorded payments are untouched. Only the balance field is corrected.',
   'صُحّح رصيد {0} زبون — أصبح مطابقًا للفواتير':
       'Repaired the balance of {0} customers — now matching the invoices',
@@ -2251,7 +2273,7 @@ const Map<String, String> kEnglish = <String, String>{
   'البادئة قبل مبلغ الخصم.': 'The prefix before the discount amount.',
   'البادئة قبل مبلغ الضريبة (تُضاف النسبة آليًا).':
       'The prefix before the tax amount (the rate is added automatically).',
-  'البادئة قبل مجموع المسدَّد.': 'The prefix before the total paid.',
+  'البادئة قبل مجموع المسدد.': 'The prefix before the total paid.',
   'البادئة قبل مجموع المشتريات.': 'The prefix before total purchases.',
   'التأريخ': 'Date',
   'التاريخ والوقت': 'Date and time',
@@ -2266,7 +2288,7 @@ const Map<String, String> kEnglish = <String, String>{
   'الخط بين الترويسة والبيانات.':
       'The line between the header and the details.',
   'الدفع': 'Payment',
-  'الدفعات المسجَّلة': 'Recorded payments',
+  'الدفعات المسجلة': 'Recorded payments',
   'الذمة المتبقية': 'Outstanding balance',
   'الذمة المتبقية (عليه)': 'Outstanding balance (owed)',
   'الرصيد الدائن': 'Credit balance',
@@ -2292,7 +2314,7 @@ const Map<String, String> kEnglish = <String, String>{
   'المبلغ المستحق': 'Amount due',
   'المجموع': 'Total',
   'المستحق بعد الخصم': 'Due after discount',
-  'المسدَّد': 'Paid',
+  'المسدد': 'Paid',
   'الملخّص': 'Summary',
   'الملخّص (تدفّقات الفترة + الرصيد الحالي)':
       'Summary (period activity + current balance)',
@@ -2459,7 +2481,7 @@ const Map<String, String> kEnglish = <String, String>{
   'من {0} حتى الآن': 'From {0} until now',
   'أقدم ذمة: {0}': 'Oldest debt: {0}',
   'إجمالي المشتريات: {0} ريال': 'Total purchases: {0} SAR',
-  'المسدَّد: {0} ريال': 'Paid: {0} SAR',
+  'المسدد: {0} ريال': 'Paid: {0} SAR',
   'الذمة المتبقية (عليه): {0} ريال': 'Remaining balance (owed): {0} SAR',
   'الرصيد الدائن (له): {0} ريال': 'Credit balance (in favour): {0} SAR',
   'صافي الموقف: {0} ريال {1}': 'Net position: {0} SAR {1}',
@@ -3044,7 +3066,7 @@ const Map<String, String> kEnglish = <String, String>{
       'Refund for undelivered days — {0} (subscription #{1}, {2} days)',
   'طُبِّق تاريخ الترخيص المضمَّن في الكود: {0}':
       'Applied the licence date embedded in the code: {0}',
-  'سيُعاد اشتقاق رصيد {0} زبون من فواتيره الفعلية، فتصبح الأرصدة مطابقة للفواتير تمامًا.\\n\\nآمن تمامًا: لا يُحذف ولا يُعدَّل أي مبلغ في الفواتير، ولا يُمسّ الدفعات المسجّلة. العملية تُصحّح حقل الرصيد فقط.':
+  'سيُعاد اشتقاق رصيد {0} زبون من فواتيره الفعلية، فتصبح الأرصدة مطابقة للفواتير تمامًا.\\n\\nآمن تمامًا: لا يُحذف ولا يُعدَّل أي مبلغ في الفواتير، ولا يُمسّ الدفعات المسجلة. العملية تُصحّح حقل الرصيد فقط.':
       'The balance of {0} customers will be re-derived from their actual invoices, so the balances match the invoices exactly.\\n\\nCompletely safe: no amount in any invoice is deleted or changed, and recorded payments are untouched. The operation corrects the balance field only.',
   'كان ملفّ الإعدادات تالفًا — أثر إطفاء مفاجئ للجهاز — فأُعيد ضبطه وأُبقيت نسخة من التالف جانبًا. سجّل الدخول مرة أخرى.':
       'The settings file was corrupted — the trace of an abrupt power loss — so it was reset and a copy of the corrupted file was kept aside. Please sign in again.',

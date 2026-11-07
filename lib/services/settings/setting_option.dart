@@ -538,8 +538,29 @@ class SettingOptions {
     kind: SettingKind.choice,
     defaultValue: AppConstants.statementPaperSizeDefault,
     group: SettingGroups.printing,
-    choices: <String>['a4', 'a5'],
-    choiceLabels: <String, String>{'a4': 'A4', 'a5': 'A5'},
+    choices: <String>['a4', 'a5', 'a6', 'receipt_80mm', 'receipt_58mm'],
+    choiceLabels: <String, String>{
+      'a4': 'A4',
+      'a5': 'A5',
+      'a6': 'A6',
+      'receipt_80mm': 'حراري 80 مم',
+      'receipt_58mm': 'حراري 58 مم',
+    },
+  );
+
+  /// هل تُحفظ نسخة PDF من كشف الحساب عند إخراجه؟
+  ///
+  /// مستقلّ عن `invoicePdfExport`: الكشف ليس فاتورة بيع، فلا يُحفظ مع كل
+  /// عملية بيع. هذا المفتاح يُفعِّل الحفظ **عند إخراج الكشف** — طباعة أو
+  /// مشاركة — فيُحفظ نسخة في مجلد المستندات كما تُحفظ الفاتورة.
+  static const SettingOption statementPdfExport = SettingOption(
+    key: AppConstants.settingStatementPdfExport,
+    label: 'حفظ نسخة PDF عند إخراج كشف الحساب',
+    description:
+        'تُحفَظ نسخة PDF من كشف الحساب في مجلد المستندات عند طباعته أو إرساله. مستقلّ عن خيار الحفظ اليدوي.',
+    kind: SettingKind.boolean,
+    defaultValue: '0',
+    group: SettingGroups.invoiceOutput,
   );
 
   static const SettingOption labelPaperSize = SettingOption(
@@ -1153,6 +1174,32 @@ class SettingOptions {
     group: SettingGroups.pos,
   );
 
+  /// 🖐️ تحكّم التطبيق في **لوحة المفاتيح اللمسية** على ويندوز.
+  ///
+  /// **لماذا خيار لا مفتاح تشغيل/إيقاف؟** لأن الحاجة الفعلية على أجهزة
+  /// اللمس درجات: بعض الأجهزة يتصرّف سليمًا مع التحكّم الكامل، وبعضها يُظهر
+  /// اللوحة بنفسه فلا يحتاج إلا الإخفاء، وبعضها يتعارض مع أي تدخّل.
+  /// فثلاثة أوضاع تُغطّي الحالات كلها بلا إعادة بناء التطبيق.
+  ///
+  /// **الافتراضي `auto`** — التحكّم الكامل، وهو السلوك الذي طلبه المستخدم
+  /// في البلاغ الأصلي (اللوحة لا تختفي عند مغادرة الحقل).
+  static const SettingOption touchKeyboardControl = SettingOption(
+    key: AppConstants.settingTouchKeyboardControl,
+    label: 'التحكّم في لوحة المفاتيح اللمسية',
+    description:
+        'على أجهزة ويندوز اللمسية: «تلقائي» يُظهر اللوحة عند دخول الحقل ويُخفيها عند مغادرته، '
+        'و«إخفاء فقط» يترك الإظهار لويندوز، و«معطَّل» يُلغي أي تدخّل من التطبيق.',
+    kind: SettingKind.choice,
+    defaultValue: AppConstants.touchKeyboardControlDefault,
+    group: SettingGroups.pos,
+    choices: <String>['auto', 'hide_only', 'off'],
+    choiceLabels: <String, String>{
+      'auto': 'تلقائي (إظهار وإخفاء)',
+      'hide_only': 'إخفاء فقط',
+      'off': 'معطَّل',
+    },
+  );
+
   /// ترتيب بطاقات الأصناف في شاشة البيع — الفرز **في القاعدة** لا في الواجهة.
   static const SettingOption clothingSort = SettingOption(
     key: AppConstants.settingClothingSort,
@@ -1367,6 +1414,8 @@ class SettingOptions {
     invoicePrintLaundrySlip,
     invoicePdfExport,
     invoicePdfDirectory,
+    // إخراج كشف الحساب (حفظ PDF)
+    statementPdfExport,
     // الضريبة
     taxEnabled,
     taxRate,
@@ -1416,6 +1465,7 @@ class SettingOptions {
     posConfirmBeforePay,
     posDefaultPaymentMethod,
     posSoundOnSale,
+    touchKeyboardControl,
     clothingSort,
     homeGridColumns,
     // الزبائن

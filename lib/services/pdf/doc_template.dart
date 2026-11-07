@@ -1003,7 +1003,7 @@ class DocCatalog {
       hint: 'عنوان القسم + حجم خطّ خلاياه.',
       section: DocSections.body,
       hasText: true,
-      defaultText: 'الدفعات المسجَّلة',
+      defaultText: 'الدفعات المسجلة',
       style: DocStyle(size: 12),
     ),
     DocField(
@@ -1053,11 +1053,11 @@ class DocCatalog {
     ),
     DocField(
       key: kTotalsPaid,
-      label: 'المسدَّد',
-      hint: 'البادئة قبل مجموع المسدَّد.',
+      label: 'المسدد',
+      hint: 'البادئة قبل مجموع المسدد.',
       section: DocSections.totals,
       hasText: true,
-      defaultText: 'المسدَّد',
+      defaultText: 'المسدد',
       style: DocStyle(size: 13),
     ),
     DocField(
